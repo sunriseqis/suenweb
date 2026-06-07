@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  suenweb:
+    build: .
+    container_name: suenweb
+    ports:
+      - "5080:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped

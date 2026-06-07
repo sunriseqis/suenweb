@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SuenWeb · 导航页</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-scheme="purple" data-style="glass" data-pattern="grid" data-bg-type="gradient" style="--glass-intensity:1">
+
+<!-- ═══════════ BACKGROUND LAYERS (4 modes, mutually exclusive) ═══════════ -->
+<div class="bg-layer bg-pattern"></div>
+<div class="bg-layer bg-gradient"></div>
+<div class="bg-layer bg-wallpaper" id="wallpaperLayer"></div>
+
+<!-- ═══════════ AUTH OVERLAY ═══════════ -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-logo"><img src="/static/favicon.png" alt="SuenWeb" style="width:64px;height:64px"></div>
+    <h2 class="auth-title" id="authTitle">欢迎使用 SuenWeb</h2>
+    <p class="auth-desc" id="authDesc">轻量个人导航页 · 搭配浏览器插件同步收藏夹 · SuenWeb</p>
+    <div class="auth-form">
+      <input type="password" id="authPassword" class="auth-input" placeholder="设置访问密码 (至少4位)" autofocus>
+      <div class="auth-error" id="authError"></div>
+      <button class="auth-btn" id="authBtn">设置密码并进入</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MAIN DASHBOARD ═══════════ -->
+<main class="app" id="mainContainer" style="display:none" role="main">
+  <header class="top-bar">
+    <div class="top-left">
+      <div class="clock-weather">
+        <div class="clock-block">
+          <div class="clock" id="clock">00:00</div>
+          <div class="date-text" id="dateDisplay"></div>
+        </div>
+        <div class="weather" id="weather"><span class="weather-icon"><img src="/static/icons/cloudy-line.svg" class="ico" alt=""></span><span class="weather-temp">--°</span><span class="weather-city">加载中</span></div>
+      </div>
+    </div>
+    <div class="top-right">
+      <button class="action-btn guest-only" id="guestLoginBtn" title="登录" aria-label="登录"><img src="/static/icons/login-box-line.svg" class="ico" alt=""></button>
+      <button class="action-btn auth-only" id="settingsBtn" title="设置" aria-label="设置"><img src="/static/icons/settings-3-line.svg" class="ico" alt=""></button>
+      <button class="action-btn action-btn-logout auth-only" id="logoutBtn" title="退出登录" aria-label="退出登录"><img src="/static/icons/logout-box-line.svg" class="ico" alt=""></button>
+    </div>
+  </header>
+
+  <section class="search-wrapper" aria-label="搜索">
+    <div class="search-box">
+      <span class="search-icon" aria-hidden="true"><img src="/static/icons/search-line.svg" class="ico" alt=""></span>
+      <input type="search" class="search-input" id="searchInput" placeholder="搜索..." aria-label="搜索关键词">
+      <div class="search-engine" id="searchEngine" role="tablist"></div>
+    </div>
+  </section>
+
+  <section class="pinned-area" id="pinnedArea" aria-label="固定组"></section>
+
+  <nav class="tab-bar" id="tabBar" role="tablist" aria-label="组标签"></nav>
+
+  <section id="tabContentArea" aria-label="组内容"></section>
+
+  <section class="onboarding" id="onboarding" style="display:none" aria-label="开始使用">
+    <div class="onboarding-card">
+      <div class="onboarding-icon"><img src="/static/icons/download-line.svg" class="ico ico-xl" alt=""></div>
+      <h3>还没有收藏夹数据</h3>
+      <p>安装浏览器插件自动同步，或上传书签文件</p>
+      <div class="onboarding-options">
+        <div class="onboard-opt">
+          <div class="onboard-opt-icon"><img src="/static/icons/puzzle-line.svg" class="ico ico-lg" alt=""></div>
+          <h4>浏览器插件 (推荐)</h4>
+          <p>自动双向同步 Chrome / Edge / Firefox</p>
+          <div class="plugin-list">
+            <a href="/extension/download/chrome">🟢 Chrome / Edge</a>
+            <a href="/extension/download/firefox">🦊 Firefox</a>
+          </div>
+        </div>
+        <div class="onboard-opt">
+          <div class="onboard-opt-icon"><img src="/static/icons/upload-line.svg" class="ico ico-lg" alt=""></div>
+          <h4>上传书签文件</h4>
+          <p>从浏览器导出 HTML 书签上传</p>
+          <label class="upload-btn" for="bookmarkFileInput">📁 选择文件</label>
+          <input type="file" id="bookmarkFileInput" accept=".html,.htm" style="display:none">
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════ SETTINGS MODAL (centered, left-nav) ═══════════ -->
+<div class="settings-overlay" id="settingsOverlay" role="dialog" aria-modal="true" aria-label="设置">
+  <div class="settings-modal" role="document">
+    <aside class="settings-sidebar" aria-label="设置分类">
+      <div class="settings-modal-title">设置</div>
+      <button class="settings-nav-item active" data-tab="presets"><span class="nav-icon"><img src="/static/icons/sun-line.svg" class="ico-sm" alt=""></span><span>预设</span></button>
+      <button class="settings-nav-item" data-tab="scheme"><span class="nav-icon"><img src="/static/icons/palette-line.svg" class="ico-sm" alt=""></span><span>配色</span></button>
+      <button class="settings-nav-item" data-tab="background"><span class="nav-icon"><img src="/static/icons/image-line.svg" class="ico-sm" alt=""></span><span>背景</span></button>
+      <button class="settings-nav-item" data-tab="layout"><span class="nav-icon"><img src="/static/icons/check-line.svg" class="ico-sm" alt=""></span><span>布局</span></button>
+      <button class="settings-nav-item" data-tab="font"><span class="nav-icon"><img src="/static/icons/font-size.svg" class="ico-sm" alt=""></span><span>字体</span></button>
+      <button class="settings-nav-item" data-tab="widgets"><span class="nav-icon"><img src="/static/icons/puzzle-line.svg" class="ico-sm" alt=""></span><span>小组件</span></button>
+      <button class="settings-nav-item" data-tab="bookmarks"><span class="nav-icon"><img src="/static/icons/bookmark-line.svg" class="ico-sm" alt=""></span><span>书签</span></button>
+      <button class="settings-nav-item" data-tab="ai"><span class="nav-icon"><img src="/static/icons/robot-line.svg" class="ico-sm" alt=""></span><span>智能</span></button>
+      <button class="settings-nav-item" data-tab="security"><span class="nav-icon"><img src="/static/icons/lock-password-line.svg" class="ico-sm" alt=""></span><span>安全</span></button>
+    </aside>
+    <main class="settings-content">
+      <div class="settings-header">
+        <h2 id="settingsTitle">预设</h2>
+        <button class="panel-close" id="panelClose" title="关闭 (Esc)">✕</button>
+      </div>
+      <div class="settings-body" id="settingsBody"></div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL ═══════════ -->
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal-card" id="modalCard" style="display:none"></div>
+</div>
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════ ICON PICKER ═══════════ -->
+<div class="icon-picker-overlay" id="iconPickerOverlay">
+  <div class="icon-picker-panel" id="iconPickerPanel">
+    <div class="icon-picker-header">
+      <h4>选择图标</h4>
+      <button onclick="closeIconPicker()" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:18px">&times;</button>
+    </div>
+    <input class="icon-picker-search" id="iconPickerSearch" placeholder="搜索图标..." oninput="filterIconPicker()">
+    <div class="icon-picker-grid" id="iconPickerGrid"></div>
+    <div class="icon-picker-footer">
+      <button onclick="closeIconPicker()">取消</button>
+      <button class="btn-primary" id="iconPickerConfirm">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ ALL JS INLINE ═══════════ -->
+<script>
+// ====== STATE ======
+const State = {
+  token:        localStorage.getItem('suenweb_token') || '',
+  groups:       [],
+  settings:     {},
+  syncStatus:   {},
+};
+
+// ====== UTILS ======
+function toast(msg, type) {
+  type = type || 'info';
+  var c = document.getElementById('toastContainer');
+  var el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 3000);
+}
+function escHtml(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function showModal(html) {
+  document.getElementById('modalCard').innerHTML = html;
+  document.getElementById('modalCard').style.display = 'block';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  // Focus first input
+  setTimeout(function(){
+    var first = document.getElementById('modalCard').querySelector('input, select, textarea, button');
+    if (first && first !== document.activeElement) first.focus();
+  }, 50);
+}
+function closeModal() {
+  document.getElementById('modalCard').style.display = 'none';
+  document.getElementById('modalOverlay').style.display = 'none';
+}
+
+// ====== ICON PICKER ======
+var _iconPickerTarget = null;
+
+function showIconPicker(inputId, currentValue) {
+  _iconPickerTarget = inputId;
+  var grid = document.getElementById('iconPickerGrid');
+  var search = document.getElementById('iconPickerSearch');
+  search.value = '';
+
+  // Build grid from built-in icons list
+  if (!window._builtinIcons) {
+    grid.innerHTML = '<div class="icon-picker-empty">加载中...</div>';
+    fetch('/api/builtin-icons').then(function(r){return r.json();}).then(function(data){
+      window._builtinIcons = data.icons || [];
+      _renderIconGrid(window._builtinIcons, currentValue);
+    }).catch(function(){
+      grid.innerHTML = '<div class="icon-picker-empty">加载失败</div>';
+    });
+  } else {
+    _renderIconGrid(window._builtinIcons, currentValue);
+  }
+
+  document.getElementById('iconPickerOverlay').classList.add('open');
+  document.getElementById('iconPickerConfirm').onclick = function(){
+    var sel = grid.querySelector('.icon-picker-item.selected');
+    if (sel) {
+      var val = sel.dataset.iconPath;
+      var inp = document.getElementById(_iconPickerTarget);
+      if (inp) { inp.value = val; inp.dispatchEvent(new Event('input')); }
+      // Show preview
+      var preview = document.getElementById(_iconPickerTarget+'_preview');
+      if (preview && val) {
+        preview.innerHTML = '<img src="'+val+'" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">';
+      }
+    }
+    closeIconPicker();
+  };
+}
+
+function _renderIconGrid(icons, currentValue) {
+  var grid = document.getElementById('iconPickerGrid');
+  if (!icons.length) { grid.innerHTML = '<div class="icon-picker-empty">无图标</div>'; return; }
+  grid.innerHTML = icons.map(function(ic){
+    var sel = ic.path === currentValue ? ' selected' : '';
+    return '<div class="icon-picker-item'+sel+'" data-icon-path="'+ic.path+'" data-icon-name="'+ic.name+'" onclick="selectIconItem(this)"><img src="'+ic.path+'" alt="'+ic.name+'" loading="lazy"></div>';
+  }).join('');
+}
+
+function selectIconItem(el) {
+  el.parentElement.querySelectorAll('.icon-picker-item').forEach(function(x){ x.classList.remove('selected'); });
+  el.classList.add('selected');
+}
+
+function filterIconPicker() {
+  var q = document.getElementById('iconPickerSearch').value.toLowerCase();
+  var items = document.querySelectorAll('#iconPickerGrid .icon-picker-item');
+  items.forEach(function(it){
+    var name = (it.dataset.iconName || '').toLowerCase();
+    it.style.display = (!q || name.indexOf(q) >= 0) ? '' : 'none';
+  });
+}
+
+function closeIconPicker() {
+  document.getElementById('iconPickerOverlay').classList.remove('open');
+  _iconPickerTarget = null;
+}
+// Close icon picker on overlay click
+document.getElementById('iconPickerOverlay').addEventListener('click', function(e){
+  if (e.target === this) closeIconPicker();
+});
+// Esc closes icon picker too
+// Esc closes modals, settings, icon picker
+document.addEventListener('keydown', function(e){
+  if (e.key !== 'Escape' && e.keyCode !== 27) return;
+  var iconPicker = document.getElementById('iconPickerOverlay');
+  if (iconPicker && iconPicker.classList.contains('open')) { closeIconPicker(); return; }
+  if (document.getElementById('modalCard').style.display === 'block') { closeModal(); return; }
+  if (document.getElementById('settingsOverlay').classList.contains('open')) { closeSettings(); return; }
+});
+function renderLinkIcon(link) {
+  var icon = link.icon || '';
+  var iconType = link.icon_type || 'auto';
+  if (iconType === 'emoji' && icon) { return '<span class="link-icon">'+escHtml(icon)+'</span>'; }
+  if ((iconType === 'url' || iconType === 'auto') && icon && icon.indexOf('/static/icons/')===0) {
+    return '<img class="link-icon-img" src="'+icon+'" alt="" onerror="this.style.display=\'none\'" style="filter:brightness(0) saturate(100%) invert(1)">';
+  }
+  if ((iconType === 'url' || iconType === 'auto') && icon && icon.indexOf('http')===0) {
+    return '<img class="link-icon-img" src="/api/icon/proxy?url='+encodeURIComponent(icon)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline\'"><span class="link-icon" style="display:none"></span>';
+  }
+  if (icon) return '<span class="link-icon">'+escHtml(icon)+'</span>';
+  try { var d = new URL(link.url).hostname; return '<img class="link-icon-img" src="/api/icon/proxy?domain='+encodeURIComponent(d)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline\'"><span class="link-icon" style="display:none"></span>'; }
+  catch(e) { return '<span class="link-icon"></span>'; }
+}
+function renderGroupIcon(icon) {
+  if (!icon) return '📁';
+  if (icon.indexOf('/static/icons/')!==-1) {
+    return '<img src="'+icon+'" class="group-icon-svg" alt="" onerror="this.style.display=\'none\';this.parentElement.textContent=\'📁\'">';
+  }
+  return escHtml(icon);
+}
+
+// ====== API ======
+function apiHeaders() {
+  var h = { 'Content-Type': 'application/json' };
+  if (State.token) h['Authorization'] = 'Bearer ' + State.token;
+  return h;
+}
+async function api(method, path, body) {
+  var opts = { method: method, headers: apiHeaders() };
+  if (body) opts.body = JSON.stringify(body);
+  var resp = await fetch(path, opts);
+  var data = await resp.json().catch(function(){ return {}; });
+  if (!resp.ok) throw new Error(data.error || 'HTTP ' + resp.status);
+  return data;
+}
+async function uploadFile(path, file) {
+  var form = new FormData(); form.append('file', file);
+  var resp = await fetch(path, { method:'POST', headers:{Authorization:'Bearer '+State.token}, body:form });
+  var data = await resp.json().catch(function(){ return {}; });
+  if (!resp.ok) throw new Error(data.error || 'HTTP '+resp.status);
+  return data;
+}
+
+// ====== DASHBOARD ======
+async function refresh() { await loadData(); renderAll(); }
+async function loadData() {
+  try {
+    var resp = await fetch('/api/data');
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    State.groups = ((await resp.json()).groups) || [];
+    State.syncStatus = await fetch('/api/sync/status').then(function(r){return r.json();}).catch(function(){return {};});
+  } catch(e) {
+    State.groups = [];
+  }
+}
+function renderAll() {
+  var hasData = State.groups.length > 0;
+  document.getElementById('onboarding').style.display    = hasData ? 'none' : 'flex';
+  document.getElementById('pinnedArea').style.display    = hasData ? '' : 'none';
+  document.getElementById('tabBar').style.display        = hasData ? '' : 'none';
+  document.getElementById('tabContentArea').style.display = hasData ? '' : 'none';
+  if (!hasData) return;
+  var pinned = State.groups.filter(function(g){ return g.type==='pinned'; });
+  var tabs   = State.groups.filter(function(g){ return g.type==='tab'; });
+  renderPinned(pinned); renderTabs(tabs);
+}
+function renderPinned(groups) {
+  var area = document.getElementById('pinnedArea');
+  area.innerHTML = groups.map(function(g){
+    var mode = g.display_mode || 'compact';
+    var linksHtml = '';
+    if (mode === 'icon') {
+      linksHtml = '<div class="links-icon-grid">'+g.links.map(function(l){
+        return '<a href="'+escAttr(l.url)+'" target="_blank" class="icon-only-link" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
+      }).join('')+'</div>';
+    } else if (mode === 'grid') {
+      linksHtml = '<div class="links-grid">'+g.links.map(function(l){
+        return '<a href="'+escAttr(l.url)+'" target="_blank" class="grid-link">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      }).join('')+'</div>';
+    } else { // compact
+      linksHtml = '<div class="pinned-links">'+g.links.map(function(l){
+        return '<a href="'+escAttr(l.url)+'" target="_blank" class="pin-link">'+renderLinkIcon(l)+'<span class="link-title">'+escHtml(l.title)+'</span><button class="link-edit-btn pinned-edit" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      }).join('')+'</div>';
+    }
+    return '<div class="pinned-card" data-group-id="'+g.id+'"><div class="pinned-header"><span class="section-icon">'+renderGroupIcon(g.icon)+'</span>'+escHtml(g.name)+'<span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">解固</button><button class="group-action-btn group-action-text" data-action="delete-group" data-id="'+g.id+'" style="color:#f87171">删除</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加链接</button></div>';
+  }).join('') + '<button class="add-link-btn" data-action="add-group-pinned" style="min-height:80px">+ 添加固定组</button>';
+}
+function renderTabs(groups) {
+  var tabBar = document.getElementById('tabBar');
+  var content = document.getElementById('tabContentArea');
+  tabBar.innerHTML = groups.map(function(g,i){
+    return '<button class="tab-btn '+(i===0?'active':'')+'" data-tab="tab-'+g.id+'">'+renderGroupIcon(g.icon)+' '+escHtml(g.name)+'<span class="tab-remove" data-action="delete-group" data-id="'+g.id+'"><img src="/static/icons/close-line.svg" class="ico-xs" alt="" style="filter:invert(1)"></span></button>';
+  }).join('') + '<button class="add-group-tab" data-action="add-group-tab">+ 新增标签</button>';
+  content.innerHTML = groups.map(function(g,i){
+    var mode = g.display_mode || 'compact';
+    var linksHtml = '';
+    if (mode === 'icon') {
+      linksHtml = '<div class="links-icon-grid">'+g.links.map(function(l){
+        return '<a href="'+escAttr(l.url)+'" target="_blank" class="icon-only-link" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
+      }).join('')+'</div>';
+    } else if (mode === 'grid') {
+      linksHtml = '<div class="links-grid">'+g.links.map(function(l){
+        return '<a href="'+escAttr(l.url)+'" target="_blank" class="grid-link">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      }).join('')+'</div>';
+    } else {
+      linksHtml = '<div class="links-grid">'+g.links.map(function(l){
+        return '<a href="'+escAttr(l.url)+'" target="_blank" class="grid-link">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      }).join('')+'</div>';
+    }
+    return '<div class="tab-content '+(i===0?'active':'')+'" id="tab-'+g.id+'"><div class="pinned-header" style="margin-bottom:10px"><span>'+renderGroupIcon(g.icon)+' '+escHtml(g.name)+'</span><span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions" style="opacity:1;margin-left:auto"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">固定</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加</button></div>';
+  }).join('');
+  tabBar.querySelectorAll('.tab-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      if (e.target.dataset.action) return;
+      tabBar.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      content.querySelectorAll('.tab-content').forEach(function(c){ c.classList.remove('active'); });
+      btn.classList.add('active');
+      var target = document.getElementById(btn.dataset.tab);
+      if (target) target.classList.add('active');
+    });
+  });
+}
+async function handleDashboardClick(e) {
+  var btn = e.target.closest('[data-action]'); if (!btn) return;
+  var action = btn.dataset.action;
+  var id = btn.dataset.id ? parseInt(btn.dataset.id) : null;
+  switch(action) {
+    case 'add-link': addLink(id); break;
+    case 'add-group-pinned': addGroup('pinned'); break;
+    case 'add-group-tab': addGroup('tab'); break;
+    case 'edit-group': editGroup(id); break;
+    case 'edit-link': editLink(id); break;
+    case 'toggle-group': toggleGroupType(id); break;
+    case 'delete-group': deleteGroup(id); break;
+  }
+}
+
+// ====== AUTH ======
+async function checkAuthStatus(){ try{ var r=await fetch('/api/auth/status'); return (await r.json()).has_password; }catch(e){ return false; } }
+async function doSetup(pw){ await api('POST','/api/auth/setup',{password:pw}); State.token=pw; localStorage.setItem('suenweb_token',pw); }
+async function doLogin(pw){ await api('POST','/api/auth/login',{password:pw}); State.token=pw; localStorage.setItem('suenweb_token',pw); }
+async function doLogout(){ try{await api('POST','/api/auth/logout');}catch(e){} State.token=''; localStorage.removeItem('suenweb_token'); }
+
+async function showAuth() {
+  document.getElementById('authOverlay').style.display = 'flex';
+  document.getElementById('mainContainer').style.display = 'none';
+  var hasPassword = await checkAuthStatus();
+  var title = document.getElementById('authTitle');
+  var desc  = document.getElementById('authDesc');
+  var btn   = document.getElementById('authBtn');
+  var input = document.getElementById('authPassword');
+  var error = document.getElementById('authError');
+  if (hasPassword) {
+    title.textContent = '欢迎回来';
+    desc.textContent  = '输入密码以访问你的 SuenWeb 导航页';
+    btn.textContent   = '登录';
+    input.placeholder = '输入访问密码';
+  } else {
+    title.textContent = '欢迎使用 SuenWeb';
+    desc.textContent  = '轻量个人导航页 · 搭配浏览器插件同步收藏夹 · SuenWeb';
+    btn.textContent   = '设置密码并进入';
+    input.placeholder = '设置访问密码 (至少4位)';
+  }
+  error.textContent = '';
+  btn.onclick = async function() {
+    var pw = input.value.trim();
+    if (pw.length < 4) { error.textContent = '密码至少4位'; return; }
+    btn.disabled = true; btn.textContent = '...';
+    try {
+      if (hasPassword) await doLogin(pw); else await doSetup(pw);
+      error.textContent = '';
+      hideAuth();
+      await initDashboard();
+    } catch(e) { error.textContent = e.message; }
+    btn.disabled = false;
+    btn.textContent = hasPassword ? '登录' : '设置密码并进入';
+  };
+  input.onkeydown = function(e){ if(e.key==='Enter') btn.click(); };
+  input.focus();
+}
+function hideAuth() {
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('mainContainer').style.display = '';
+  setGuestMode(false);
+}
+async function initDashboard() {
+  try { await loadData(); }
+  catch(e) { if(e.message.indexOf('401')>=0||e.message.indexOf('AUTH_REQUIRED')>=0) return; console.error(e); return; }
+  hideAuth(); setGuestMode(false); renderAll();
+}
+
+// ====== EDITOR ======
+async function addGroup(type){
+  showModal('<h3>'+(type==='pinned'?'添加固定组':'添加标签组')+'</h3>'+
+    '<div class="form-group"><label>组名 *</label><input id="egName" placeholder="如：常用工具"></div>'+
+    '<div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">📁</span><input type="hidden" id="egIcon" value=""><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'📁\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div>'+
+    '<div class="btn-row"><button class="btn btn-secondary" id="egCancel">取消</button><button class="btn btn-primary" id="egSave">创建</button></div>');
+  document.getElementById('egCancel').onclick = closeModal;
+  document.getElementById('egSave').onclick = async function(){
+    var name = document.getElementById('egName').value.trim();
+    var icon = document.getElementById('egIcon').value.trim() || '';
+    if (!name) { toast('请输入组名','error'); return; }
+    try {
+      await api('POST','/api/groups',{name:name,icon:icon,type:type});
+      closeModal();
+      await refresh();
+      toast('组已创建','success');
+    } catch(e){ toast(e.message,'error'); }
+  };
+  var n = document.getElementById('egName'); n && n.focus();
+}
+async function editGroup(gid) {
+  var group = State.groups.find(function(g){ return g.id===gid; }); if(!group) return;
+  var iconVal = escAttr(group.icon||'');
+  var isBuiltin = iconVal.indexOf('/static/icons/')===0;
+  var previewHtml = isBuiltin ? '<img src="'+iconVal+'" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">' : (group.icon||'📁');
+  showModal('<h3>编辑组</h3><div class="form-group"><label>组名</label><input id="egName" value="'+escAttr(group.name)+'"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">'+previewHtml+'</span><input type="hidden" id="egIcon" value="'+iconVal+'"><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\''+iconVal+'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'📁\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div><div class="form-group"><label>显示模式</label><select id="egMode"><option value="compact"'+(group.display_mode==='compact'?' selected':'')+'>紧凑</option><option value="grid"'+(group.display_mode==='grid'?' selected':'')+'>详情</option><option value="icon"'+(group.display_mode==='icon'?' selected':'')+'>仅图标</option></select></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="egDelete">删除</button><button class="btn btn-secondary" id="egCancel">取消</button><button class="btn btn-primary" id="egSave">保存</button></div>');
+  document.getElementById('egDelete').onclick=async function(){ if(!confirm('确定删除「'+group.name+'」及其所有链接？')) return; try{await api('DELETE','/api/groups/'+gid); closeModal(); await refresh(); toast('已删除','info');} catch(e){toast(e.message,'error');} };
+  document.getElementById('egCancel').onclick = closeModal;
+  document.getElementById('egSave').onclick = async function(){
+    var name=document.getElementById('egName').value.trim();
+    var icon=document.getElementById('egIcon').value.trim();
+    var mode=document.getElementById('egMode').value;
+    if(!name){ toast('名称不能为空','error'); return; }
+    try{ await api('PUT','/api/groups/'+gid,{name:name,icon:icon||'📁',display_mode:mode}); closeModal(); await refresh(); toast('已更新','success'); }
+    catch(e){ toast(e.message,'error'); }
+  };
+}
+async function toggleGroupType(gid){
+  var group = State.groups.find(function(g){ return g.id===gid; }); if(!group) return;
+  var newType = group.type === 'pinned' ? 'tab' : 'pinned';
+  try{ await api('PUT','/api/groups/'+gid,{type:newType}); await refresh(); toast(newType==='pinned'?'已固定':'已移到标签栏','info'); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function deleteGroup(gid){
+  var group = State.groups.find(function(g){ return g.id===gid; }); if(!group) return;
+  if(!confirm('确定删除「'+group.name+'」及其所有链接？')) return;
+  try{ await api('DELETE','/api/groups/'+gid); await refresh(); toast('已删除','info'); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function addLink(gid) {
+  showModal('<h3>添加链接</h3><div class="form-group"><label>标题 *</label><input id="elTitle" placeholder="网站名称"></div><div class="form-group"><label>URL *</label><input id="elUrl" placeholder="https://..."></div><div class="form-group"><label>描述</label><input id="elDesc" placeholder="简短描述"></div><div class="form-group"><label>图标 (emoji 或 URL)</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:18px"></span><input id="elIcon" placeholder="📌 或 https://..." style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\',document.getElementById(\'elIcon\').value);return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置图标</button></div></div><div class="btn-row"><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">添加</button></div>');
+  document.getElementById('elCancel').onclick = closeModal;
+  document.getElementById('elSave').onclick = async function(){
+    var title=document.getElementById('elTitle').value.trim();
+    var url=document.getElementById('elUrl').value.trim();
+    var desc=document.getElementById('elDesc').value.trim();
+    var icon=document.getElementById('elIcon').value.trim();
+    if(!title||!url){ toast('标题和URL不能为空','error'); return; }
+    try{ await api('POST','/api/links',{group_id:gid,title:title,url:url,description:desc,icon:icon,icon_type:getIconType(icon)}); closeModal(); await refresh(); toast('链接已添加','success'); }
+    catch(e){ toast(e.message,'error'); }
+  };
+}
+function getIconType(icon) {
+  if (!icon) return 'auto';
+  if (icon.indexOf('/static/icons/')===0) return 'url';
+  if (icon.indexOf('http')===0) return 'url';
+  return 'emoji';
+}
+async function editLink(lid) {
+  var link=null;
+  State.groups.forEach(function(g){ var f=g.links.find(function(l){return l.id===lid;}); if(f) link=f; });
+  if(!link) return;
+  var groupOpts=State.groups.map(function(g){ return '<option value="'+g.id+'"'+(g.id===link.group_id?' selected':'')+'>'+escHtml(g.name)+'</option>'; }).join('');
+  showModal('<h3>编辑链接</h3><div class="form-group"><label>所属组</label><select id="elGroup">'+groupOpts+'</select></div><div class="form-group"><label>标题</label><input id="elTitle" value="'+escAttr(link.title)+'"></div><div class="form-group"><label>URL</label><input id="elUrl" value="'+escAttr(link.url)+'"></div><div class="form-group"><label>描述 <button class="ai-desc-btn-modal" id="elAiBtn" style="font-size:11px;padding:2px 8px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);border-radius:4px;color:#a78bfa;cursor:pointer">'+(link.description?'重新生成':'补全生成')+'</button></label><input id="elDesc" value="'+escAttr(link.description||'')+'"></div><div class="form-group"><label>图标 (emoji 或 URL)</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:18px">'+escHtml(link.icon||'')+'</span><input id="elIcon" value="'+escAttr(link.icon||'')+'" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\',document.getElementById(\'elIcon\').value);return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置图标</button></div></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="elDelete">删除</button><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">保存</button></div>');
+  document.getElementById('elDelete').onclick=async function(){ if(!confirm('确定删除此链接？')) return; try{await api('DELETE','/api/links/'+lid); closeModal(); await refresh(); toast('已删除','info');} catch(e){toast(e.message,'error');} };
+  document.getElementById('elAiBtn').onclick=async function(){ var btn=document.getElementById('elAiBtn'); if(!btn) return; btn.disabled=true; btn.textContent='...'; var ok=await aiDescribeOne(lid); if(ok){ var d=document.getElementById('elDesc'); if(d) d.value=ok; btn.textContent='重新生成'; } btn.disabled=false; };
+  document.getElementById('elCancel').onclick=closeModal;
+  document.getElementById('elSave').onclick=async function(){
+    var title=document.getElementById('elTitle').value.trim();
+    var url=document.getElementById('elUrl').value.trim();
+    var desc=document.getElementById('elDesc').value.trim();
+    var icon=document.getElementById('elIcon').value.trim();
+    var gid=parseInt(document.getElementById('elGroup').value);
+    if(!title||!url){ toast('标题和URL不能为空','error'); return; }
+    try{ await api('PUT','/api/links/'+lid,{group_id:gid,title:title,url:url,description:desc,icon:icon,icon_type:getIconType(icon)}); closeModal(); await refresh(); toast('已更新','success'); }
+    catch(e){ toast(e.message,'error'); }
+  };
+}
+async function uploadBookmarks(file){
+  try{ var d=await uploadFile('/api/sync',file); toast('导入成功！新增 '+d.imported+' 个书签','success'); await refresh(); }
+  catch(e){ toast(e.message,'error'); }
+}
+
+// ====== SETTINGS MODAL ======
+var _currentSettingsTab = 'presets';
+
+function openSettings() {
+  _currentSettingsTab = 'presets';
+  document.querySelectorAll('.settings-nav-item').forEach(function(t){
+    t.classList.toggle('active', t.dataset.tab === _currentSettingsTab);
+  });
+  document.getElementById('settingsOverlay').classList.add('open');
+  renderSettings();
+}
+
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+}
+
+function switchSettingsTab(tab) {
+  _currentSettingsTab = tab;
+  document.querySelectorAll('.settings-nav-item').forEach(function(t){
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  renderSettings();
+  // Trigger wallpaper source loading when switching to background tab
+  if (tab === 'background') {
+    setTimeout(function(){ loadWallpaperSources(); }, 100);
+  }
+}
+
+// 8 color schemes (coordinated accent + surfaces)
+var _COLOR_SCHEMES = [
+  {id:'purple', hex:'#7c6ff7', name:'紫罗兰', desc:'优雅的紫色调'},
+  {id:'ocean',   hex:'#4a90f2', name:'海洋蓝', desc:'冷静的蓝色调'},
+  {id:'teal',    hex:'#24ccba', name:'青碧',   desc:'清新的青色调'},
+  {id:'forest',  hex:'#29c775', name:'森林绿', desc:'自然的绿色调'},
+  {id:'sunset',  hex:'#f5802f', name:'日落橙', desc:'温暖的橙色调'},
+  {id:'mono',    hex:'#d1d1d5', name:'黑白灰', desc:'经典无彩色系'},
+  {id:'rose',    hex:'#f15264', name:'玫瑰红', desc:'热烈的红色调'},
+  {id:'amber',   hex:'#f5bb26', name:'琥珀金', desc:'明亮的金色调'},
+];
+
+// 5 套精选预设 — 一键应用配色+风格+背景
+var _PRESETS = [
+  {id:'midnight-purple', name:'暗夜紫',   desc:'经典毛玻璃紫',  scheme:'purple', style:'glass',   bgType:'gradient', preview:'linear-gradient(135deg,#1a1028,#162040)'},
+  {id:'ocean-breeze',    name:'海洋微风', desc:'清新半透明蓝',  scheme:'ocean',  style:'glass',   bgType:'wallpaper',preview:'linear-gradient(135deg,#0a1a2a,#1a3a4a)'},
+  {id:'mono-minimal',    name:'极简黑白', desc:'无彩色干净风格',scheme:'mono',   style:'minimal', bgType:'solid',   preview:'linear-gradient(135deg,#1a1a1a,#2a2a2a)'},
+  {id:'bento-sunset',    name:'Bento 暖橙',desc:'圆润温暖色调', scheme:'sunset', style:'bento',   bgType:'gradient',preview:'linear-gradient(135deg,#1a0c04,#2a1a10)'},
+  {id:'brutal-forest',   name:'粗野森林', desc:'大胆边框自然绿',scheme:'forest', style:'brutal',  bgType:'pattern', preview:'linear-gradient(135deg,#0a1a10,#102a18)'},
+];
+
+function applyPreset(preset) {
+  // 视觉风格
+  document.body.setAttribute('data-style', preset.style);
+  saveSetting('style', preset.style);
+  // 背景模式
+  document.body.setAttribute('data-bg-type', preset.bgType);
+  saveSetting('background_type', preset.bgType);
+  if (typeof applyBackgroundType === 'function') applyBackgroundType(preset.bgType);
+  // 同步状态到内存
+  _widgetCfg.color_scheme = preset.scheme;
+  _widgetCfg.accent_color = '';
+  // 重置自定义 hex 输入
+  var hexIn = document.getElementById('cfgAccentHex');
+  var colorIn = document.getElementById('cfgAccentCustom');
+  var sc = _COLOR_SCHEMES.filter(function(s){return s.id===preset.scheme})[0];
+  if (sc && hexIn) hexIn.value = sc.hex;
+  if (sc && colorIn) colorIn.value = sc.hex;
+  // 重新应用配色（清掉 accent 覆盖）
+  applyColorScheme(preset.scheme);
+  // 更新所有相关 UI
+  document.querySelectorAll('.preset-card').forEach(function(c){ c.classList.toggle('active', c.dataset.preset===preset.id); });
+  document.querySelectorAll('.scheme-card').forEach(function(c){ c.classList.toggle('active', c.dataset.schemeVal===preset.scheme); });
+  document.querySelectorAll('.style-card').forEach(function(c){ c.classList.toggle('active', c.dataset.styleVal===preset.style); });
+  document.querySelectorAll('.bgmode-card').forEach(function(c){ c.classList.toggle('active', c.dataset.mode===preset.bgType); });
+}
+
+function _matchPreset() {
+  var curScheme = _widgetCfg.color_scheme || document.body.getAttribute('data-scheme') || 'purple';
+  var curStyle  = document.body.getAttribute('data-style') || 'glass';
+  var curBg     = document.body.getAttribute('data-bg-type') || 'gradient';
+  if (_widgetCfg.accent_color) return null; // 自定义色不属于任何预设
+  for (var i = 0; i < _PRESETS.length; i++) {
+    var p = _PRESETS[i];
+    if (p.scheme === curScheme && p.style === curStyle && p.bgType === curBg) return p.id;
+  }
+  return null;
+}
+
+function hexToRgb(hex) {
+  var h = hex.replace('#','');
+  if (h.length === 3) h = h.split('').map(function(c){return c+c}).join('');
+  return {
+    r: parseInt(h.slice(0,2),16),
+    g: parseInt(h.slice(2,4),16),
+    b: parseInt(h.slice(4,6),16)
+  };
+}
+
+function hexToHue(hex) {
+  var rgb = hexToRgb(hex);
+  var r = rgb.r/255, g = rgb.g/255, b = rgb.b/255;
+  var max = Math.max(r,g,b), min = Math.min(r,g,b);
+  var d = max - min;
+  if (d === 0) return 0;
+  var h;
+  if (max === r) h = ((g-b)/d + 6) % 6;
+  else if (max === g) h = (b-r)/d + 2;
+  else h = (r-g)/d + 4;
+  h = Math.round(h * 60);
+  return h % 360;
+}
+
+function applyColorScheme(schemeId, customHex) {
+  document.body.setAttribute('data-scheme', schemeId);
+  _widgetCfg.color_scheme = schemeId;
+  if (customHex && /^#[0-9a-f]{6}$/i.test(customHex)) {
+    var rgb = hexToRgb(customHex);
+    var r = rgb.r+','+rgb.g+','+rgb.b;
+    var hue = hexToHue(customHex);
+    document.documentElement.style.setProperty('--accent', customHex);
+    document.documentElement.style.setProperty('--accent-rgb', r);
+    document.documentElement.style.setProperty('--accent-glow', 'rgba('+r+',0.35)');
+    document.documentElement.style.setProperty('--accent-soft', 'rgba('+r+',0.12)');
+    document.documentElement.style.setProperty('--accent-h', hue);
+    _widgetCfg.accent_color = customHex;
+  } else {
+    document.documentElement.style.removeProperty('--accent');
+    document.documentElement.style.removeProperty('--accent-rgb');
+    document.documentElement.style.removeProperty('--accent-glow');
+    document.documentElement.style.removeProperty('--accent-soft');
+    document.documentElement.style.removeProperty('--accent-h');
+    _widgetCfg.accent_color = '';
+  }
+  saveSetting('color_scheme', schemeId);
+  saveSetting('accent_color', _widgetCfg.accent_color || '');
+}
+
+function applyAccentColor(hex) {
+  if (!/^#[0-9a-f]{3,8}$/i.test(hex)) return;
+  var scheme = _findClosestScheme(hex);
+  applyColorScheme(scheme.id, hex);
+  // Update hue variables so surfaces coordinate with custom accent
+  var hue = hexToHue(hex);
+  document.documentElement.style.setProperty('--accent-h', hue);
+}
+
+function _findClosestScheme(hex) {
+  var hue = hexToHue(hex);
+  var best = _COLOR_SCHEMES[0];
+  var bestDiff = 360;
+  _COLOR_SCHEMES.forEach(function(s){
+    var sh = hexToHue(s.hex);
+    var d = Math.abs(hue - sh);
+    if (d > 180) d = 360 - d;
+    if (d < bestDiff) { bestDiff = d; best = s; }
+  });
+  return best;
+}
+
+function renderSettings() {
+  var body = document.getElementById('settingsBody');
+  var title = document.getElementById('settingsTitle');
+  var tabTitles = {presets:'预设',scheme:'配色',background:'背景',layout:'布局',font:'字体',widgets:'小组件',bookmarks:'书签',ai:'智能',security:'安全'};
+  title.textContent = tabTitles[_currentSettingsTab] || '设置';
+  body.innerHTML = _buildSettingsSection(_currentSettingsTab);
+  _bindSettingsEvents();
+}
+
+function _buildSettingsSection(tab) {
+  var bgType = document.body.getAttribute('data-bg-type') || 'gradient';
+  var pattern = document.body.getAttribute('data-pattern') || 'grid';
+  var scheme = _widgetCfg.color_scheme || document.body.getAttribute('data-scheme') || 'purple';
+  var accent = _widgetCfg.accent_color || '';
+
+  if (tab === 'presets') {
+    var activePreset = _matchPreset();
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">精选组合</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">一键应用配色、风格与背景的搭配方案</p>'+
+        '<div class="preset-grid">'+
+          _PRESETS.map(function(p){
+            return '<div class="preset-card '+(activePreset===p.id?'active':'')+'" data-preset="'+p.id+'">'+
+              '<div class="preset-preview" style="background:'+p.preview+'">'+
+                '<div class="preset-dot" style="background:'+_COLOR_SCHEMES.filter(function(s){return s.id===p.scheme})[0].hex+'"></div>'+
+              '</div>'+
+              '<div class="preset-info">'+
+                '<div class="preset-name">'+p.name+'</div>'+
+                '<div class="preset-desc">'+p.desc+'</div>'+
+              '</div>'+
+            '</div>';
+          }).join('')+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'scheme') {
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">配色方案</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">强调色自动联动卡片背景与边框</p>'+
+        '<div class="scheme-grid">'+
+          _COLOR_SCHEMES.map(function(s){
+            var isActive = scheme === s.id;
+            return '<div class="scheme-card '+(isActive?'active':'')+'" data-scheme-val="'+s.id+'">'+
+              '<div class="scheme-preview" style="background:'+s.hex+'">'+
+                '<div class="scheme-chip scheme-chip-1"></div>'+
+                '<div class="scheme-chip scheme-chip-2"></div>'+
+                '<div class="scheme-chip scheme-chip-3"></div>'+
+              '</div>'+
+              '<div class="scheme-name">'+s.name+'</div>'+
+              '<div class="scheme-desc">'+s.desc+'</div>'+
+            '</div>';
+          }).join('')+
+        '</div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">自定义强调色</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">覆盖当前方案的强调色</p>'+
+        '<div class="add-row">'+
+          '<input id="cfgAccentCustom" class="settings-input" type="color" value="'+ (accent || _COLOR_SCHEMES.filter(function(s){return s.id===scheme})[0].hex) +'" style="height:36px;width:60px;padding:2px;cursor:pointer">'+
+          '<input id="cfgAccentHex" class="settings-input" type="text" value="'+ (accent || _COLOR_SCHEMES.filter(function(s){return s.id===scheme})[0].hex) +'" placeholder="#7c6ff7" maxlength="7">'+
+          '<button class="btn-tiny" id="cfgAccentApply">应用</button>'+
+          '<button class="btn-tiny" id="cfgAccentReset" style="margin-left:4px">重置</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'background') {
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">背景模式</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">纯色、渐变、图案或壁纸轮播，四选一</p>'+
+        '<div class="bgmode-grid">'+
+          [
+            {id:'solid',name:'纯色'},
+            {id:'gradient',name:'渐变'},
+            {id:'pattern',name:'图案'},
+            {id:'wallpaper',name:'壁纸'}
+          ].map(function(m){
+            return '<div class="bgmode-card '+(bgType===m.id?'active':'')+'" data-mode="'+m.id+'">'+
+              '<div class="mode-preview"></div>'+
+              '<div><span class="mode-name">'+m.name+'</span></div>'+
+            '</div>';
+          }).join('')+
+        '</div>'+
+        // Inline color picker for solid mode
+        '<div id="solidColorRow" style="display:'+(bgType==='solid'?'flex':'none')+';margin-top:12px;align-items:center;gap:8px">'+
+          '<span style="font-size:12px;color:var(--text-secondary);white-space:nowrap;flex-shrink:0">纯色</span>'+
+          '<input type="color" id="cfgSolidColor" class="settings-input" value="'+(_widgetCfg.bg_solid_color||'#0d0e14')+'" style="height:34px;width:50px;padding:2px;cursor:pointer;min-width:0;flex-shrink:0">'+
+          '<input id="cfgSolidColorHex" class="settings-input" type="text" value="'+(_widgetCfg.bg_solid_color||'#0d0e14')+'" placeholder="#0d0e14" maxlength="7" style="flex:1;min-width:0">'+
+          '<button class="btn-tiny" id="cfgSolidApply">应用</button>'+
+        '</div>'+
+      '</div>'+
+
+      // Pattern picker — shown when pattern mode active
+      '<div id="patternCard" style="display:'+(bgType==='pattern'?'block':'none')+'">'+
+        '<div class="settings-section-title">图案样式</div>'+
+        '<div class="settings-card">'+
+          '<div class="pattern-grid">'+
+            [
+              {id:'grid',name:'网格'},
+              {id:'dots',name:'圆点'},
+              {id:'diagonal',name:'斜线'},
+              {id:'none',name:'无图案'}
+            ].map(function(p){
+              return '<div class="pattern-card '+(pattern===p.id?'active':'')+'" data-pattern="'+p.id+'">'+
+                '<div class="pattern-preview"></div>'+
+                '<div>'+p.name+'</div>'+
+              '</div>';
+            }).join('')+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+
+      // Wallpaper section — shown when wallpaper mode active
+      '<div id="wallpaperCard" style="display:'+(bgType==='wallpaper'?'block':'none')+'">'+
+        '<div class="settings-section-title">壁纸源</div>'+
+        '<div class="settings-card">'+
+          // Bing — single compact row
+          '<div id="wpBingRow" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);margin-bottom:10px;font-size:var(--text-sm)">'+
+            '<span style="color:var(--text-muted)">加载壁纸源...</span>'+
+          '</div>'+
+          // SteamGridDB — collapsible
+          '<div id="wpGameSection">'+
+            '<div class="wp-section-hd" style="cursor:pointer" onclick="var b=document.getElementById('+"'wpGameBody'"+');var a=document.getElementById('+"'wpGameArrow'"+');var d=b.style.display==='+"'none'"+'?'+"'block'"+':'+"'none'"+';b.style.display=d;a.style.transform=d=='+"'block'"+'?'+"'rotate(90deg)'"+':'+"'rotate(0deg)'"+'">'+
+              '<span id="wpGameArrow" style="transition:transform 0.2s;font-size:10px;color:var(--text-muted);margin-right:6px;display:inline-block">▶</span>'+
+              '<span style="font-size:var(--text-sm);font-weight:600;color:var(--text-primary)">SteamGridDB</span>'+
+              '<span id="wpGameCount" style="margin-left:6px;font-size:var(--text-xs);color:var(--accent);font-weight:600"></span>'+
+              '<span style="margin-left:auto;display:flex;gap:4px" onclick="event.stopPropagation()">'+
+                '<button class="btn-tiny" style="font-size:var(--text-xs);padding:2px 6px" onclick="toggleSGDB(1)">全启用</button>'+
+                '<button class="btn-tiny" style="font-size:var(--text-xs);padding:2px 6px" onclick="toggleSGDB(0)">全禁用</button>'+
+              '</span>'+
+            '</div>'+
+            '<div id="wpGameBody" style="display:none;margin-top:4px">'+
+              '<div id="wpGameList" class="wp-list">'+
+                '<div style="font-size:var(--text-sm);color:var(--text-muted);padding:8px">加载中...</div>'+
+              '</div>'+
+            '</div>'+
+          '</div>'+
+          // Add custom source
+          '<div style="margin-top:12px;border-top:1px solid var(--border-subtle);padding-top:10px">'+
+            '<div style="font-size:var(--text-xs);font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">自定义源</div>'+
+            '<div class="add-row" style="flex-wrap:wrap">'+
+              '<input id="wpCustomName" class="settings-input" placeholder="名称" style="flex:1;min-width:80px">'+
+              '<input id="wpCustomUrl" class="settings-input" placeholder="Steam App ID 或图片 URL" style="flex:2;min-width:120px">'+
+              '<select id="wpCustomType" class="settings-select" style="min-width:0;flex-shrink:0">'+
+                '<option value="steamgriddb">SteamGridDB</option>'+
+                '<option value="url">URL</option>'+
+              '</select>'+
+              '<button class="btn-tiny" id="wpAddCustom" style="flex-shrink:0">添加</button>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+
+        '<div class="settings-section-title">SteamGridDB</div>'+
+        '<div class="settings-card">'+
+          '<p class="card-desc">需要 <a href="https://www.steamgriddb.com/profile/preferences/api" target="_blank" style="color:var(--accent)">申请 API Key</a> 才能获取游戏英雄图</p>'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<input id="sgdbApiKey" class="settings-input" type="password" placeholder="sk_..." style="flex:1;min-width:160px">'+
+            '<button class="btn-tiny" id="sgdbTestBtn">测试</button>'+
+            '<button class="btn-tiny" id="sgdbSaveBtn">保存</button>'+
+          '</div>'+
+        '</div>'+
+
+        '<div class="settings-section-title">轮播设置</div>'+
+        '<div class="settings-card">'+
+          '<div class="settings-row">'+
+            '<div class="row-label">切换间隔<div class="row-desc">壁纸自动轮换间隔</div></div>'+
+            '<div class="row-control">'+
+              '<div class="slider-row">'+
+                '<input type="range" class="settings-slider" id="wpIntervalSlider" min="30" max="1800" step="30" value="'+(State.wpInterval||300)+'" style="width:140px">'+
+                '<span class="slider-val" id="wpIntervalValue">'+formatInterval(State.wpInterval||300)+'</span>'+
+              '</div>'+
+            '</div>'+
+          '</div>'+
+          '<div class="settings-row">'+
+            '<div class="row-label">不自动切换<div class="row-desc">关闭定时轮播</div></div>'+
+            '<div class="row-control"><input type="checkbox" id="wpIntervalNever" '+(State.wpInterval>=9999?'checked':'')+' style="width:18px;height:18px;accent-color:var(--accent)"></div>'+
+          '</div>'+
+          '<div class="settings-action-row" style="gap:6px">'+
+            '<button class="btn btn-secondary" id="wpPrevBtn">上一张</button>'+
+            '<button class="btn btn-secondary" id="wpRefreshBtn">刷新</button>'+
+            '<button class="btn btn-secondary" id="wpNextBtn">下一张</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'layout') {
+    var style = document.body.getAttribute('data-style') || 'glass';
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">视觉风格</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">4 种卡片风格，切换圆角、边框与阴影</p>'+
+        '<div class="style-grid">'+
+          [
+            {id:'minimal',name:'极简'},
+            {id:'bento',name:'Bento'},
+            {id:'glass',name:'毛玻璃'},
+            {id:'brutal',name:'新粗野'}
+          ].map(function(s){
+            return '<div class="style-card '+(style===s.id?'active':'')+'" data-style-val="'+s.id+'">'+
+              '<div class="style-preview"><div class="sp-card"></div><div class="sp-card"></div><div class="sp-card"></div></div>'+
+              '<div class="style-name">'+s.name+'</div>'+
+            '</div>';
+          }).join('')+
+        '</div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">字号</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">调整整页基础字号</p>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">字号<div class="row-desc">整页基础字号</div></div>'+
+          '<div class="row-control">'+
+            '<div class="slider-row">'+
+              '<input type="range" class="settings-slider" id="cfgLayoutFontSize" min="12" max="18" step="1" value="'+(_widgetCfg.font_size||14)+'" style="width:160px">'+
+              '<span class="slider-val" id="cfgLayoutFontSizeVal">'+(_widgetCfg.font_size||14)+'px</span>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'font') {
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">字体配置</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">为不同用途选择字体，留空使用系统默认</p>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">中文正文</div>'+
+          '<div class="row-control"><select id="cfgFontBody" class="settings-select"><option value="">系统默认</option></select></div>'+
+        '</div>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">中文标题</div>'+
+          '<div class="row-control"><select id="cfgFontTitle" class="settings-select"><option value="">系统默认</option></select></div>'+
+        '</div>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">英文 / 数字</div>'+
+          '<div class="row-control"><select id="cfgFontEn" class="settings-select"><option value="">系统默认</option></select></div>'+
+        '</div>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">代码</div>'+
+          '<div class="row-control"><select id="cfgFontCode" class="settings-select"><option value="">系统默认</option></select></div>'+
+        '</div>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">字号<div class="row-desc">整页基础字号</div></div>'+
+          '<div class="row-control">'+
+            '<div class="slider-row">'+
+              '<input type="range" class="settings-slider" id="cfgFontSize" min="12" max="18" step="1" value="'+(_widgetCfg.font_size||14)+'" style="width:160px">'+
+              '<span class="slider-val" id="cfgFontSizeVal">'+(_widgetCfg.font_size||14)+'px</span>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">实时预览</div>'+
+      '<div class="font-preview" id="fontPreview">'+
+        '<div class="pv-title">导航页标题 Nav Title</div>'+
+        '<div class="pv-body">这是一段中文正文预览文字，展示字体效果。The quick brown fox jumps over the lazy dog.</div>'+
+        '<div class="pv-code">1234567890 code snippet</div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">添加自定义字体</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">填写字体名称、CSS font-family、CDN URL（支持 .woff2 / .woff / Google Fonts CSS）</p>'+
+        '<div class="add-row">'+
+          '<input id="cfgFontName" class="settings-input" placeholder="名称（如 站酷高端黑）">'+
+        '</div>'+
+        '<div class="add-row">'+
+          '<input id="cfgFontFamily" class="settings-input" placeholder="font-family（如 ZCoolKuaiLe）">'+
+        '</div>'+
+        '<div class="add-row">'+
+          '<input id="cfgFontCdn" class="settings-input" placeholder="CDN URL（.woff2 或 Google Fonts css）">'+
+          '<button class="btn-tiny" id="cfgFontSave">+ 添加</button>'+
+        '</div>'+
+        '<div id="customFontsList" style="margin-top:12px"></div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'widgets') {
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">时钟</div>'+
+      '<div class="settings-card">'+
+        '<div class="settings-row">'+
+          '<div class="row-label">时间格式</div>'+
+          '<div class="row-control"><select id="cfgClock" class="settings-select"><option value="24h" '+(_widgetCfg.clock==='24h'?'selected':'')+'>24 小时制</option><option value="12h" '+(_widgetCfg.clock==='12h'?'selected':'')+'>12 小时制</option></select></div>'+
+        '</div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">搜索引擎</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">勾选启用的引擎；第一个为默认</p>'+
+        '<div id="cfgEngines" class="checkbox-group">'+Object.keys(_ENGINE_MAP).map(function(k){ var info=_ENGINE_MAP[k]; var checked=_widgetCfg.search_engines.indexOf(k)>=0; return '<label><input type="checkbox" value="'+k+'"'+(checked?' checked':'')+'> '+info.name+'</label>'; }).join('')+'</div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">天气</div>'+
+      '<div class="settings-card">'+
+        '<div class="settings-row">'+
+          '<div class="row-label">城市</div>'+
+          '<div class="row-control"><input id="cfgWeatherCity" class="settings-input" value="'+escAttr(_widgetCfg.weather_city)+'" style="width:180px"></div>'+
+        '</div>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">显示大小</div>'+
+          '<div class="row-control"><select id="cfgWeatherSize" class="settings-select"><option value="small" '+(_widgetCfg.weather_size==='small'?'selected':'')+'>小</option><option value="medium" '+(_widgetCfg.weather_size==='medium'?'selected':'')+'>中</option><option value="large" '+(_widgetCfg.weather_size==='large'?'selected':'')+'>大</option></select></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'bookmarks') {
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">连接状态</div>'+
+      '<div class="settings-card">'+
+        '<div class="settings-row"><div class="row-label">插件在线</div><div class="row-control" id="pluginOnline">检查中...</div></div>'+
+        '<div class="settings-row"><div class="row-label">上次通讯</div><div class="row-control" id="pluginLastContact">—</div></div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">导入 / 导出</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">导入或导出为浏览器标准 HTML 书签文件</p>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button class="btn btn-primary" id="exportBtn">导出 HTML</button>'+
+          '<button class="btn btn-secondary" id="importBtn">导入 HTML</button>'+
+        '</div>'+
+        '<input type="file" id="importFileInput" accept=".html,.htm" style="display:none">'+
+      '</div>'+
+
+      '<div class="settings-section-title">浏览器插件</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">下载插件后，右键即可收藏到 SuenWeb</p>'+
+        '<div style="display:flex;gap:8px">'+
+          '<a href="/extension/download/chrome" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Chrome / Edge</a>'+
+          '<a href="/extension/download/firefox" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Firefox</a>'+
+        '</div>'+
+        '<p class="card-desc" style="margin-top:8px">下载后在扩展管理页加载已解压的文件夹</p>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'ai') {
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">LLM 配置</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">填入 OpenAI 兼容 API，用于 AI 补全与链接检测</p>'+
+        '<div style="margin-bottom:10px"><label style="font-size:12px;color:var(--text-secondary)">API 地址</label><input id="cfgLlmUrl" class="settings-input" value="'+escAttr(_widgetCfg.llm_url||'')+'" placeholder="https://api.openai.com/v1" style="width:100%;margin-top:4px"></div>'+
+        '<div style="margin-bottom:10px"><label style="font-size:12px;color:var(--text-secondary)">API 密钥</label><input type="password" id="cfgLlmKey" class="settings-input" value="'+escAttr(_widgetCfg.llm_key||'')+'" style="width:100%;margin-top:4px"></div>'+
+        '<div style="margin-bottom:10px"><label style="font-size:12px;color:var(--text-secondary)">模型名称</label><input id="cfgLlmModel" class="settings-input" value="'+escAttr(_widgetCfg.llm_model||'')+'" placeholder="gpt-3.5-turbo" style="width:100%;margin-top:4px"></div>'+
+        '<button class="btn btn-secondary" id="cfgLlmSave" style="width:100%">保存</button>'+
+      '</div>'+
+
+      '<div class="settings-section-title">一键补全描述</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">选择要补全的组，仅处理空描述链接</p>'+
+        '<div class="checkbox-group">'+
+          '<button type=button class="btn-tiny" onclick="toggleAllGroups(\'ai-desc\',true)">全选</button>'+
+          '<button type=button class="btn-tiny" onclick="toggleRevGroups(\'ai-desc\')">反选</button>'+
+        '</div>'+
+        '<div class="checkbox-group" style="margin-top:8px">'+State.groups.map(function(g){return '<label><input type="checkbox" class="ai-desc-grp" value="'+g.id+'" onchange="onGroupChange(\'ai-desc\')"> '+escHtml(g.name)+'</label>';}).join('')+'</div>'+
+        '<button class="btn btn-primary" id="aiDescribeAllBtn" disabled style="margin-top:8px">请先勾选目标分组</button>'+
+        '<div id="aiDescribeResult" style="margin-top:10px;font-size:12px"></div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">链接健康检查</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">选择要检测的组，可批量删除失效链接</p>'+
+        '<div class="checkbox-group">'+
+          '<button type=button class="btn-tiny" onclick="toggleAllGroups(\'ai-check\',true)">全选</button>'+
+          '<button type=button class="btn-tiny" onclick="toggleRevGroups(\'ai-check\')">反选</button>'+
+        '</div>'+
+        '<div class="checkbox-group" style="margin-top:8px">'+State.groups.map(function(g){return '<label><input type="checkbox" class="ai-check-grp" value="'+g.id+'" onchange="onGroupChange(\'ai-check\')"> '+escHtml(g.name)+'</label>';}).join('')+'</div>'+
+        '<button class="btn btn-primary" id="aiCheckBtn" disabled style="margin-top:8px">请先勾选目标分组</button>'+
+        '<div id="aiCheckResult" style="margin-top:10px;font-size:12px;max-height:300px;overflow-y:auto"></div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  if (tab === 'security') {
+    return ''+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">修改密码</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">修改后需要重新登录，插件也需更新密码</p>'+
+        '<div style="display:flex;flex-direction:column;gap:8px">'+
+          '<input type="password" id="oldPassword" class="settings-input" placeholder="旧密码">'+
+          '<input type="password" id="newPassword" class="settings-input" placeholder="新密码（至少4位）">'+
+          '<button class="btn btn-primary" id="changePwBtn">保存</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  return '<div class="settings-section active"><p>未知标签</p></div>';
+}
+
+function _bindSettingsEvents() {
+  var body = document.getElementById('settingsBody');
+
+  // Nav items
+  document.querySelectorAll('.settings-nav-item').forEach(function(t){
+    if (!t.dataset.tab) return;
+    t.onclick = function(){ switchSettingsTab(t.dataset.tab); };
+  });
+
+  if (_currentSettingsTab === 'presets') {
+    body.querySelectorAll('.preset-card').forEach(function(c){
+      c.onclick = function(){
+        var pid = c.dataset.preset;
+        var preset = _PRESETS.filter(function(p){return p.id===pid;})[0];
+        if (preset) {
+          applyPreset(preset);
+          toast('已应用「'+preset.name+'」','success');
+        }
+      };
+    });
+  }
+
+  if (_currentSettingsTab === 'scheme') {
+    // 配色方案卡片
+    body.querySelectorAll('.scheme-card').forEach(function(c){
+      c.onclick = function(){
+        var schemeId = c.dataset.schemeVal;
+        applyColorScheme(schemeId);
+        body.querySelectorAll('.scheme-card').forEach(function(x){x.classList.remove('active')});
+        c.classList.add('active');
+        var hexIn = document.getElementById('cfgAccentHex');
+        var colorIn = document.getElementById('cfgAccentCustom');
+        var sc = _COLOR_SCHEMES.filter(function(s){return s.id===schemeId})[0];
+        if (sc && hexIn) hexIn.value = sc.hex;
+        if (sc && colorIn) colorIn.value = sc.hex;
+        toast('配色已切换','success');
+      };
+    });
+    var hexIn = document.getElementById('cfgAccentHex');
+    var colorIn = document.getElementById('cfgAccentCustom');
+    var applyBtn = document.getElementById('cfgAccentApply');
+    var resetBtn = document.getElementById('cfgAccentReset');
+    if (colorIn) colorIn.oninput = function(){ if (hexIn) hexIn.value = colorIn.value; };
+    if (hexIn) hexIn.oninput = function(){ if (/^#[0-9a-f]{6}$/i.test(hexIn.value) && colorIn) colorIn.value = hexIn.value; };
+    if (applyBtn) applyBtn.onclick = function(){
+      var v = (hexIn && hexIn.value) || (colorIn && colorIn.value) || '';
+      if (!/^#[0-9a-f]{6}$/i.test(v)) { toast('请输入有效的颜色值','error'); return; }
+      applyAccentColor(v);
+      toast('自定义色已应用','success');
+    };
+    if (resetBtn) resetBtn.onclick = function(){
+      var scheme = _widgetCfg.color_scheme || 'purple';
+      applyColorScheme(scheme);
+      var sc = _COLOR_SCHEMES.filter(function(s){return s.id===scheme})[0];
+      if (sc && hexIn) hexIn.value = sc.hex;
+      if (sc && colorIn) colorIn.value = sc.hex;
+      toast('已重置为方案默认色','success');
+    };
+  }
+
+  if (_currentSettingsTab === 'layout') {
+    // 视觉风格卡片
+    body.querySelectorAll('.style-card').forEach(function(c){
+      c.onclick = function(){
+        var v = c.dataset.styleVal;
+        document.body.setAttribute('data-style', v);
+        body.querySelectorAll('.style-card').forEach(function(x){x.classList.remove('active')});
+        c.classList.add('active');
+        saveSetting('style', v);
+        toast('视觉风格已切换','success');
+      };
+    });
+    // 字号
+    var fsSlider = document.getElementById('cfgLayoutFontSize');
+    var fsVal = document.getElementById('cfgLayoutFontSizeVal');
+    if (fsSlider) {
+      fsSlider.oninput = function(){
+        if (fsVal) fsVal.textContent = fsSlider.value + 'px';
+        _widgetCfg.font_size = fsSlider.value;
+        document.documentElement.style.setProperty('--text-base', fsSlider.value + 'px');
+        document.body.style.fontSize = fsSlider.value + 'px';
+      };
+      fsSlider.onchange = function(){ saveWidgetCfg(); };
+    }
+  }
+
+  if (_currentSettingsTab === 'background') {
+    // 背景模式卡片
+    body.querySelectorAll('.bgmode-card').forEach(function(c){
+      c.onclick = function(){
+        var v = c.dataset.mode;
+        document.body.setAttribute('data-bg-type', v);
+        body.querySelectorAll('.bgmode-card').forEach(function(x){x.classList.remove('active')});
+        c.classList.add('active');
+        saveSetting('background_type', v);
+        var pc = document.getElementById('patternCard');
+        var sc = document.getElementById('solidColorRow');
+        var wc = document.getElementById('wallpaperCard');
+        if (pc) pc.style.display = v === 'pattern' ? 'block' : 'none';
+        if (sc) sc.style.display = v === 'solid' ? 'flex' : 'none';
+        if (wc) wc.style.display = v === 'wallpaper' ? 'block' : 'none';
+        applyBackgroundType(v);
+      };
+    });
+
+    // 纯色背景
+    var solidApply = document.getElementById('cfgSolidApply');
+    if (solidApply) solidApply.onclick = function(){
+      var c = document.getElementById('cfgSolidColor'); if (!c) return;
+      var v = c.value; if (!/^#[0-9a-f]{6}$/i.test(v)) { toast('颜色格式无效','error'); return; }
+      document.body.style.background = v;
+      _widgetCfg.bg_solid_color = v;
+      saveSetting('bg_solid_color', v);
+      toast('纯色背景已应用','success');
+    };
+    var solidColor = document.getElementById('cfgSolidColor');
+    var solidHex = document.getElementById('cfgSolidColorHex');
+    if (solidColor && solidHex) {
+      solidColor.oninput = function(){ solidHex.value = solidColor.value; };
+      solidHex.oninput = function(){ if (/^#[0-9a-f]{6}$/i.test(solidHex.value)) solidColor.value = solidHex.value; };
+    }
+
+    // 图案卡片
+    body.querySelectorAll('.pattern-card').forEach(function(c){
+      c.onclick = function(){
+        var v = c.dataset.pattern;
+        document.body.setAttribute('data-pattern', v);
+        body.querySelectorAll('.pattern-card').forEach(function(x){x.classList.remove('active')});
+        c.classList.add('active');
+        saveSetting('pattern', v);
+      };
+    });
+
+    // 壁纸源管理 + 轮播
+    if (document.getElementById('wpBingRow')) {
+      loadWallpaperSources();
+      var wpSlider = document.getElementById('wpIntervalSlider');
+      if (wpSlider) {
+        wpSlider.oninput = function(){
+          var never = document.getElementById('wpIntervalNever');
+          document.getElementById('wpIntervalValue').textContent = formatInterval(parseInt(wpSlider.value));
+          if (never) never.checked = false;
+        };
+        wpSlider.onchange = function(){
+          var v = parseInt(wpSlider.value);
+          State.wpInterval = v;
+          saveSetting('wallpaper_interval', String(v));
+          resetWallpaperTimer();
+        };
+      }
+      var wpNever = document.getElementById('wpIntervalNever');
+      if (wpNever) {
+        wpNever.onchange = function(){
+          if (wpNever.checked) {
+            State.wpInterval = 9999;
+            saveSetting('wallpaper_interval', '9999');
+            clearWallpaperTimer();
+            document.getElementById('wpIntervalValue').textContent = '从不';
+          } else {
+            State.wpInterval = 300;
+            saveSetting('wallpaper_interval', '300');
+            resetWallpaperTimer();
+            document.getElementById('wpIntervalValue').textContent = '5分钟';
+          }
+        };
+      }
+      var wpRefresh = document.getElementById('wpRefreshBtn');
+      if (wpRefresh) wpRefresh.onclick = async function(){ wpRefresh.disabled=true; wpRefresh.textContent='...'; await refreshWallpaper('next'); wpRefresh.disabled=false; wpRefresh.textContent='刷新'; };
+      var wpPrev = document.getElementById('wpPrevBtn');
+      if (wpPrev) wpPrev.onclick = async function(){ wpPrev.disabled=true; await refreshWallpaper('prev'); wpPrev.disabled=false; };
+      var wpNext = document.getElementById('wpNextBtn');
+      if (wpNext) wpNext.onclick = async function(){ wpNext.disabled=true; await refreshWallpaper('next'); wpNext.disabled=false; };
+      var wpAdd = document.getElementById('wpAddCustom');
+      if (wpAdd) wpAdd.onclick = async function(){
+        var n = document.getElementById('wpCustomName').value.trim();
+        var u = document.getElementById('wpCustomUrl').value.trim();
+        var t = document.getElementById('wpCustomType').value;
+        if (!n || !u) { toast('请填写名称和游戏ID/URL','error'); return; }
+        try { await api('POST','/api/wallpaper/source',{name:n,url:u,source_type:t}); document.getElementById('wpCustomName').value=''; document.getElementById('wpCustomUrl').value=''; loadWallpaperSources(); toast('已添加','success'); } catch(e){ toast(e.message,'error'); }
+      };
+      // SGDB: test API key
+      var sgdbTest = document.getElementById('sgdbTestBtn');
+      if (sgdbTest) sgdbTest.onclick = async function(){
+        sgdbTest.disabled=true; sgdbTest.textContent='测试中...';
+        var key = document.getElementById('sgdbApiKey').value.trim();
+        try {
+          var r = await fetch('/api/wallpaper/sgdb-test', {method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({api_key:key})});
+          var d = await r.json();
+          if (d.ok) { toast(d.message,'success'); var stEl=document.getElementById('sgdbStatus'); if(stEl){ stEl.textContent='已配置'; stEl.style.color='var(--success)'; loadWallpaperSources(); } }
+          else { toast(d.error||'连接失败','error'); }
+        } catch(e){ toast(e.message,'error'); }
+        sgdbTest.disabled=false; sgdbTest.textContent='测试连接';
+      };
+      // SGDB: save API key
+      var sgdbSave = document.getElementById('sgdbSaveBtn');
+      if (sgdbSave) sgdbSave.onclick = async function(){
+        var key = document.getElementById('sgdbApiKey').value.trim();
+        try { await saveSetting('steamgriddb_api_key', key); toast('API Key 已保存','success'); loadWallpaperSources(); } catch(e){ toast(e.message,'error'); }
+      };
+    }
+  }
+
+  if (_currentSettingsTab === 'font') {
+    loadFontSettings();
+    ['cfgFontBody','cfgFontTitle','cfgFontEn','cfgFontCode'].forEach(function(id){
+      var sel = document.getElementById(id); if (!sel) return;
+      sel.onchange = function(){
+        var keyMap = {cfgFontBody:'font_body',cfgFontTitle:'font_title',cfgFontEn:'font_body_en',cfgFontCode:'font_code'};
+        var key = keyMap[id]; var family = sel.value;
+        if (key==='font_body')       _widgetCfg.font_body = family;
+        else if (key==='font_title') _widgetCfg.font_title = family;
+        else if (key==='font_body_en') _widgetCfg.font_body_en = family;
+        else if (key==='font_code')  _widgetCfg.font_code = family;
+        applyFontSettings();
+        saveWidgetCfg();
+      };
+    });
+    var fsSlider = document.getElementById('cfgFontSize');
+    if (fsSlider) {
+      fsSlider.oninput = function(){ document.getElementById('cfgFontSizeVal').textContent = fsSlider.value + 'px'; };
+      fsSlider.onchange = function(){ _widgetCfg.font_size = fsSlider.value; applyFontSettings(); saveWidgetCfg(); };
+    }
+    var fontSave = document.getElementById('cfgFontSave');
+    if (fontSave) fontSave.onclick = async function(){
+      var n = document.getElementById('cfgFontName').value.trim();
+      var f = document.getElementById('cfgFontFamily').value.trim();
+      var c = document.getElementById('cfgFontCdn').value.trim();
+      if (!n || !f || !c) { toast('请填写完整','error'); return; }
+      try { await api('POST','/api/fonts',{name:n,family:f,cdn_url:c,language:'zh'}); document.getElementById('cfgFontName').value=''; document.getElementById('cfgFontFamily').value=''; document.getElementById('cfgFontCdn').value=''; loadFontSettings(); toast('字体已添加','success'); } catch(e){ toast(e.message,'error'); }
+    };
+  }
+
+  if (_currentSettingsTab === 'widgets') {
+    var cfgClock = document.getElementById('cfgClock');
+    if (cfgClock) cfgClock.onchange = function(){ _widgetCfg.clock = cfgClock.value; updateClock(); saveWidgetCfg(); };
+    var cfgCity = document.getElementById('cfgWeatherCity');
+    if (cfgCity) cfgCity.onchange = function(){ _widgetCfg.weather_city = cfgCity.value.trim() || 'Beijing'; fetchWeather(); saveWidgetCfg(); };
+    var cfgSize = document.getElementById('cfgWeatherSize');
+    if (cfgSize) cfgSize.onchange = function(){ _widgetCfg.weather_size = cfgSize.value; fetchWeather(); saveWidgetCfg(); };
+    var cfgEngs = document.getElementById('cfgEngines');
+    if (cfgEngs) cfgEngs.addEventListener('change', function(){
+      var cbs = cfgEngs.querySelectorAll('input:checked');
+      var engs = []; cbs.forEach(function(cb){engs.push(cb.value)});
+      if (engs.length===0) { engs=['google']; cfgEngs.querySelector('input[value=google]').checked=true; }
+      _widgetCfg.search_engines = engs.join(',');
+      if (engs.indexOf(_searchEngine)<0) _searchEngine = engs[0];
+      renderSearchEngines(); initSearch(); saveWidgetCfg();
+    });
+  }
+
+  if (_currentSettingsTab === 'bookmarks') {
+    var expBtn = document.getElementById('exportBtn');
+    if (expBtn) expBtn.onclick = function(){ window.open('/api/export','_blank'); };
+    var impBtn = document.getElementById('importBtn');
+    var impFile = document.getElementById('importFileInput');
+    if (impBtn && impFile) {
+      impBtn.onclick = function(){ impFile.click(); };
+      impFile.onchange = async function(){
+        var file = impFile.files[0];
+        if (!file) return;
+        var form = new FormData();
+        form.append('file', file);
+        try {
+          var resp = await fetch('/api/sync', { method: 'POST', headers: { 'Authorization': 'Bearer '+State.token }, body: form });
+          var r = await resp.json();
+          if (resp.ok) toast('导入成功: '+(r.imported||0)+' 个书签', 'success');
+          else toast(r.error||'导入失败', 'error');
+        } catch(e) { toast('导入失败: '+e.message, 'error'); }
+        impFile.value = '';
+      };
+    }
+    // Refresh plugin status
+    fetch('/api/sync/status').then(function(sr){ return sr.ok ? sr.json() : null; }).then(function(sd){
+      if (!sd) return;
+      var po = document.getElementById('pluginOnline');
+      var pc = document.getElementById('pluginLastContact');
+      if (po) {
+        po.textContent = sd.listeners > 0 ? '在线 ('+sd.listeners+')' : '离线';
+        po.style.color = sd.listeners > 0 ? 'var(--success)' : 'var(--text-muted)';
+      }
+      if (pc) pc.textContent = sd.last_sync_at || '—';
+    }).catch(function(){});
+  }
+
+  if (_currentSettingsTab === 'ai') {
+    var aiDescBtn = document.getElementById('aiDescribeAllBtn');
+    if (aiDescBtn) aiDescBtn.onclick = aiDescribeAll;
+    var aiCheckBtn = document.getElementById('aiCheckBtn');
+    if (aiCheckBtn) aiCheckBtn.onclick = aiCheck;
+    var cfgLlmSave = document.getElementById('cfgLlmSave');
+    if (cfgLlmSave) cfgLlmSave.onclick = function(){
+      _widgetCfg.llm_url = document.getElementById('cfgLlmUrl').value.trim();
+      _widgetCfg.llm_key = document.getElementById('cfgLlmKey').value.trim();
+      _widgetCfg.llm_model = document.getElementById('cfgLlmModel').value.trim();
+      saveWidgetCfg();
+      toast('配置已保存','success');
+    };
+  }
+
+  if (_currentSettingsTab === 'security') {
+    var cpw = document.getElementById('changePwBtn');
+    if (cpw) cpw.onclick = async function(){
+      var o = document.getElementById('oldPassword').value;
+      var n = document.getElementById('newPassword').value;
+      if (!o || !n) { toast('请填写新旧密码','error'); return; }
+      if (n.length<4) { toast('新密码至少4位','error'); return; }
+      try {
+        await api('POST','/api/auth/change-password',{old_password:o,new_password:n});
+        State.token = n;
+        localStorage.setItem('suenweb_token', n);
+        toast('密码已更新','success');
+        document.getElementById('oldPassword').value='';
+        document.getElementById('newPassword').value='';
+      } catch(e){ toast(e.message,'error'); }
+    };
+  }
+}
+function onGroupChange(prefix){
+  var cbs=document.querySelectorAll('.'+prefix+'-grp');
+  var btn=document.querySelector('#'+(prefix==='ai-desc'?'aiDescribeAllBtn':'aiCheckBtn'));
+  var checked=Array.from(cbs).filter(function(c){return c.checked});
+  if(btn){ btn.disabled=checked.length===0; btn.textContent=checked.length===0?'请先勾选目标分组':(prefix==='ai-desc'?'补全 '+checked.length+' 组':'检测 '+checked.length+' 组'); }
+}
+function toggleAllGroups(prefix){
+  document.querySelectorAll('.'+prefix+'-grp').forEach(function(cb){cb.checked=true});
+  onGroupChange(prefix);
+}
+function toggleRevGroups(prefix){
+  document.querySelectorAll('.'+prefix+'-grp').forEach(function(cb){cb.checked=!cb.checked});
+  onGroupChange(prefix);
+}
+async function saveWidgetCfg(){
+  if(!State.token) return;
+  try{ await api('PUT','/api/settings',{clock_format:_widgetCfg.clock,weather_city:_widgetCfg.weather_city,weather_size:_widgetCfg.weather_size,search_engines:_widgetCfg.search_engines,search_default:_searchEngine,llm_url:_widgetCfg.llm_url,llm_key:_widgetCfg.llm_key,llm_model:_widgetCfg.llm_model,font_body:_widgetCfg.font_body,font_title:_widgetCfg.font_title,font_body_en:_widgetCfg.font_body_en,font_code:_widgetCfg.font_code,font_size:_widgetCfg.font_size}); }catch(e){}
+}
+async function saveSetting(key,value){ try{ await api('PUT','/api/settings',{[key]:String(value)}); }catch(e){} }
+
+// ====== WALLPAPER SYSTEM ======
+function formatInterval(sec){ if(sec>=9999||sec===0) return '从不'; if(sec<60) return sec+'秒'; var m=Math.floor(sec/60); if(m<60) return m+'分钟'; var h=Math.floor(m/60); return h+'小时'+((m%60)?(m%60)+'分钟':''); }
+function clearWallpaperTimer(){ if(_wpTimer){ clearInterval(_wpTimer); _wpTimer=null; } }
+function resetWallpaperTimer(){ clearWallpaperTimer(); var iv=State.wpInterval||300; if(iv>=9999||iv===0) return; _wpTimer=setInterval(function(){ refreshWallpaper('next'); }, iv*1000); }
+
+async function refreshWallpaper(direction){
+  try{
+    var resp=await fetch('/api/wallpaper/refresh',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({direction:direction})});
+    var data=await resp.json();
+    if(data.url) applyWallpaper(data.url);
+    loadWallpaperSources(); // refresh the source list to show current index
+  } catch(e){ console.error('Wallpaper refresh error:', e); }
+}
+
+async function loadWallpaper(){
+  try{
+    var resp=await fetch('/api/wallpaper');
+    var data=await resp.json();
+    if(data.background_type) document.body.setAttribute('data-bg-type', data.background_type);
+    if(data.url && document.body.getAttribute('data-bg-type')==='wallpaper') applyWallpaper(data.url);
+  } catch(e){}
+}
+
+function applyWallpaper(url){
+  var layer=document.getElementById('wallpaperLayer');
+  if(!layer) return;
+  var img=new Image();
+  img.onload=function(){ layer.style.backgroundImage='url('+url+')'; layer.style.opacity='1'; };
+  img.onerror=function(){ layer.style.opacity='0'; };
+  img.src=url;
+}
+
+function applyBackgroundType(type){
+  document.body.setAttribute('data-bg-type', type);
+  if(type==='solid' && _widgetCfg.bg_solid_color) document.body.style.background = _widgetCfg.bg_solid_color;
+  else document.body.style.background = '';
+  var layer=document.getElementById('wallpaperLayer');
+  if(type==='wallpaper'){ if(layer) layer.style.display='block'; loadWallpaper(); resetWallpaperTimer(); }
+  else { if(layer) layer.style.display='none'; clearWallpaperTimer(); }
+}
+
+async function loadWallpaperSources(){
+  var bingRow=document.getElementById('wpBingRow');
+  var gameList=document.getElementById('wpGameList');
+  if(!bingRow && !gameList) return;
+  try{
+    var resp=await fetch('/api/wallpaper/sources');
+    var data=await resp.json();
+    State.wpInterval=data.interval||300;
+    State.wpSources=data.sources||[];
+    var currentIndex=data.current_index||0;
+
+    // Split sources: Bing vs SteamGridDB games vs other
+    var bingSrc=null, sgdbSrcs=[], otherSrcs=[];
+    data.sources.forEach(function(src){
+      if(src.source_type==='url' && src.category==='builtin' && src.name.indexOf('必应')>=0){
+        bingSrc=src;
+      } else if(src.source_type==='steamgriddb'){
+        sgdbSrcs.push(src);
+      } else {
+        otherSrcs.push(src);
+      }
+    });
+
+    // Bing row — compact inline
+    if(bingRow){
+      bingRow.innerHTML='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">'+
+        '<input type="checkbox" '+(bingSrc.enabled?'checked':'')+' onchange="toggleWallpaperSource('+bingSrc.id+',this.checked)">'+
+        '<span style="color:var(--text-primary)">必应每日</span>'+
+        '<span style="color:var(--text-muted);margin-left:auto;font-size:var(--text-xs)">cn.bing.com</span>'+
+      '</label>'+
+      (currentIndex===data.sources.indexOf(bingSrc)?'<span style="font-size:var(--text-xs);color:var(--success);font-weight:500;flex-shrink:0;margin-left:8px">当前</span>':'');
+    }
+
+    // SteamGridDB game list — collapsible
+    var enabledCount=sgdbSrcs.filter(function(s){return s.enabled;}).length;
+    var countEl=document.getElementById('wpGameCount');
+    if(countEl) countEl.textContent=enabledCount+' 个已启用';
+
+    if(gameList){
+      if(sgdbSrcs.length===0){
+        gameList.innerHTML='<div style="color:var(--text-muted);font-size:12px;padding:10px;text-align:center">暂无 SteamGridDB 源，请先配置 API Key</div>';
+      } else {
+        var html='';
+        sgdbSrcs.forEach(function(src, i){
+          var isCurrent=data.sources.indexOf(src)===currentIndex;
+          html+='<div class="wp-item">'+
+            '<input type="checkbox" value="'+src.id+'" '+(src.enabled?'checked':'')+' onchange="toggleWallpaperSource('+src.id+',this.checked)">'+
+            '<span class="wp-name">'+escHtml(src.name)+'</span>'+
+            (isCurrent?'<span class="wp-current">当前</span>':'')+
+            (src.category!=='builtin'?'<button class="wp-del" onclick="deleteWallpaperSource('+src.id+')">✕</button>':'')+
+          '</div>';
+        });
+        // Add other non-bing, non-SGDB sources at bottom
+        otherSrcs.forEach(function(src, i){
+          var isCurrent=data.sources.indexOf(src)===currentIndex;
+          html+='<div class="wp-item">'+
+            '<input type="checkbox" value="'+src.id+'" '+(src.enabled?'checked':'')+' onchange="toggleWallpaperSource('+src.id+',this.checked)">'+
+            '<span class="wp-name">'+escHtml(src.name)+'</span>'+
+            (isCurrent?'<span class="wp-current">当前</span>':'')+
+            '<button class="wp-del" onclick="deleteWallpaperSource('+src.id+')">✕</button>'+
+          '</div>';
+        });
+        gameList.innerHTML=html;
+      }
+    }
+
+    // Update interval slider if it exists
+    var slider=document.getElementById('wpIntervalSlider'); if(slider){ slider.value=State.wpInterval; var val=document.getElementById('wpIntervalValue'); if(val) val.textContent=formatInterval(State.wpInterval); }
+    var never=document.getElementById('wpIntervalNever'); if(never){ never.checked=State.wpInterval>=9999; }
+
+    // SGDB status
+    var st=document.getElementById('sgdbStatus');
+    if(st){ st.textContent=data.steamgriddb_configured?'OK ('+data.steamgriddb_api_key+')':'未配置'; st.style.color=data.steamgriddb_configured?'var(--success)':'var(--text-muted)'; }
+  } catch(e){
+    if(bingRow) bingRow.innerHTML='<span style="font-size:12px;color:var(--error)">加载失败</span>';
+    if(gameList) gameList.innerHTML='<div style="color:var(--error);font-size:12px;padding:8px">加载失败</div>';
+  }
+}
+
+// Toggle ALL SteamGridDB sources at once
+async function toggleSGDB(enable){
+  if(!State.wpSources) return;
+  var sgdb=State.wpSources.filter(function(s){return s.source_type==='steamgriddb'});
+  if(!sgdb.length){ toast('没有 SteamGridDB 源','err'); return; }
+  try{
+    for(var i=0;i<sgdb.length;i++){
+      await api('PUT','/api/wallpaper/source/'+sgdb[i].id,{enabled:enable?1:0});
+    }
+    loadWallpaperSources();
+    toast(enable?'SteamGridDB 源已全部启用':'SteamGridDB 源已全部禁用','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+
+async function toggleWallpaperSource(id, enabled){
+  try{ await api('PUT','/api/wallpaper/source/'+id,{enabled:enabled?1:0}); loadWallpaperSources(); } catch(e){ toast(e.message,'error'); }
+}
+
+async function deleteWallpaperSource(id){
+  if(!confirm('确定删除此壁纸源？')) return;
+  try{ await api('DELETE','/api/wallpaper/source/'+id); loadWallpaperSources(); toast('已删除','info'); } catch(e){ toast(e.message,'error'); }
+}
+
+// ====== FONT SYSTEM ======
+async function loadFontSettings(){
+  try{
+    var resp=await fetch('/api/fonts');
+    var data=await resp.json();
+    _fontList=data.fonts||[];
+    // Populate font selectors — 4 ZeoSeven fonts + default
+    var opts = '<option value="">系统默认</option>' +
+      _fontList.map(function(f){
+        return '<option value="'+escAttr(f.family)+'">'+escHtml(f.name)+'</option>';
+      }).join('');
+    var sel=document.getElementById('cfgFontBody'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_body||''; }
+    sel=document.getElementById('cfgFontTitle'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_title||''; }
+    sel=document.getElementById('cfgFontEn'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_body_en||''; }
+    sel=document.getElementById('cfgFontCode'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_code||''; }
+    // Update font size slider
+    var fs=document.getElementById('cfgFontSize'); if(fs){ fs.value=_widgetCfg.font_size||14; document.getElementById('cfgFontSizeVal').textContent=fs.value+'px'; }
+    // Custom fonts list
+    var customList=document.getElementById('customFontsList'); if(customList){
+      var customs=_fontList.filter(function(f){return f.category==='custom'});
+      if(customs.length>0){ customList.innerHTML='<span style="color:var(--text-secondary)">自定义字体：</span>'+customs.map(function(f){return '<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;padding:2px 8px;background:rgba(255,255,255,0.06);border-radius:4px;font-size:11px">'+escHtml(f.name)+' <button style="background:none;border:none;color:#f87171;cursor:pointer;font-size:10px;padding:0" onclick="deleteFont('+f.id+')">✕</button></span>';}).join(''); }
+      else customList.innerHTML='<span style="color:var(--text-secondary);font-size:11px">暂无自定义字体</span>';
+    }
+  } catch(e){ console.error('Font load error:', e); }
+}
+
+async function deleteFont(fid){
+  if(!confirm('确定删除此字体？')) return;
+  try{ await api('DELETE','/api/fonts/'+fid); loadFontSettings(); toast('已删除','info'); } catch(e){ toast(e.message,'error'); }
+}
+
+function applyFontSettings(){
+  var body=_widgetCfg.font_body||'';
+  var title=_widgetCfg.font_title||'';
+  var en=_widgetCfg.font_body_en||'';
+  var code=_widgetCfg.font_code||'';
+  var size=_widgetCfg.font_size||14;
+  var stack=[];
+  if(body) stack.push('"'+body+'"');
+  if(en) stack.push('"'+en+'"');
+  stack.push('-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif');
+  var fontStr=stack.join(',');
+  document.body.style.fontFamily=fontStr;
+  document.body.style.fontSize=size+'px';
+  document.documentElement.style.setProperty('--text-base',size+'px');
+  var ts=document.getElementById('font-title-style'); if(ts) ts.remove();
+  if(title){ ts=document.createElement('style'); ts.id='font-title-style'; ts.textContent='h1,h2,h3,h4,h5,.auth-title,.pinned-header,.clock,.settings-modal-title,.settings-section-title{font-family:"'+title+'",'+fontStr+'}'; document.head.appendChild(ts); }
+  var cs=document.getElementById('font-code-style'); if(cs) cs.remove();
+  if(code){ cs=document.createElement('style'); cs.id='font-code-style'; cs.textContent='code,pre,.pv-code{font-family:"'+code+'",monospace}'; document.head.appendChild(cs); }
+  var preview=document.getElementById('fontPreview');
+  if(preview){ preview.style.fontFamily=fontStr; preview.style.fontSize=size+'px'; var pvt=preview.querySelector('.pv-title'); if(pvt&&title) pvt.style.fontFamily='"'+title+'",'+fontStr; var pvc=preview.querySelector('.pv-code'); if(pvc&&code) pvc.style.fontFamily='"'+code+'",monospace'; }
+  // Use server-side proxy: <link rel=stylesheet> + woff2 proxied through /api/font-woff
+  // This avoids MIME blocks, CORS, fetch race conditions, and relative URL resolution issues.
+  var selected=[body,title,en,code];
+  _fontList.forEach(function(f){
+    if(selected.indexOf(f.family)<0) return;
+    var linkId = 'font-link-' + f.id;
+    if (document.getElementById(linkId)) return;
+    var link = document.createElement('link');
+    link.id = linkId;
+    link.rel = 'stylesheet';
+    link.href = '/api/font-css/' + f.id + '.css';
+    link.onload = function() { console.log('Font loaded via proxy:', f.name, f.family); };
+    link.onerror = function() { console.warn('Font proxy fail:', f.name, f.family); };
+    document.head.appendChild(link);
+  });
+}
+
+// ====== AI HANDLERS ======
+async function aiDescribeAll(){
+  var btn=document.getElementById('aiDescribeAllBtn'); if(!btn) return;
+  var llm_url=_widgetCfg.llm_url, llm_key=_widgetCfg.llm_key, llm_model=_widgetCfg.llm_model;
+  btn.disabled=true; btn.textContent='补全中...';
+  var result=document.getElementById('aiDescribeResult');
+  if(!llm_url){ result.innerHTML='<span style="color:#f87171">请先填写 API 地址</span>'; btn.disabled=false; onGroupChange('ai-desc'); return; }
+  if(!llm_key){ result.innerHTML='<span style="color:#f87171">请先填写 API Key</span>'; btn.disabled=false; onGroupChange('ai-desc'); return; }
+  if(!llm_model){ result.innerHTML='<span style="color:#f87171">请先填写模型名称</span>'; btn.disabled=false; onGroupChange('ai-desc'); return; }
+  var gids=[]; document.querySelectorAll('.ai-desc-grp:checked').forEach(function(cb){gids.push(parseInt(cb.value))});
+  result.innerHTML='<span style="color:#a78bfa">补全中，请等待...</span>';
+  try{
+    var resp=await fetch('/api/ai/describe',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({llm_url:llm_url,llm_key:llm_key,llm_model:llm_model,group_ids:gids})});
+    var data=await resp.json();
+    if(resp.ok){ result.innerHTML='<span style="color:#4ade80">✅ '+data.message+'</span>'; await refresh(); }
+    else { result.innerHTML='<span style="color:#f87171">❌ '+data.error+'</span>'; }
+  }catch(e){ result.innerHTML='<span style="color:#f87171">❌ '+e.message+'</span>'; }
+  btn.disabled=false; onGroupChange('ai-desc');
+}
+
+async function aiDescribeOne(lid){
+  var llm_url=_widgetCfg.llm_url, llm_key=_widgetCfg.llm_key, llm_model=_widgetCfg.llm_model;
+  if(!llm_url){ toast('请先在设置中填写 LLM API 地址','error'); return null; }
+  if(!llm_key){ toast('请先在设置中填写 API Key','error'); return null; }
+  if(!llm_model){ toast('请先在设置中填写模型名称','error'); return null; }
+  try{
+    var resp=await fetch('/api/ai/describe',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({llm_url:llm_url,llm_key:llm_key,llm_model:llm_model,link_id:lid})});
+    var data=await resp.json();
+    if(resp.ok){ toast('描述已生成','success'); return data.description||''; }
+    else { toast('❌ '+data.error,'error'); return null; }
+  }catch(e){ toast('❌ '+e.message,'error'); return null; }
+}
+
+async function aiCheck(){
+  var btn=document.getElementById('aiCheckBtn'); if(!btn) return;
+  btn.disabled=true; btn.textContent='检测中...';
+  var result=document.getElementById('aiCheckResult');
+  var gids=[]; document.querySelectorAll('.ai-check-grp:checked').forEach(function(cb){gids.push(parseInt(cb.value))});
+  try{
+    var resp=await fetch('/api/ai/check',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({group_ids:gids})});
+    var text=await resp.text();
+    var data; try{data=JSON.parse(text);}catch(e){ result.innerHTML='<span style="color:#f87171">❌ 服务器返回异常</span>'; btn.disabled=false; onGroupChange('ai-check'); return; }
+    if(!resp.ok){ result.innerHTML='<span style="color:#f87171">❌ '+data.error+'</span>'; btn.disabled=false; onGroupChange('ai-check'); return; }
+    var html='<div style="margin-bottom:4px">✅ '+data.working+' 正常 / ❌ '+data.broken+' 失效 (共 '+data.total+')</div>';
+    data.results.forEach(function(r){
+      if(r.ok) return;
+      html+='<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04)"><input type="checkbox" class="ai-del-cb" value="'+r.id+'"><span style="color:#f87171">🔴</span><span style="flex:1"><b>'+escHtml(r.title)+'</b> <span style="color:var(--text-secondary)">['+escHtml(r.group)+']</span></span><a href="'+escAttr(r.url)+'" target="_blank" style="color:var(--accent);font-size:11px" onclick="event.stopPropagation()"> 访问</a><span style="color:var(--text-secondary);font-size:10px">'+escHtml(r.error||('HTTP '+r.status))+'</span></label>';
+    });
+    html+='<button class="btn btn-danger btn-sm" id="aiDelBroken" style="margin-top:8px;width:100%"> 删除选中失效链接</button>';
+    result.innerHTML=html;
+    (document.getElementById('aiDelBroken')||{}).onclick=async function(){
+      var dels=[]; document.querySelectorAll('.ai-del-cb:checked').forEach(function(cb){dels.push(parseInt(cb.value))});
+      if(dels.length===0){ toast('请至少勾选一个链接','error'); return; }
+      if(!confirm('确定删除 '+dels.length+' 个失效链接？')) return;
+      var ok=0; for(var i=0;i<dels.length;i++){ try{await api('DELETE','/api/links/'+dels[i]); ok++; }catch(e){} }
+      toast('已删除 '+ok+' 个','success'); await refresh(); result.innerHTML='<span style="color:#4ade80">✅ 已删除 '+ok+' 个失效链接</span>';
+    };
+  }catch(e){ result.innerHTML='<span style="color:#f87171">❌ '+e.message+'</span>'; }
+  btn.disabled=false; onGroupChange('ai-check');
+}
+
+// ====== WIDGET CONFIG ======
+var _widgetCfg = { clock:'24h', weather_city:'Beijing', weather_size:'medium', search_engines:'google,bing,baidu,duckduckgo', font_body:'', font_title:'', font_body_en:'', font_code:'', font_size:'14', color_scheme:'purple', accent_color:'' };
+var _searchEngine='google';
+var _wpTimer = null;
+var _fontList = [];
+function loadWidgetCfg(s) {
+  if(s.clock_format) _widgetCfg.clock = s.clock_format;
+  if(s.weather_city) _widgetCfg.weather_city = s.weather_city;
+  if(s.weather_size) _widgetCfg.weather_size = s.weather_size;
+  if(s.search_engines) _widgetCfg.search_engines = s.search_engines;
+  if(s.search_default) _searchEngine = s.search_default;
+  if(s.llm_url) _widgetCfg.llm_url = s.llm_url;
+  if(s.llm_key) _widgetCfg.llm_key = s.llm_key;
+  if(s.llm_model) _widgetCfg.llm_model = s.llm_model;
+  if(s.font_body) _widgetCfg.font_body = s.font_body;
+  if(s.font_title) _widgetCfg.font_title = s.font_title;
+  if(s.font_body_en) _widgetCfg.font_body_en = s.font_body_en;
+  if(s.font_code) _widgetCfg.font_code = s.font_code;
+  if(s.font_size) _widgetCfg.font_size = s.font_size;
+  if(s.background_type) document.body.setAttribute('data-bg-type', s.background_type);
+  if(s.bg_solid_color) { _widgetCfg.bg_solid_color = s.bg_solid_color; if (document.body.getAttribute('data-bg-type') === 'solid') document.body.style.background = s.bg_solid_color; }
+    if(s.color_scheme) _widgetCfg.color_scheme = s.color_scheme;
+    if(s.accent_color) _widgetCfg.accent_color = s.accent_color;
+    if(s.style) document.body.setAttribute('data-style', s.style);
+    // Apply color scheme (surfaces + accent coordinated)
+    if (_widgetCfg.color_scheme) {
+      applyColorScheme(_widgetCfg.color_scheme, _widgetCfg.accent_color || undefined);
+    } else if (_widgetCfg.accent_color) {
+      applyAccentColor(_widgetCfg.accent_color);
+    }
+  if(s.wallpaper_interval) State.wpInterval = parseInt(s.wallpaper_interval) || 300;
+  else State.wpInterval = 300;
+}
+
+var _ENGINE_MAP = {
+  google:    { name:'Google',   url:'https://www.google.com/search?q={q}' },
+  bing:      { name:'必应',      url:'https://www.bing.com/search?q={q}' },
+  baidu:     { name:'百度',      url:'https://www.baidu.com/s?wd={q}' },
+  duckduckgo:{ name:'DuckDuckGo', url:'https://duckduckgo.com/?q={q}' },
+  bilibili:  { name:'B站',       url:'https://search.bilibili.com/all?keyword={q}' },
+  github:    { name:'GitHub',   url:'https://github.com/search?q={q}' },
+};
+
+function renderSearchEngines(){
+  var engines = _widgetCfg.search_engines.split(',');
+  var bar = document.querySelector('.search-engine');
+  bar.innerHTML = engines.map(function(e){
+    var info = _ENGINE_MAP[e] || {name:e};
+    return '<button class="engine-btn'+(e===_searchEngine?' active':'')+'" data-engine="'+e+'">'+info.name+'</button>';
+  }).join('');
+}
+function initSearch(){
+  var bar = document.querySelector('.search-engine');
+  bar.addEventListener('click', function(e){
+    var btn = e.target.closest('.engine-btn'); if(!btn) return;
+    bar.querySelectorAll('.engine-btn').forEach(function(b){b.classList.remove('active')});
+    btn.classList.add('active');
+    _searchEngine = btn.dataset.engine;
+    document.getElementById('searchInput').focus();
+    // Save default
+    if(State.token) saveSetting('search_default', _searchEngine);
+  });
+  document.getElementById('searchInput').addEventListener('keydown', function(e){
+    if(e.key!=='Enter') return;
+    var q = encodeURIComponent(e.target.value.trim()); if(!q) return;
+    var info = _ENGINE_MAP[_searchEngine] || _ENGINE_MAP['google'];
+    window.open(info.url.replace('{q}',q), '_blank');
+  });
+}
+
+function updateClock(){
+  var now=new Date();
+  var h24 = _widgetCfg.clock === '24h';
+  var el=document.getElementById('clock');
+  if(el) el.textContent=now.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:!h24});
+  var de=document.getElementById('dateDisplay');
+  if(de) de.textContent=now.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+}
+
+async function fetchWeather(){
+  var el=document.getElementById('weather'); if(!el) return;
+  var city = _widgetCfg.weather_city || 'Beijing';
+  var size = _widgetCfg.weather_size || 'medium';
+  try{
+    var resp=await fetch('https://wttr.in/'+encodeURIComponent(city)+'?format=j1');
+    var data=await resp.json(); var cur=data.current_condition[0];
+    var map={'113':'☀️','116':'⛅','119':'☁️','122':'☁️','143':'🌫️','176':'🌦️','179':'🌨️','182':'🌨️','185':'🌨️','200':'⛈️','227':'🌨️','230':'🌨️','248':'🌫️','260':'🌫️','263':'🌦️','266':'🌦️','281':'🌧️','284':'🌧️','293':'🌦️','296':'🌦️','299':'🌧️','302':'🌧️','305':'🌧️','308':'🌧️','311':'🌧️','314':'🌧️','317':'🌧️','320':'🌨️','323':'🌨️','326':'🌨️','329':'❄️','332':'❄️','335':'❄️','338':'❄️','350':'🌧️','353':'🌦️','356':'🌧️','359':'🌧️','362':'🌨️','365':'🌨️','368':'❄️','371':'❄️','374':'🌧️','377':'🌧️','386':'⛈️','389':'⛈️','392':'⛈️','395':'❄️'};
+    el.setAttribute('data-size', size);
+    el.innerHTML='<span class="weather-icon">'+(map[cur.weatherCode]||'<img src=\"/static/icons/cloudy-line.svg\" class=\"ico\" alt=\"\">')+'</span><span class="weather-temp">'+cur.temp_C+'°C</span><span class="weather-city">'+escHtml(city)+'</span>';
+  }catch(e){ el.innerHTML='<span class="weather-icon"><img src=\"/static/icons/cloudy-line.svg\" class=\"ico\" alt=\"\"></span><span class=\"weather-city\">加载失败</span>'; }
+}
+
+// ====== GUEST MODE ======
+var _isGuest = true;
+function setGuestMode(guest) {
+  _isGuest = guest;
+  document.querySelectorAll('.auth-only').forEach(function(el){ el.style.display = guest ? 'none' : ''; });
+  document.querySelectorAll('.guest-only').forEach(function(el){ el.style.display = guest ? '' : 'none'; });
+  // No edit buttons in guest mode
+  document.body.classList.toggle('guest-mode', guest);
+}
+function showGuestDashboard() {
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('mainContainer').style.display = '';
+  setGuestMode(true);
+  loadData().then(function(){ renderAll(); }).catch(function(){});
+}
+
+// ====== INIT ======
+async function init(){
+  try{
+    // Settings
+    var s={};
+    try{ var resp=await fetch('/api/settings'); s=await resp.json(); }catch(e){}
+    if(s.pattern) document.body.setAttribute('data-pattern',s.pattern);
+    loadWidgetCfg(s);
+    // Widgets
+    renderSearchEngines(); initSearch();
+    updateClock(); setInterval(updateClock,1000); fetchWeather();
+    // Wallpaper & Fonts
+    applyBackgroundType(document.body.getAttribute('data-bg-type')||'gradient');
+    // Load font list before applying, so CDN fonts are available
+    try { var fr = await fetch('/api/fonts'); var fd = await fr.json(); _fontList = fd.fonts || []; } catch(e) { _fontList = []; }
+    applyFontSettings();
+    // Auth gate
+    if(State.token){
+      try{ await loadData(); document.getElementById('authOverlay').style.display='none'; document.getElementById('mainContainer').style.display=''; setGuestMode(false); renderAll(); }
+      catch(e){ showGuestDashboard(); }
+    } else {
+      var hasPw = await checkAuthStatus();
+      if(hasPw) { showGuestDashboard(); }
+      else { showAuth(); }
+    }
+    // Events
+    document.getElementById('guestLoginBtn').addEventListener('click', showAuth);
+    document.getElementById('settingsBtn').addEventListener('click',openSettings);
+    document.getElementById('panelClose').addEventListener('click',closeSettings);
+    document.getElementById('settingsOverlay').addEventListener('click',function(e){ if(e.target===e.currentTarget) closeSettings(); });
+    document.getElementById('logoutBtn').addEventListener('click',async function(){ await doLogout(); State.groups=[]; State.token=''; localStorage.removeItem('suenweb_token'); window.location.reload(); });
+    document.addEventListener('click',async function(e){
+      if(_isGuest) return;
+      var btn=e.target.closest('[data-action]'); if(!btn) return;
+      if(btn.tagName==='BUTTON'||btn.dataset.action) e.preventDefault();
+      handleDashboardClick(e);
+    });
+    document.getElementById('bookmarkFileInput').addEventListener('change',function(e){ var f=e.target.files[0]; if(f) uploadBookmarks(f); e.target.value=''; });
+    document.getElementById('modalOverlay').addEventListener('click',function(e){ if(e.target===e.currentTarget) closeModal(); });
+  }catch(e){ var el=document.getElementById('authError'); if(el) el.textContent='Error: '+e.message; console.error(e); }
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+</script>
+</body>
+</html>

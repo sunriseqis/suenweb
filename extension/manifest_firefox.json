@@ -1,0 +1,31 @@
+{
+  "manifest_version": 2,
+  "name": "SuenWeb Sync",
+  "version": "1.1.0",
+  "description": "右键收藏到 SuenWeb 导航页，支持 WebDAV 备份",
+  "permissions": ["bookmarks", "storage", "alarms", "menus", "http://*/*", "https://*/*"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_title": "SuenWeb Sync",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "sunriseqis@aliyun.com",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
+  }
+}
