@@ -483,14 +483,22 @@ async function editGroup(gid) {
 async function toggleGroupType(gid){
   var group = State.groups.find(function(g){ return g.id===gid; }); if(!group) return;
   var newType = group.type === 'pinned' ? 'tab' : 'pinned';
+  var oldType = group.type;
+  // Optimistic: immediate UI update, no waiting for server
+  group.type = newType;
+  renderAll();
   try{ await api('PUT','/api/groups/'+gid,{type:newType}); await refresh(); toast(newType==='pinned'?'已固定':'已移到标签栏','info'); }
-  catch(e){ toast(e.message,'error'); }
+  catch(e){ group.type = oldType; renderAll(); toast(e.message,'error'); }
 }
 async function deleteGroup(gid){
   var group = State.groups.find(function(g){ return g.id===gid; }); if(!group) return;
   if(!confirm('确定删除「'+group.name+'」及其所有链接？')) return;
+  // Optimistic: remove immediately from state and re-render
+  var idx = State.groups.indexOf(group);
+  State.groups.splice(idx, 1);
+  renderAll();
   try{ await api('DELETE','/api/groups/'+gid); await refresh(); toast('已删除','info'); }
-  catch(e){ toast(e.message,'error'); }
+  catch(e){ await refresh(); toast(e.message,'error'); }
 }
 async function addLink(gid) {
   showModal('<h3>添加链接</h3><div class="form-group"><label>标题 *</label><input id="elTitle" placeholder="网站名称"></div><div class="form-group"><label>URL *</label><input id="elUrl" placeholder="https://..."></div><div class="form-group"><label>描述</label><input id="elDesc" placeholder="简短描述"></div><div class="form-group"><label>图标 (emoji 或 URL)</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:18px"></span><input id="elIcon" placeholder="📌 或 https://..." style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\',document.getElementById(\'elIcon\').value);return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置图标</button></div></div><div class="btn-row"><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">添加</button></div>');

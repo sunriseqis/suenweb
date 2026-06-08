@@ -19,6 +19,19 @@ warnings.filterwarnings('ignore', category=InsecureRequestWarning)
 
 from bookmark_parser import parse_bookmarks
 
+# Thread-local HTTP session — each Flask thread gets its own connection pool
+import threading
+_thread_local = threading.local()
+
+def _get_http_session() -> requests.Session:
+    """Get or create a thread-local requests.Session with connection pooling."""
+    if not hasattr(_thread_local, 'session'):
+        _thread_local.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=1)
+        _thread_local.session.mount('https://', adapter)
+        _thread_local.session.mount('http://', adapter)
+    return _thread_local.session
+
 # ── App Setup ──────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -969,7 +982,7 @@ def api_sgdb_test():
         return jsonify({'ok': False, 'error': '请填写 API Key'})
     try:
         # Test with a lightweight endpoint — search for "cyberpunk"
-        resp = requests.get(
+        resp = _get_http_session().get(
             f'{SGDB_BASE}/search/autocomplete/Cyberpunk',
             headers={'Authorization': f'Bearer {api_key}'},
             timeout=10
@@ -1043,7 +1056,7 @@ def _resolve_steamgriddb(db, steam_app_id, game_name=''):
 
     # Fetch from SteamGridDB API
     try:
-        resp = requests.get(
+        resp = _get_http_session().get(
             SGDB_HEROES_URL.format(appid=steam_app_id),
             headers={'Authorization': f'Bearer {api_key}'},
             timeout=12
@@ -1090,7 +1103,7 @@ def _resolve_wallpaper(api_url):
     try:
         # Bing daily wallpaper API
         if 'bing.com' in api_url:
-            resp = requests.get(api_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            resp = _get_http_session().get(api_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
             if resp.ok:
                 data = resp.json()
                 images = data.get('images', [])
@@ -1100,7 +1113,7 @@ def _resolve_wallpaper(api_url):
 
         # Direct image URLs (most APIs return the image directly)
         # Try HEAD request to check if it's a redirect to an image
-        resp = requests.head(api_url, timeout=10, allow_redirects=True,
+        resp = _get_http_session().head(api_url, timeout=10, allow_redirects=True,
                             headers={'User-Agent': 'Mozilla/5.0'})
         content_type = resp.headers.get('Content-Type', '')
         if 'image' in content_type or resp.status_code == 200:
@@ -1247,7 +1260,7 @@ def _extract_icons_from_html(domain):
     """Fetch homepage and extract <link rel=icon> hrefs. Returns list of absolute URLs."""
     icons = []
     try:
-        resp = requests.get(f'https://{domain}/', timeout=6,
+        resp = _get_http_session().get(f'https://{domain}/', timeout=4,
                             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
         if resp.status_code != 200:
             return icons
@@ -1281,7 +1294,12 @@ def _extract_icons_from_html(domain):
 
 @app.route('/api/icon/proxy')
 def api_icon_proxy():
-    """Proxy fetch favicon to avoid CORS and provide fallback, with SQLite cache."""
+    """Proxy fetch favicon to avoid CORS and provide fallback, with SQLite cache.
+    
+    Performance-critical: Flask dev server is single-threaded; this handler MUST return
+    fast (<3s) or all other API requests (incl. pin/unpin) queue behind it.
+    Strategy: Google favicons first (~200ms), fast 3rd-party services next, skip slow
+    homepage scraping in the primary path. Failed domains get negative-cached."""
     url = request.args.get('url', '')
     domain = request.args.get('domain', '')
     if not url and not domain:
@@ -1300,9 +1318,19 @@ def api_icon_proxy():
     if domain:
         try:
             db = get_db()
+            # Negative cache: skip domains that failed recently (1h)
+            neg = db.execute(
+                "SELECT 1 FROM icon_cache WHERE domain=? AND content_type='x-negative' "
+                "AND updated_at > datetime('now','localtime','-1 hours')",
+                (domain,)
+            ).fetchone()
+            if neg:
+                return _default_icon_svg()
+
             row = db.execute(
                 "SELECT content, content_type FROM icon_cache "
-                "WHERE domain=? AND updated_at > datetime('now','localtime','-7 days')",
+                "WHERE domain=? AND content_type!='x-negative' "
+                "AND updated_at > datetime('now','localtime','-7 days')",
                 (domain,)
             ).fetchone()
             if row:
@@ -1312,25 +1340,23 @@ def api_icon_proxy():
         except Exception:
             pass
 
-    # --- Cache miss: try all sources ---
+    # --- Cache miss: fast sources first ---
+    # Ordered by speed: Google (200ms) > DuckDuckGo > icon.horse > direct favicon.ico > other APIs
     sources = []
     if domain:
-        html_icons = _extract_icons_from_html(domain)
-        sources.extend(html_icons)
-        sources.append(f'https://{domain}/favicon.ico')
         sources.append(f'https://www.google.com/s2/favicons?domain={domain}&sz=32')
-        sources.append(f'https://favicon.im/{domain}')
-        sources.append(f'https://icon.horse/icon/{domain}')
         sources.append(f'https://icons.duckduckgo.com/ip3/{domain}.ico')
+        sources.append(f'https://icon.horse/icon/{domain}')
+        sources.append(f'https://{domain}/favicon.ico')
         sources.append(f'https://api.faviconkit.com/{domain}/32')
-        sources.append(f'https://favicon.run/favicon?domain={domain}&sz=64')
 
     if url:
         sources.insert(0, url)
 
+    # Try each source with short timeout; connection reuse via shared session
     for src in sources:
         try:
-            resp = requests.get(src, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+            resp = _get_http_session().get(src, timeout=3, headers={'User-Agent': 'Mozilla/5.0'})
             if resp.status_code == 200 and len(resp.content) > 60:
                 content_type = resp.headers.get('Content-Type', 'image/x-icon')
                 if 'text/html' in content_type or 'text/plain' in content_type:
@@ -1338,13 +1364,13 @@ def api_icon_proxy():
                 # Save to cache
                 if domain:
                     try:
-                        db = get_db()
-                        db.execute(
+                        db2 = get_db()
+                        db2.execute(
                             "INSERT OR REPLACE INTO icon_cache (domain, content, content_type, source_url, updated_at) "
                             "VALUES (?,?,?,?,datetime('now','localtime'))",
                             (domain, resp.content, content_type, src)
                         )
-                        db.commit()
+                        db2.commit()
                     except Exception:
                         pass
                 return Response(resp.content, mimetype=content_type,
@@ -1353,7 +1379,49 @@ def api_icon_proxy():
         except Exception:
             continue
 
-    # Return a default SVG icon
+    # All fast sources failed — try HTML scraping as last resort (one attempt only)
+    if domain:
+        try:
+            html_icons = _extract_icons_from_html(domain)
+            for hi_src in html_icons[:2]:  # only try first 2
+                try:
+                    resp = _get_http_session().get(hi_src, timeout=3, headers={'User-Agent': 'Mozilla/5.0'})
+                    if resp.status_code == 200 and len(resp.content) > 60:
+                        content_type = resp.headers.get('Content-Type', 'image/x-icon')
+                        if 'text/html' in content_type:
+                            continue
+                        db3 = get_db()
+                        db3.execute(
+                            "INSERT OR REPLACE INTO icon_cache (domain, content, content_type, source_url, updated_at) "
+                            "VALUES (?,?,?,?,datetime('now','localtime'))",
+                            (domain, resp.content, content_type, hi_src)
+                        )
+                        db3.commit()
+                        return Response(resp.content, mimetype=content_type,
+                                        headers={'Cache-Control': 'public, max-age=86400',
+                                                 'X-Icon-Cache': 'miss'})
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    # --- Write negative cache ---
+    if domain:
+        try:
+            db4 = get_db()
+            db4.execute(
+                "INSERT OR REPLACE INTO icon_cache (domain, content, content_type, source_url, updated_at) "
+                "VALUES (?,?,?,?,datetime('now','localtime'))",
+                (domain, b'', 'x-negative', '')
+            )
+            db4.commit()
+        except Exception:
+            pass
+
+    return _default_icon_svg()
+
+
+def _default_icon_svg():
     svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
         <rect width="32" height="32" rx="6" fill="#333"/>
         <text x="16" y="22" text-anchor="middle" fill="#888" font-size="18">🔗</text>
@@ -1669,4 +1737,4 @@ init_db()
 
 if __name__ == '__main__':
     # debug=False to avoid Werkzeug reloader fork (was causing 'stuck' foreground in some shells)
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
