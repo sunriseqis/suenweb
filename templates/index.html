@@ -30,25 +30,16 @@
 
 <!-- ═══════════ MAIN DASHBOARD ═══════════ -->
 <main class="app" id="mainContainer" style="display:none" role="main">
-  <header class="top-bar">
-    <div class="top-left">
-      <div class="clock-weather">
-        <div class="clock-block">
-          <div class="clock" id="clock">00:00</div>
-          <div class="date-text" id="dateDisplay"></div>
-        </div>
-        <div class="weather" id="weather"><span class="weather-icon"><img src="/static/icons/cloudy-line.svg" class="ico" alt=""></span><span class="weather-temp">--°</span><span class="weather-city">加载中</span></div>
+  <section class="hero" id="heroSection" data-widget-style="bar" aria-label="主入口">
+    <div class="hero-clock-weather">
+      <div class="clock-block">
+        <div class="clock" id="clock">00:00</div>
+        <div class="date-text" id="dateDisplay"></div>
       </div>
+      <div class="hero-divider" aria-hidden="true"></div>
+      <div class="weather" id="weather"><span class="weather-icon"><img src="/static/icons/cloudy-line.svg" class="ico" alt=""></span><span class="weather-temp">--°</span><span class="weather-city">加载中</span></div>
     </div>
-    <div class="top-right">
-      <button class="action-btn guest-only" id="guestLoginBtn" title="登录" aria-label="登录"><img src="/static/icons/login-box-line.svg" class="ico" alt=""></button>
-      <button class="action-btn auth-only" id="settingsBtn" title="设置" aria-label="设置"><img src="/static/icons/settings-3-line.svg" class="ico" alt=""></button>
-      <button class="action-btn action-btn-logout auth-only" id="logoutBtn" title="退出登录" aria-label="退出登录"><img src="/static/icons/logout-box-line.svg" class="ico" alt=""></button>
-    </div>
-  </header>
-
-  <section class="search-wrapper" aria-label="搜索">
-    <div class="search-box">
+    <div class="hero-search">
       <span class="search-icon" aria-hidden="true"><img src="/static/icons/search-line.svg" class="ico" alt=""></span>
       <input type="search" class="search-input" id="searchInput" placeholder="搜索..." aria-label="搜索关键词">
       <div class="search-engine" id="searchEngine" role="tablist"></div>
@@ -83,10 +74,23 @@
           <label class="upload-btn" for="bookmarkFileInput">📁 选择文件</label>
           <input type="file" id="bookmarkFileInput" accept=".html,.htm" style="display:none">
         </div>
+        <div class="onboard-opt auth-only">
+          <div class="onboard-opt-icon">✍️</div>
+          <h4>手动创建</h4>
+          <p>先建一个分组，再逐个添加常用链接</p>
+          <button class="upload-btn" data-action="add-group-tab" type="button">+ 创建第一个分组</button>
+        </div>
       </div>
     </div>
   </section>
 </main>
+
+<!-- ═══════════ FLOATING ACTIONS (bottom-right) ═══════════ -->
+<div class="fab-actions" id="fabActions" aria-label="快捷操作">
+  <button class="fab-btn guest-only" id="guestLoginBtn" title="登录" aria-label="登录"><img src="/static/icons/login-box-line.svg" class="ico" alt=""></button>
+  <button class="fab-btn auth-only" id="settingsBtn" title="设置" aria-label="设置"><img src="/static/icons/settings-3-line.svg" class="ico" alt=""></button>
+  <button class="fab-btn fab-btn-logout auth-only" id="logoutBtn" title="退出登录" aria-label="退出登录"><img src="/static/icons/logout-box-line.svg" class="ico" alt=""></button>
+</div>
 
 <!-- ═══════════ SETTINGS MODAL (centered, left-nav) ═══════════ -->
 <div class="settings-overlay" id="settingsOverlay" role="dialog" aria-modal="true" aria-label="设置">
@@ -97,7 +101,6 @@
       <button class="settings-nav-item" data-tab="scheme"><span class="nav-icon"><img src="/static/icons/palette-line.svg" class="ico-sm" alt=""></span><span>配色</span></button>
       <button class="settings-nav-item" data-tab="background"><span class="nav-icon"><img src="/static/icons/image-line.svg" class="ico-sm" alt=""></span><span>背景</span></button>
       <button class="settings-nav-item" data-tab="layout"><span class="nav-icon"><img src="/static/icons/check-line.svg" class="ico-sm" alt=""></span><span>布局</span></button>
-      <button class="settings-nav-item" data-tab="font"><span class="nav-icon"><img src="/static/icons/font-size.svg" class="ico-sm" alt=""></span><span>字体</span></button>
       <button class="settings-nav-item" data-tab="widgets"><span class="nav-icon"><img src="/static/icons/puzzle-line.svg" class="ico-sm" alt=""></span><span>小组件</span></button>
       <button class="settings-nav-item" data-tab="bookmarks"><span class="nav-icon"><img src="/static/icons/bookmark-line.svg" class="ico-sm" alt=""></span><span>书签</span></button>
       <button class="settings-nav-item" data-tab="ai"><span class="nav-icon"><img src="/static/icons/robot-line.svg" class="ico-sm" alt=""></span><span>智能</span></button>
@@ -157,6 +160,7 @@ function toast(msg, type) {
 }
 function escHtml(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function safeHref(u) { try { var x=new URL(u, location.origin); return /^(https?:|mailto:|ftp:)$/.test(x.protocol) ? x.href : '#'; } catch(e) { return '#'; } }
 function showModal(html) {
   document.getElementById('modalCard').innerHTML = html;
   document.getElementById('modalCard').style.display = 'block';
@@ -174,6 +178,8 @@ function closeModal() {
 
 // ====== ICON PICKER ======
 var _iconPickerTarget = null;
+var _suppressSettingSave = false;
+var _dragState = null;
 
 function showIconPicker(inputId, currentValue) {
   _iconPickerTarget = inputId;
@@ -204,7 +210,7 @@ function showIconPicker(inputId, currentValue) {
       // Show preview
       var preview = document.getElementById(_iconPickerTarget+'_preview');
       if (preview && val) {
-        preview.innerHTML = '<img src="'+val+'" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">';
+        preview.innerHTML = '<img src="'+escAttr(val)+'" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">';
       }
     }
     closeIconPicker();
@@ -216,7 +222,7 @@ function _renderIconGrid(icons, currentValue) {
   if (!icons.length) { grid.innerHTML = '<div class="icon-picker-empty">无图标</div>'; return; }
   grid.innerHTML = icons.map(function(ic){
     var sel = ic.path === currentValue ? ' selected' : '';
-    return '<div class="icon-picker-item'+sel+'" data-icon-path="'+ic.path+'" data-icon-name="'+ic.name+'" onclick="selectIconItem(this)"><img src="'+ic.path+'" alt="'+ic.name+'" loading="lazy"></div>';
+    return '<div class="icon-picker-item'+sel+'" data-icon-path="'+escAttr(ic.path)+'" data-icon-name="'+escAttr(ic.name)+'" onclick="selectIconItem(this)"><img src="'+escAttr(ic.path)+'" alt="'+escAttr(ic.name)+'" loading="lazy"></div>';
   }).join('');
 }
 
@@ -256,7 +262,7 @@ function renderLinkIcon(link) {
   var iconType = link.icon_type || 'auto';
   if (iconType === 'emoji' && icon) { return '<span class="link-icon">'+escHtml(icon)+'</span>'; }
   if ((iconType === 'url' || iconType === 'auto') && icon && icon.indexOf('/static/icons/')===0) {
-    return '<img class="link-icon-img" src="'+icon+'" alt="" onerror="this.style.display=\'none\'" style="filter:brightness(0) saturate(100%) invert(1)">';
+    return '<img class="link-icon-img" src="'+escAttr(icon)+'" alt="" onerror="this.style.display=\'none\'" style="filter:brightness(0) saturate(100%) invert(1)">';
   }
   if ((iconType === 'url' || iconType === 'auto') && icon && icon.indexOf('http')===0) {
     return '<img class="link-icon-img" src="/api/icon/proxy?url='+encodeURIComponent(icon)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline\'"><span class="link-icon" style="display:none"></span>';
@@ -267,8 +273,8 @@ function renderLinkIcon(link) {
 }
 function renderGroupIcon(icon) {
   if (!icon) return '📁';
-  if (icon.indexOf('/static/icons/')!==-1) {
-    return '<img src="'+icon+'" class="group-icon-svg" alt="" onerror="this.style.display=\'none\';this.parentElement.textContent=\'📁\'">';
+  if (icon.indexOf('/static/icons/')===0) {
+    return '<img src="'+escAttr(icon)+'" class="group-icon-svg" alt="" onerror="this.style.display=\'none\';this.parentElement.textContent=\'📁\'">';
   }
   return escHtml(icon);
 }
@@ -284,14 +290,14 @@ async function api(method, path, body) {
   if (body) opts.body = JSON.stringify(body);
   var resp = await fetch(path, opts);
   var data = await resp.json().catch(function(){ return {}; });
-  if (!resp.ok) throw new Error(data.error || 'HTTP ' + resp.status);
+  if (!resp.ok) throw new Error(data.detail || data.error || 'HTTP ' + resp.status);
   return data;
 }
 async function uploadFile(path, file) {
   var form = new FormData(); form.append('file', file);
   var resp = await fetch(path, { method:'POST', headers:{Authorization:'Bearer '+State.token}, body:form });
   var data = await resp.json().catch(function(){ return {}; });
-  if (!resp.ok) throw new Error(data.error || 'HTTP '+resp.status);
+  if (!resp.ok) throw new Error(data.detail || data.error || 'HTTP '+resp.status);
   return data;
 }
 
@@ -302,7 +308,7 @@ async function loadData() {
     var resp = await fetch('/api/data');
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     State.groups = ((await resp.json()).groups) || [];
-    State.syncStatus = await fetch('/api/sync/status').then(function(r){return r.json();}).catch(function(){return {};});
+    State.syncStatus = State.token ? await fetch('/api/sync/status',{headers:{Authorization:'Bearer '+State.token}}).then(function(r){return r.json();}).catch(function(){return {};}) : {};
   } catch(e) {
     State.groups = [];
   }
@@ -324,44 +330,44 @@ function renderPinned(groups) {
     var mode = g.display_mode || 'compact';
     var linksHtml = '';
     if (mode === 'icon') {
-      linksHtml = '<div class="links-icon-grid">'+g.links.map(function(l){
-        return '<a href="'+escAttr(l.url)+'" target="_blank" class="icon-only-link" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
+      linksHtml = '<div class="links-icon-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="icon-only-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
       }).join('')+'</div>';
     } else if (mode === 'grid') {
-      linksHtml = '<div class="links-grid">'+g.links.map(function(l){
-        return '<a href="'+escAttr(l.url)+'" target="_blank" class="grid-link">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      linksHtml = '<div class="links-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="grid-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
       }).join('')+'</div>';
     } else { // compact
-      linksHtml = '<div class="pinned-links">'+g.links.map(function(l){
-        return '<a href="'+escAttr(l.url)+'" target="_blank" class="pin-link">'+renderLinkIcon(l)+'<span class="link-title">'+escHtml(l.title)+'</span><button class="link-edit-btn pinned-edit" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      linksHtml = '<div class="pinned-links link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="pin-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<span class="link-title">'+escHtml(l.title)+'</span><button class="link-edit-btn pinned-edit" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
       }).join('')+'</div>';
     }
-    return '<div class="pinned-card" data-group-id="'+g.id+'"><div class="pinned-header"><span class="section-icon">'+renderGroupIcon(g.icon)+'</span>'+escHtml(g.name)+'<span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">解固</button><button class="group-action-btn group-action-text" data-action="delete-group" data-id="'+g.id+'" style="color:#f87171">删除</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加链接</button></div>';
+    return '<div class="pinned-card drag-group" draggable="'+(! _isGuest)+'" data-group-id="'+g.id+'"><div class="pinned-header"><span class="drag-handle auth-only" title="拖动排序">⋮⋮</span><span class="section-icon">'+renderGroupIcon(g.icon)+'</span>'+escHtml(g.name)+'<span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">解固</button><button class="group-action-btn group-action-text" data-action="delete-group" data-id="'+g.id+'" style="color:#f87171">删除</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加链接</button></div>';
   }).join('') + '<button class="add-link-btn" data-action="add-group-pinned" style="min-height:80px">+ 添加固定组</button>';
 }
 function renderTabs(groups) {
   var tabBar = document.getElementById('tabBar');
   var content = document.getElementById('tabContentArea');
   tabBar.innerHTML = groups.map(function(g,i){
-    return '<button class="tab-btn '+(i===0?'active':'')+'" data-tab="tab-'+g.id+'">'+renderGroupIcon(g.icon)+' '+escHtml(g.name)+'<span class="tab-remove" data-action="delete-group" data-id="'+g.id+'"><img src="/static/icons/close-line.svg" class="ico-xs" alt="" style="filter:invert(1)"></span></button>';
+    return '<button class="tab-btn drag-group '+(i===0?'active':'')+'" draggable="'+(! _isGuest)+'" data-group-id="'+g.id+'" data-tab="tab-'+g.id+'"><span class="drag-handle auth-only">⋮⋮</span>'+renderGroupIcon(g.icon)+' '+escHtml(g.name)+'<span class="tab-remove" data-action="delete-group" data-id="'+g.id+'"><img src="/static/icons/close-line.svg" class="ico-xs" alt="" style="filter:invert(1)"></span></button>';
   }).join('') + '<button class="add-group-tab" data-action="add-group-tab">+ 新增标签</button>';
   content.innerHTML = groups.map(function(g,i){
     var mode = g.display_mode || 'compact';
     var linksHtml = '';
     if (mode === 'icon') {
-      linksHtml = '<div class="links-icon-grid">'+g.links.map(function(l){
-        return '<a href="'+escAttr(l.url)+'" target="_blank" class="icon-only-link" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
+      linksHtml = '<div class="links-icon-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="icon-only-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
       }).join('')+'</div>';
     } else if (mode === 'grid') {
-      linksHtml = '<div class="links-grid">'+g.links.map(function(l){
-        return '<a href="'+escAttr(l.url)+'" target="_blank" class="grid-link">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      linksHtml = '<div class="links-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="grid-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
       }).join('')+'</div>';
     } else {
-      linksHtml = '<div class="links-grid">'+g.links.map(function(l){
-        return '<a href="'+escAttr(l.url)+'" target="_blank" class="grid-link">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+      linksHtml = '<div class="links-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="grid-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
       }).join('')+'</div>';
     }
-    return '<div class="tab-content '+(i===0?'active':'')+'" id="tab-'+g.id+'"><div class="pinned-header" style="margin-bottom:10px"><span>'+renderGroupIcon(g.icon)+' '+escHtml(g.name)+'</span><span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions" style="opacity:1;margin-left:auto"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">固定</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加</button></div>';
+    return '<div class="tab-content '+(i===0?'active':'')+'" id="tab-'+g.id+'" data-group-id="'+g.id+'"><div class="pinned-header" style="margin-bottom:10px"><span>'+renderGroupIcon(g.icon)+' '+escHtml(g.name)+'</span><span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions" style="opacity:1;margin-left:auto"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">固定</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加</button></div>';
   }).join('');
   tabBar.querySelectorAll('.tab-btn').forEach(function(btn){
     btn.addEventListener('click', function(e){
@@ -389,10 +395,81 @@ async function handleDashboardClick(e) {
   }
 }
 
+function initDragAndDrop(){
+  document.addEventListener('dragstart', function(e){
+    if (_isGuest) return;
+    var link = e.target.closest('.drag-link');
+    var group = e.target.closest('.drag-group');
+    if (link) {
+      _dragState = {type:'link', id:parseInt(link.dataset.linkId)};
+      e.dataTransfer.effectAllowed = 'move';
+      link.classList.add('dragging');
+    } else if (group) {
+      _dragState = {type:'group', id:parseInt(group.dataset.groupId)};
+      e.dataTransfer.effectAllowed = 'move';
+      group.classList.add('dragging');
+    }
+  });
+  document.addEventListener('dragend', function(){
+    document.querySelectorAll('.dragging,.drag-over').forEach(function(x){ x.classList.remove('dragging','drag-over'); });
+    _dragState = null;
+  });
+  document.addEventListener('dragover', function(e){
+    if (!_dragState || _isGuest) return;
+    var target = _dragState.type === 'link' ? e.target.closest('.link-drop-zone,.drag-link') : e.target.closest('.drag-group');
+    if (!target) return;
+    e.preventDefault();
+    target.classList.add('drag-over');
+  });
+  document.addEventListener('dragleave', function(e){
+    var t = e.target.closest && e.target.closest('.drag-over');
+    if (t) t.classList.remove('drag-over');
+  });
+  document.addEventListener('drop', async function(e){
+    if (!_dragState || _isGuest) return;
+    var target = _dragState.type === 'link' ? e.target.closest('.link-drop-zone,.drag-link') : e.target.closest('.drag-group');
+    if (!target) return;
+    e.preventDefault();
+    try {
+      if (_dragState.type === 'group') await dropGroup(parseInt(target.dataset.groupId));
+      else await dropLink(target);
+    } catch(err) { toast(err.message || '拖动失败','error'); await refresh(); }
+  });
+}
+
+async function dropGroup(targetId){
+  var from = State.groups.findIndex(function(g){return g.id===_dragState.id});
+  var to = State.groups.findIndex(function(g){return g.id===targetId});
+  if (from < 0 || to < 0 || from === to) return;
+  var item = State.groups.splice(from,1)[0];
+  State.groups.splice(to,0,item);
+  renderAll();
+  await api('POST','/api/reorder/groups',{ids:State.groups.map(function(g){return g.id;})});
+}
+
+async function dropLink(target){
+  var sourceId = _dragState.id;
+  var targetLink = target.closest('.drag-link');
+  var zone = target.closest('.link-drop-zone') || target;
+  var groupId = parseInt(zone.dataset.groupId || (targetLink && targetLink.closest('.link-drop-zone').dataset.groupId));
+  var fromGroup = State.groups.find(function(g){return g.links.some(function(l){return l.id===sourceId;});});
+  var toGroup = State.groups.find(function(g){return g.id===groupId;});
+  if (!fromGroup || !toGroup) return;
+  var srcIdx = fromGroup.links.findIndex(function(l){return l.id===sourceId;});
+  var item = fromGroup.links.splice(srcIdx,1)[0];
+  item.group_id = groupId;
+  var insertIdx = targetLink ? toGroup.links.findIndex(function(l){return l.id===parseInt(targetLink.dataset.linkId);}) : toGroup.links.length;
+  if (insertIdx < 0) insertIdx = toGroup.links.length;
+  toGroup.links.splice(insertIdx,0,item);
+  renderAll();
+  await api('POST','/api/reorder/links',{group_id:groupId,ids:toGroup.links.map(function(l){return l.id;})});
+  if (fromGroup.id !== toGroup.id && fromGroup.links.length) await api('POST','/api/reorder/links',{group_id:fromGroup.id,ids:fromGroup.links.map(function(l){return l.id;})});
+}
+
 // ====== AUTH ======
 async function checkAuthStatus(){ try{ var r=await fetch('/api/auth/status'); return (await r.json()).has_password; }catch(e){ return false; } }
-async function doSetup(pw){ await api('POST','/api/auth/setup',{password:pw}); State.token=pw; localStorage.setItem('suenweb_token',pw); }
-async function doLogin(pw){ await api('POST','/api/auth/login',{password:pw}); State.token=pw; localStorage.setItem('suenweb_token',pw); }
+async function doSetup(pw){ var r=await api('POST','/api/auth/setup',{password:pw}); State.token=r.token||pw; localStorage.setItem('suenweb_token',State.token); }
+async function doLogin(pw){ var r=await api('POST','/api/auth/login',{password:pw}); State.token=r.token||pw; localStorage.setItem('suenweb_token',State.token); }
 async function doLogout(){ try{await api('POST','/api/auth/logout');}catch(e){} State.token=''; localStorage.removeItem('suenweb_token'); }
 
 async function showAuth() {
@@ -524,8 +601,9 @@ async function editLink(lid) {
   State.groups.forEach(function(g){ var f=g.links.find(function(l){return l.id===lid;}); if(f) link=f; });
   if(!link) return;
   var groupOpts=State.groups.map(function(g){ return '<option value="'+g.id+'"'+(g.id===link.group_id?' selected':'')+'>'+escHtml(g.name)+'</option>'; }).join('');
-  showModal('<h3>编辑链接</h3><div class="form-group"><label>所属组</label><select id="elGroup">'+groupOpts+'</select></div><div class="form-group"><label>标题</label><input id="elTitle" value="'+escAttr(link.title)+'"></div><div class="form-group"><label>URL</label><input id="elUrl" value="'+escAttr(link.url)+'"></div><div class="form-group"><label>描述 <button class="ai-desc-btn-modal" id="elAiBtn" style="font-size:11px;padding:2px 8px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);border-radius:4px;color:#a78bfa;cursor:pointer">'+(link.description?'重新生成':'补全生成')+'</button></label><input id="elDesc" value="'+escAttr(link.description||'')+'"></div><div class="form-group"><label>图标 (emoji 或 URL)</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:18px">'+escHtml(link.icon||'')+'</span><input id="elIcon" value="'+escAttr(link.icon||'')+'" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\',document.getElementById(\'elIcon\').value);return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置图标</button></div></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="elDelete">删除</button><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">保存</button></div>');
+  showModal('<h3>编辑链接</h3><div class="form-group"><label>所属组</label><select id="elGroup">'+groupOpts+'</select></div><div class="form-group"><label>标题</label><input id="elTitle" value="'+escAttr(link.title)+'"></div><div class="form-group"><label>URL</label><input id="elUrl" value="'+escAttr(link.url)+'"></div><div class="form-group"><label>描述 <button class="ai-desc-btn-modal" id="elAiBtn" style="font-size:11px;padding:2px 8px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);border-radius:4px;color:#a78bfa;cursor:pointer">'+(link.description?'重新生成':'补全生成')+'</button></label><input id="elDesc" value="'+escAttr(link.description||'')+'"></div><div class="form-group"><label>图标 (emoji 或 URL)</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:18px">'+escHtml(link.icon||'')+'</span><input id="elIcon" value="'+escAttr(link.icon||'')+'" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\',document.getElementById(\'elIcon\').value);return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置图标</button></div></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="elDelete">删除</button><button class="btn btn-secondary" id="elRefreshIcon">刷新图标</button><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">保存</button></div>');
   document.getElementById('elDelete').onclick=async function(){ if(!confirm('确定删除此链接？')) return; try{await api('DELETE','/api/links/'+lid); closeModal(); await refresh(); toast('已删除','info');} catch(e){toast(e.message,'error');} };
+  document.getElementById('elRefreshIcon').onclick=async function(){ try{ await api('POST','/api/icon/refresh',{url:document.getElementById('elUrl').value.trim()}); toast('图标缓存已刷新','success'); await refresh(); } catch(e){ toast(e.message,'error'); } };
   document.getElementById('elAiBtn').onclick=async function(){ var btn=document.getElementById('elAiBtn'); if(!btn) return; btn.disabled=true; btn.textContent='...'; var ok=await aiDescribeOne(lid); if(ok){ var d=document.getElementById('elDesc'); if(d) d.value=ok; btn.textContent='重新生成'; } btn.disabled=false; };
   document.getElementById('elCancel').onclick=closeModal;
   document.getElementById('elSave').onclick=async function(){
@@ -540,18 +618,95 @@ async function editLink(lid) {
   };
 }
 async function uploadBookmarks(file){
-  try{ var d=await uploadFile('/api/sync',file); toast('导入成功！新增 '+d.imported+' 个书签','success'); await refresh(); }
+  try{ await previewAndImportBookmarks(file); }
   catch(e){ toast(e.message,'error'); }
+}
+
+async function previewAndImportBookmarks(file){
+  var p = await uploadFile('/api/import/preview', file);
+  var list = (p.groups||[]).slice(0,8).map(function(g){
+    return '<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)"><b>'+escHtml(g.name)+'</b> · 新增 '+g.new+' · 重复 '+g.duplicate+' · 共 '+g.total+'</div>';
+  }).join('');
+  showModal('<h3>导入预览</h3>'+
+    '<p class="card-desc">将导入 '+p.total+' 条，新增 '+p.new+' 条，跳过重复 '+p.duplicate+' 条。重复按完整 URL 判断，不按域名合并。</p>'+
+    '<div style="max-height:260px;overflow:auto;margin:10px 0">'+list+'</div>'+
+    '<div class="btn-row"><button class="btn btn-secondary" id="impCancel">取消</button><button class="btn btn-primary" id="impConfirm">确认导入</button></div>');
+  document.getElementById('impCancel').onclick = closeModal;
+  document.getElementById('impConfirm').onclick = async function(){
+    try {
+      var d = await uploadFile('/api/sync', file);
+      closeModal();
+      toast('导入成功！新增 '+d.imported+' 个书签','success');
+      await refresh();
+    } catch(e) { toast(e.message,'error'); }
+  };
+}
+
+async function showDuplicates(){
+  try {
+    var d = await api('GET','/api/tools/duplicates');
+    if (!d.total_duplicates) { toast('没有发现重复链接','success'); return; }
+    var html = '<h3>重复链接</h3><p class="card-desc">仅按标准化完整 URL 查重，不按域名合并。</p><div style="max-height:320px;overflow:auto">';
+    d.groups.forEach(function(g){
+      html += '<div style="margin-bottom:10px;border-bottom:1px solid var(--border-subtle);padding-bottom:8px"><div style="font-weight:700">'+escHtml(g.url_key)+'</div>';
+      g.items.forEach(function(it,idx){
+        html += '<label style="display:flex;gap:8px;align-items:center;font-size:12px;padding:3px 0"><input type="checkbox" class="dup-cb" value="'+it.id+'" '+(idx===0?'disabled':'checked')+'><span>'+(idx===0?'保留':'删除')+'</span><span style="flex:1">'+escHtml(it.title)+' <span style="color:var(--text-muted)">['+escHtml(it.group_name)+']</span></span></label>';
+      });
+      html += '</div>';
+    });
+    html += '</div><div class="btn-row"><button class="btn btn-secondary" onclick="closeModal()">取消</button><button class="btn btn-danger" id="dupDeleteBtn">删除选中重复项</button></div>';
+    showModal(html);
+    document.getElementById('dupDeleteBtn').onclick = async function(){
+      var ids = Array.from(document.querySelectorAll('.dup-cb:checked')).map(function(x){return parseInt(x.value)});
+      if (!ids.length) { toast('没有选中要删除的重复项','error'); return; }
+      if (!confirm('确定删除 '+ids.length+' 个重复链接？')) return;
+      var r = await api('POST','/api/tools/duplicates/delete',{ids:ids});
+      closeModal(); toast('已删除 '+r.deleted+' 个重复链接','success'); await refresh();
+    };
+  } catch(e){ toast(e.message,'error'); }
+}
+
+async function exportBookmarks(){
+  try {
+    var resp = await fetch('/api/export', {headers:{Authorization:'Bearer '+State.token}});
+    if (!resp.ok) throw new Error('导出失败: HTTP '+resp.status);
+    var blob = await resp.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'suenweb_bookmarks.html';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  } catch(e){ toast(e.message,'error'); }
+}
+
+async function loadOperationLogs(){
+  var box = document.getElementById('opsLogBox'); if (!box) return;
+  try {
+    var d = await api('GET','/api/ops/logs?limit=30');
+    if (!d.logs.length) { box.textContent = '暂无操作记录'; return; }
+    box.innerHTML = d.logs.map(function(l){
+      return '<div style="padding:5px 0;border-bottom:1px solid var(--border-subtle)"><span style="color:var(--text-primary)">'+escHtml(l.action)+'</span> <span>'+escHtml(l.target||'')+'</span><span style="float:right">'+escHtml(l.created_at||'')+'</span></div>';
+    }).join('');
+  } catch(e){ box.textContent = '加载失败'; }
 }
 
 // ====== SETTINGS MODAL ======
 var _currentSettingsTab = 'presets';
 
-function openSettings() {
+async function openSettings() {
   _currentSettingsTab = 'presets';
   document.querySelectorAll('.settings-nav-item').forEach(function(t){
     t.classList.toggle('active', t.dataset.tab === _currentSettingsTab);
   });
+  if (State.token) {
+    try {
+      var s = await api('GET','/api/settings');
+      loadWidgetCfg(s);
+    } catch(e) {}
+  }
   document.getElementById('settingsOverlay').classList.add('open');
   renderSettings();
 }
@@ -676,8 +831,10 @@ function applyColorScheme(schemeId, customHex) {
     document.documentElement.style.removeProperty('--accent-h');
     _widgetCfg.accent_color = '';
   }
-  saveSetting('color_scheme', schemeId);
-  saveSetting('accent_color', _widgetCfg.accent_color || '');
+  if (!_suppressSettingSave) {
+    saveSetting('color_scheme', schemeId);
+    saveSetting('accent_color', _widgetCfg.accent_color || '');
+  }
 }
 
 function applyAccentColor(hex) {
@@ -705,7 +862,7 @@ function _findClosestScheme(hex) {
 function renderSettings() {
   var body = document.getElementById('settingsBody');
   var title = document.getElementById('settingsTitle');
-  var tabTitles = {presets:'预设',scheme:'配色',background:'背景',layout:'布局',font:'字体',widgets:'小组件',bookmarks:'书签',ai:'智能',security:'安全'};
+  var tabTitles = {presets:'预设',scheme:'配色',background:'背景',layout:'布局',widgets:'小组件',bookmarks:'书签',ai:'智能',security:'安全'};
   title.textContent = tabTitles[_currentSettingsTab] || '设置';
   body.innerHTML = _buildSettingsSection(_currentSettingsTab);
   _bindSettingsEvents();
@@ -921,9 +1078,13 @@ function _buildSettingsSection(tab) {
         '</div>'+
       '</div>'+
 
-      '<div class="settings-section-title">字号</div>'+
+      '<div class="settings-section-title">字体</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">调整整页基础字号</p>'+
+        '<p class="card-desc">统一调整整页字体和字号</p>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">字体<div class="row-desc">整个页面使用同一字体</div></div>'+
+          '<div class="row-control"><select id="cfgGlobalFont" class="settings-select"><option value="">系统默认</option></select></div>'+
+        '</div>'+
         '<div class="settings-row">'+
           '<div class="row-label">字号<div class="row-desc">整页基础字号</div></div>'+
           '<div class="row-control">'+
@@ -933,64 +1094,16 @@ function _buildSettingsSection(tab) {
             '</div>'+
           '</div>'+
         '</div>'+
-      '</div>'+
-    '</div>';
-  }
-
-  if (tab === 'font') {
-    return ''+
-    '<div class="settings-section active">'+
-      '<div class="settings-section-title">字体配置</div>'+
-      '<div class="settings-card">'+
-        '<p class="card-desc">为不同用途选择字体，留空使用系统默认</p>'+
-        '<div class="settings-row">'+
-          '<div class="row-label">中文正文</div>'+
-          '<div class="row-control"><select id="cfgFontBody" class="settings-select"><option value="">系统默认</option></select></div>'+
-        '</div>'+
-        '<div class="settings-row">'+
-          '<div class="row-label">中文标题</div>'+
-          '<div class="row-control"><select id="cfgFontTitle" class="settings-select"><option value="">系统默认</option></select></div>'+
-        '</div>'+
-        '<div class="settings-row">'+
-          '<div class="row-label">英文 / 数字</div>'+
-          '<div class="row-control"><select id="cfgFontEn" class="settings-select"><option value="">系统默认</option></select></div>'+
-        '</div>'+
-        '<div class="settings-row">'+
-          '<div class="row-label">代码</div>'+
-          '<div class="row-control"><select id="cfgFontCode" class="settings-select"><option value="">系统默认</option></select></div>'+
-        '</div>'+
-        '<div class="settings-row">'+
-          '<div class="row-label">字号<div class="row-desc">整页基础字号</div></div>'+
-          '<div class="row-control">'+
-            '<div class="slider-row">'+
-              '<input type="range" class="settings-slider" id="cfgFontSize" min="12" max="18" step="1" value="'+(_widgetCfg.font_size||14)+'" style="width:160px">'+
-              '<span class="slider-val" id="cfgFontSizeVal">'+(_widgetCfg.font_size||14)+'px</span>'+
-            '</div>'+
+        '<div id="customFontPanel" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-subtle)">'+
+          '<p class="card-desc">添加自定义字体：填写显示名称、CSS font-family 和 CDN URL</p>'+
+          '<div class="add-row"><input id="cfgFontName" class="settings-input" placeholder="名称（如 站酷高端黑）"></div>'+
+          '<div class="add-row"><input id="cfgFontFamily" class="settings-input" placeholder="font-family（如 ZCoolKuaiLe）"></div>'+
+          '<div class="add-row">'+
+            '<input id="cfgFontCdn" class="settings-input" placeholder="CDN URL（.woff2 或 Google Fonts css）">'+
+            '<button class="btn-tiny" id="cfgFontSave">添加</button>'+
           '</div>'+
+          '<div id="customFontsList" style="margin-top:12px"></div>'+
         '</div>'+
-      '</div>'+
-
-      '<div class="settings-section-title">实时预览</div>'+
-      '<div class="font-preview" id="fontPreview">'+
-        '<div class="pv-title">导航页标题 Nav Title</div>'+
-        '<div class="pv-body">这是一段中文正文预览文字，展示字体效果。The quick brown fox jumps over the lazy dog.</div>'+
-        '<div class="pv-code">1234567890 code snippet</div>'+
-      '</div>'+
-
-      '<div class="settings-section-title">添加自定义字体</div>'+
-      '<div class="settings-card">'+
-        '<p class="card-desc">填写字体名称、CSS font-family、CDN URL（支持 .woff2 / .woff / Google Fonts CSS）</p>'+
-        '<div class="add-row">'+
-          '<input id="cfgFontName" class="settings-input" placeholder="名称（如 站酷高端黑）">'+
-        '</div>'+
-        '<div class="add-row">'+
-          '<input id="cfgFontFamily" class="settings-input" placeholder="font-family（如 ZCoolKuaiLe）">'+
-        '</div>'+
-        '<div class="add-row">'+
-          '<input id="cfgFontCdn" class="settings-input" placeholder="CDN URL（.woff2 或 Google Fonts css）">'+
-          '<button class="btn-tiny" id="cfgFontSave">+ 添加</button>'+
-        '</div>'+
-        '<div id="customFontsList" style="margin-top:12px"></div>'+
       '</div>'+
     '</div>';
   }
@@ -998,11 +1111,20 @@ function _buildSettingsSection(tab) {
   if (tab === 'widgets') {
     return ''+
     '<div class="settings-section active">'+
-      '<div class="settings-section-title">时钟</div>'+
+      '<div class="settings-section-title">时间天气组件</div>'+
       '<div class="settings-card">'+
+        '<p class="card-desc">把时间和天气作为一个组件统一控制，适合不同主页布局</p>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">显示风格<div class="row-desc">四种一体化样式，不再出现卡片套卡片</div></div>'+
+          '<div class="row-control"><select id="cfgWidgetStyle" class="settings-select"><option value="bar" '+(_widgetCfg.widget_style==='bar'?'selected':'')+'>信息长条</option><option value="stacked" '+(_widgetCfg.widget_style==='stacked'?'selected':'')+'>居中大卡</option><option value="pill" '+(_widgetCfg.widget_style==='pill'?'selected':'')+'>紧凑胶囊</option><option value="minimal" '+(_widgetCfg.widget_style==='minimal'?'selected':'')+'>极简文字</option></select></div>'+
+        '</div>'+
         '<div class="settings-row">'+
           '<div class="row-label">时间格式</div>'+
           '<div class="row-control"><select id="cfgClock" class="settings-select"><option value="24h" '+(_widgetCfg.clock==='24h'?'selected':'')+'>24 小时制</option><option value="12h" '+(_widgetCfg.clock==='12h'?'selected':'')+'>12 小时制</option></select></div>'+
+        '</div>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">城市</div>'+
+          '<div class="row-control"><input id="cfgWeatherCity" class="settings-input" value="'+escAttr(_widgetCfg.weather_city)+'" style="width:180px"></div>'+
         '</div>'+
       '</div>'+
 
@@ -1010,18 +1132,6 @@ function _buildSettingsSection(tab) {
       '<div class="settings-card">'+
         '<p class="card-desc">勾选启用的引擎；第一个为默认</p>'+
         '<div id="cfgEngines" class="checkbox-group">'+Object.keys(_ENGINE_MAP).map(function(k){ var info=_ENGINE_MAP[k]; var checked=_widgetCfg.search_engines.indexOf(k)>=0; return '<label><input type="checkbox" value="'+k+'"'+(checked?' checked':'')+'> '+info.name+'</label>'; }).join('')+'</div>'+
-      '</div>'+
-
-      '<div class="settings-section-title">天气</div>'+
-      '<div class="settings-card">'+
-        '<div class="settings-row">'+
-          '<div class="row-label">城市</div>'+
-          '<div class="row-control"><input id="cfgWeatherCity" class="settings-input" value="'+escAttr(_widgetCfg.weather_city)+'" style="width:180px"></div>'+
-        '</div>'+
-        '<div class="settings-row">'+
-          '<div class="row-label">显示大小</div>'+
-          '<div class="row-control"><select id="cfgWeatherSize" class="settings-select"><option value="small" '+(_widgetCfg.weather_size==='small'?'selected':'')+'>小</option><option value="medium" '+(_widgetCfg.weather_size==='medium'?'selected':'')+'>中</option><option value="large" '+(_widgetCfg.weather_size==='large'?'selected':'')+'>大</option></select></div>'+
-        '</div>'+
       '</div>'+
     '</div>';
   }
@@ -1037,12 +1147,23 @@ function _buildSettingsSection(tab) {
 
       '<div class="settings-section-title">导入 / 导出</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">导入或导出为浏览器标准 HTML 书签文件</p>'+
+        '<p class="card-desc">导入前会先预览新增和重复数量；重复判断按完整 URL，而不是按域名</p>'+
         '<div style="display:flex;gap:8px">'+
           '<button class="btn btn-primary" id="exportBtn">导出 HTML</button>'+
           '<button class="btn btn-secondary" id="importBtn">导入 HTML</button>'+
+          '<button class="btn btn-secondary" id="dedupeBtn">查重</button>'+
         '</div>'+
         '<input type="file" id="importFileInput" accept=".html,.htm" style="display:none">'+
+      '</div>'+
+
+      '<div class="settings-section-title">备份 / 同步状态</div>'+
+      '<div class="settings-card">'+
+        '<div id="bookmarkStatusBox" style="font-size:12px;color:var(--text-secondary)">加载中...</div>'+
+      '</div>'+
+
+      '<div class="settings-section-title">操作日志</div>'+
+      '<div class="settings-card">'+
+        '<div id="opsLogBox" style="max-height:180px;overflow:auto;font-size:12px;color:var(--text-secondary)">加载中...</div>'+
       '</div>'+
 
       '<div class="settings-section-title">浏览器插件</div>'+
@@ -1174,6 +1295,41 @@ function _bindSettingsEvents() {
   }
 
   if (_currentSettingsTab === 'layout') {
+    loadFontSettings();
+    var cfgGlobalFont = document.getElementById('cfgGlobalFont');
+    if (cfgGlobalFont) {
+      cfgGlobalFont.onchange = function(){
+        if (cfgGlobalFont.value === '__custom__') {
+          var panel = document.getElementById('customFontPanel');
+          if (panel) panel.style.display = 'block';
+          cfgGlobalFont.value = _widgetCfg.font_body || '';
+          return;
+        }
+        var panel = document.getElementById('customFontPanel');
+        if (panel) panel.style.display = 'none';
+        _widgetCfg.font_body = cfgGlobalFont.value;
+        applyFontSettings();
+        saveWidgetCfg();
+      };
+    }
+    var fontSave = document.getElementById('cfgFontSave');
+    if (fontSave) fontSave.onclick = async function(){
+      var n = document.getElementById('cfgFontName').value.trim();
+      var f = document.getElementById('cfgFontFamily').value.trim();
+      var c = document.getElementById('cfgFontCdn').value.trim();
+      if (!n || !f || !c) { toast('请填写完整','error'); return; }
+      try {
+        var created = await api('POST','/api/fonts',{name:n,family:f,cdn_url:c,language:'zh'});
+        document.getElementById('cfgFontName').value='';
+        document.getElementById('cfgFontFamily').value='';
+        document.getElementById('cfgFontCdn').value='';
+        _widgetCfg.font_body = created.family || f;
+        await loadFontSettings();
+        applyFontSettings();
+        saveWidgetCfg();
+        toast('字体已添加并应用','success');
+      } catch(e){ toast(e.message,'error'); }
+    };
     // 视觉风格卡片
     body.querySelectorAll('.style-card').forEach(function(c){
       c.onclick = function(){
@@ -1315,43 +1471,13 @@ function _bindSettingsEvents() {
     }
   }
 
-  if (_currentSettingsTab === 'font') {
-    loadFontSettings();
-    ['cfgFontBody','cfgFontTitle','cfgFontEn','cfgFontCode'].forEach(function(id){
-      var sel = document.getElementById(id); if (!sel) return;
-      sel.onchange = function(){
-        var keyMap = {cfgFontBody:'font_body',cfgFontTitle:'font_title',cfgFontEn:'font_body_en',cfgFontCode:'font_code'};
-        var key = keyMap[id]; var family = sel.value;
-        if (key==='font_body')       _widgetCfg.font_body = family;
-        else if (key==='font_title') _widgetCfg.font_title = family;
-        else if (key==='font_body_en') _widgetCfg.font_body_en = family;
-        else if (key==='font_code')  _widgetCfg.font_code = family;
-        applyFontSettings();
-        saveWidgetCfg();
-      };
-    });
-    var fsSlider = document.getElementById('cfgFontSize');
-    if (fsSlider) {
-      fsSlider.oninput = function(){ document.getElementById('cfgFontSizeVal').textContent = fsSlider.value + 'px'; };
-      fsSlider.onchange = function(){ _widgetCfg.font_size = fsSlider.value; applyFontSettings(); saveWidgetCfg(); };
-    }
-    var fontSave = document.getElementById('cfgFontSave');
-    if (fontSave) fontSave.onclick = async function(){
-      var n = document.getElementById('cfgFontName').value.trim();
-      var f = document.getElementById('cfgFontFamily').value.trim();
-      var c = document.getElementById('cfgFontCdn').value.trim();
-      if (!n || !f || !c) { toast('请填写完整','error'); return; }
-      try { await api('POST','/api/fonts',{name:n,family:f,cdn_url:c,language:'zh'}); document.getElementById('cfgFontName').value=''; document.getElementById('cfgFontFamily').value=''; document.getElementById('cfgFontCdn').value=''; loadFontSettings(); toast('字体已添加','success'); } catch(e){ toast(e.message,'error'); }
-    };
-  }
-
   if (_currentSettingsTab === 'widgets') {
+    var cfgWidgetStyle = document.getElementById('cfgWidgetStyle');
+    if (cfgWidgetStyle) cfgWidgetStyle.onchange = function(){ _widgetCfg.widget_style = cfgWidgetStyle.value; applyWidgetChrome(); saveWidgetCfg(); };
     var cfgClock = document.getElementById('cfgClock');
     if (cfgClock) cfgClock.onchange = function(){ _widgetCfg.clock = cfgClock.value; updateClock(); saveWidgetCfg(); };
     var cfgCity = document.getElementById('cfgWeatherCity');
     if (cfgCity) cfgCity.onchange = function(){ _widgetCfg.weather_city = cfgCity.value.trim() || 'Beijing'; fetchWeather(); saveWidgetCfg(); };
-    var cfgSize = document.getElementById('cfgWeatherSize');
-    if (cfgSize) cfgSize.onchange = function(){ _widgetCfg.weather_size = cfgSize.value; fetchWeather(); saveWidgetCfg(); };
     var cfgEngs = document.getElementById('cfgEngines');
     if (cfgEngs) cfgEngs.addEventListener('change', function(){
       var cbs = cfgEngs.querySelectorAll('input:checked');
@@ -1365,7 +1491,7 @@ function _bindSettingsEvents() {
 
   if (_currentSettingsTab === 'bookmarks') {
     var expBtn = document.getElementById('exportBtn');
-    if (expBtn) expBtn.onclick = function(){ window.open('/api/export','_blank'); };
+    if (expBtn) expBtn.onclick = exportBookmarks;
     var impBtn = document.getElementById('importBtn');
     var impFile = document.getElementById('importFileInput');
     if (impBtn && impFile) {
@@ -1373,19 +1499,14 @@ function _bindSettingsEvents() {
       impFile.onchange = async function(){
         var file = impFile.files[0];
         if (!file) return;
-        var form = new FormData();
-        form.append('file', file);
-        try {
-          var resp = await fetch('/api/sync', { method: 'POST', headers: { 'Authorization': 'Bearer '+State.token }, body: form });
-          var r = await resp.json();
-          if (resp.ok) toast('导入成功: '+(r.imported||0)+' 个书签', 'success');
-          else toast(r.error||'导入失败', 'error');
-        } catch(e) { toast('导入失败: '+e.message, 'error'); }
+        await previewAndImportBookmarks(file);
         impFile.value = '';
       };
     }
+    var dedupeBtn = document.getElementById('dedupeBtn');
+    if (dedupeBtn) dedupeBtn.onclick = showDuplicates;
     // Refresh plugin status
-    fetch('/api/sync/status').then(function(sr){ return sr.ok ? sr.json() : null; }).then(function(sd){
+    fetch('/api/sync/status',{headers:{Authorization:'Bearer '+State.token}}).then(function(sr){ return sr.ok ? sr.json() : null; }).then(function(sd){
       if (!sd) return;
       var po = document.getElementById('pluginOnline');
       var pc = document.getElementById('pluginLastContact');
@@ -1394,7 +1515,10 @@ function _bindSettingsEvents() {
         po.style.color = sd.listeners > 0 ? 'var(--success)' : 'var(--text-muted)';
       }
       if (pc) pc.textContent = sd.last_sync_at || '—';
+      var box = document.getElementById('bookmarkStatusBox');
+      if (box) box.innerHTML = '分组：'+sd.total_groups+' · 链接：'+sd.total_links+' · 待插件同步：'+sd.pending_sync+' · 上次通讯：'+(sd.last_sync_at||'—')+' · 来源：'+(sd.last_sync_from||'—');
     }).catch(function(){});
+    loadOperationLogs();
   }
 
   if (_currentSettingsTab === 'ai') {
@@ -1420,9 +1544,9 @@ function _bindSettingsEvents() {
       if (!o || !n) { toast('请填写新旧密码','error'); return; }
       if (n.length<4) { toast('新密码至少4位','error'); return; }
       try {
-        await api('POST','/api/auth/change-password',{old_password:o,new_password:n});
-        State.token = n;
-        localStorage.setItem('suenweb_token', n);
+        var r = await api('POST','/api/auth/change-password',{old_password:o,new_password:n});
+        State.token = r.token || State.token;
+        localStorage.setItem('suenweb_token', State.token);
         toast('密码已更新','success');
         document.getElementById('oldPassword').value='';
         document.getElementById('newPassword').value='';
@@ -1445,10 +1569,10 @@ function toggleRevGroups(prefix){
   onGroupChange(prefix);
 }
 async function saveWidgetCfg(){
-  if(!State.token) return;
-  try{ await api('PUT','/api/settings',{clock_format:_widgetCfg.clock,weather_city:_widgetCfg.weather_city,weather_size:_widgetCfg.weather_size,search_engines:_widgetCfg.search_engines,search_default:_searchEngine,llm_url:_widgetCfg.llm_url,llm_key:_widgetCfg.llm_key,llm_model:_widgetCfg.llm_model,font_body:_widgetCfg.font_body,font_title:_widgetCfg.font_title,font_body_en:_widgetCfg.font_body_en,font_code:_widgetCfg.font_code,font_size:_widgetCfg.font_size}); }catch(e){}
+  if(!State.token || _suppressSettingSave) return;
+  try{ await api('PUT','/api/settings',{clock_format:_widgetCfg.clock,weather_city:_widgetCfg.weather_city,widget_style:_widgetCfg.widget_style,search_engines:_widgetCfg.search_engines,search_default:_searchEngine,llm_url:_widgetCfg.llm_url,llm_key:_widgetCfg.llm_key,llm_model:_widgetCfg.llm_model,font_body:_widgetCfg.font_body,font_title:'',font_body_en:'',font_code:'',font_size:_widgetCfg.font_size}); }catch(e){}
 }
-async function saveSetting(key,value){ try{ await api('PUT','/api/settings',{[key]:String(value)}); }catch(e){} }
+async function saveSetting(key,value){ if(_suppressSettingSave) return; try{ await api('PUT','/api/settings',{[key]:String(value)}); }catch(e){} }
 
 // ====== WALLPAPER SYSTEM ======
 function formatInterval(sec){ if(sec>=9999||sec===0) return '从不'; if(sec<60) return sec+'秒'; var m=Math.floor(sec/60); if(m<60) return m+'分钟'; var h=Math.floor(m/60); return h+'小时'+((m%60)?(m%60)+'分钟':''); }
@@ -1599,18 +1723,16 @@ async function loadFontSettings(){
     var resp=await fetch('/api/fonts');
     var data=await resp.json();
     _fontList=data.fonts||[];
-    // Populate font selectors — 4 ZeoSeven fonts + default
+    // 字体只保留一个全局选择项，底部提供“+ 自定义字体”入口
     var opts = '<option value="">系统默认</option>' +
       _fontList.map(function(f){
         return '<option value="'+escAttr(f.family)+'">'+escHtml(f.name)+'</option>';
-      }).join('');
-    var sel=document.getElementById('cfgFontBody'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_body||''; }
-    sel=document.getElementById('cfgFontTitle'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_title||''; }
-    sel=document.getElementById('cfgFontEn'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_body_en||''; }
-    sel=document.getElementById('cfgFontCode'); if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_code||''; }
-    // Update font size slider
-    var fs=document.getElementById('cfgFontSize'); if(fs){ fs.value=_widgetCfg.font_size||14; document.getElementById('cfgFontSizeVal').textContent=fs.value+'px'; }
-    // Custom fonts list
+      }).join('') +
+      '<option value="__custom__">+ 自定义字体</option>';
+    var sel=document.getElementById('cfgGlobalFont');
+    if(sel){ sel.innerHTML=opts; sel.value=_widgetCfg.font_body||''; }
+    var fs=document.getElementById('cfgLayoutFontSize');
+    if(fs){ fs.value=_widgetCfg.font_size||14; var fv=document.getElementById('cfgLayoutFontSizeVal'); if(fv) fv.textContent=fs.value+'px'; }
     var customList=document.getElementById('customFontsList'); if(customList){
       var customs=_fontList.filter(function(f){return f.category==='custom'});
       if(customs.length>0){ customList.innerHTML='<span style="color:var(--text-secondary)">自定义字体：</span>'+customs.map(function(f){return '<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;padding:2px 8px;background:rgba(255,255,255,0.06);border-radius:4px;font-size:11px">'+escHtml(f.name)+' <button style="background:none;border:none;color:#f87171;cursor:pointer;font-size:10px;padding:0" onclick="deleteFont('+f.id+')">✕</button></span>';}).join(''); }
@@ -1626,27 +1748,27 @@ async function deleteFont(fid){
 
 function applyFontSettings(){
   var body=_widgetCfg.font_body||'';
-  var title=_widgetCfg.font_title||'';
-  var en=_widgetCfg.font_body_en||'';
-  var code=_widgetCfg.font_code||'';
   var size=_widgetCfg.font_size||14;
   var stack=[];
   if(body) stack.push('"'+body+'"');
-  if(en) stack.push('"'+en+'"');
   stack.push('-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif');
   var fontStr=stack.join(',');
+  document.documentElement.style.setProperty('--font-body-family', fontStr);
+  document.documentElement.style.setProperty('--font-title-family', fontStr);
+  document.documentElement.style.setProperty('--font-code-family', fontStr);
   document.body.style.fontFamily=fontStr;
   document.body.style.fontSize=size+'px';
   document.documentElement.style.setProperty('--text-base',size+'px');
+  // Override inherit-based font-family with !important so inputs/buttons/links pick it up too
+  var bs=document.getElementById('font-body-style'); if(bs) bs.remove();
+  bs=document.createElement('style'); bs.id='font-body-style';
+  bs.textContent='html,body,input,select,textarea,button,a,code,pre,.search-input,.settings-input,.settings-select,.engine-btn,.btn-tiny,.fab-btn,.group-action-btn,.add-link-btn,.upload-btn,.tab-content,.pinned-card,.links-grid,.grid-link,.pin-link,.icon-only-link,.link-info,.link-title,.link-desc,.tab-bar{font-family:var(--font-body-family) !important}';
+  document.head.appendChild(bs);
   var ts=document.getElementById('font-title-style'); if(ts) ts.remove();
-  if(title){ ts=document.createElement('style'); ts.id='font-title-style'; ts.textContent='h1,h2,h3,h4,h5,.auth-title,.pinned-header,.clock,.settings-modal-title,.settings-section-title{font-family:"'+title+'",'+fontStr+'}'; document.head.appendChild(ts); }
   var cs=document.getElementById('font-code-style'); if(cs) cs.remove();
-  if(code){ cs=document.createElement('style'); cs.id='font-code-style'; cs.textContent='code,pre,.pv-code{font-family:"'+code+'",monospace}'; document.head.appendChild(cs); }
-  var preview=document.getElementById('fontPreview');
-  if(preview){ preview.style.fontFamily=fontStr; preview.style.fontSize=size+'px'; var pvt=preview.querySelector('.pv-title'); if(pvt&&title) pvt.style.fontFamily='"'+title+'",'+fontStr; var pvc=preview.querySelector('.pv-code'); if(pvc&&code) pvc.style.fontFamily='"'+code+'",monospace'; }
   // Use server-side proxy: <link rel=stylesheet> + woff2 proxied through /api/font-woff
   // This avoids MIME blocks, CORS, fetch race conditions, and relative URL resolution issues.
-  var selected=[body,title,en,code];
+  var selected=[body];
   _fontList.forEach(function(f){
     if(selected.indexOf(f.family)<0) return;
     var linkId = 'font-link-' + f.id;
@@ -1723,37 +1845,42 @@ async function aiCheck(){
 }
 
 // ====== WIDGET CONFIG ======
-var _widgetCfg = { clock:'24h', weather_city:'Beijing', weather_size:'medium', search_engines:'google,bing,baidu,duckduckgo', font_body:'', font_title:'', font_body_en:'', font_code:'', font_size:'14', color_scheme:'purple', accent_color:'' };
+var _widgetCfg = { clock:'24h', weather_city:'Beijing', widget_style:'bar', search_engines:'google,bing,baidu,duckduckgo', font_body:'', font_size:'14', color_scheme:'purple', accent_color:'' };
 var _searchEngine='google';
 var _wpTimer = null;
 var _fontList = [];
 function loadWidgetCfg(s) {
   if(s.clock_format) _widgetCfg.clock = s.clock_format;
   if(s.weather_city) _widgetCfg.weather_city = s.weather_city;
-  if(s.weather_size) _widgetCfg.weather_size = s.weather_size;
+  if(s.widget_style) _widgetCfg.widget_style = (s.widget_style === 'center-card') ? 'stacked' : s.widget_style;
   if(s.search_engines) _widgetCfg.search_engines = s.search_engines;
   if(s.search_default) _searchEngine = s.search_default;
   if(s.llm_url) _widgetCfg.llm_url = s.llm_url;
   if(s.llm_key) _widgetCfg.llm_key = s.llm_key;
   if(s.llm_model) _widgetCfg.llm_model = s.llm_model;
-  if(s.font_body) _widgetCfg.font_body = s.font_body;
-  if(s.font_title) _widgetCfg.font_title = s.font_title;
-  if(s.font_body_en) _widgetCfg.font_body_en = s.font_body_en;
-  if(s.font_code) _widgetCfg.font_code = s.font_code;
+  if(s.font_body || s.font_title || s.font_body_en || s.font_code) {
+    _widgetCfg.font_body = s.font_body || s.font_title || s.font_body_en || s.font_code || '';
+  }
   if(s.font_size) _widgetCfg.font_size = s.font_size;
   if(s.background_type) document.body.setAttribute('data-bg-type', s.background_type);
   if(s.bg_solid_color) { _widgetCfg.bg_solid_color = s.bg_solid_color; if (document.body.getAttribute('data-bg-type') === 'solid') document.body.style.background = s.bg_solid_color; }
     if(s.color_scheme) _widgetCfg.color_scheme = s.color_scheme;
     if(s.accent_color) _widgetCfg.accent_color = s.accent_color;
     if(s.style) document.body.setAttribute('data-style', s.style);
-    // Apply color scheme (surfaces + accent coordinated)
-    if (_widgetCfg.color_scheme) {
-      applyColorScheme(_widgetCfg.color_scheme, _widgetCfg.accent_color || undefined);
-    } else if (_widgetCfg.accent_color) {
-      applyAccentColor(_widgetCfg.accent_color);
+    // Only re-apply when server actually returned a value, otherwise we'd
+    // overwrite the user's current scheme/accent with the in-memory default.
+    if (s.color_scheme || s.accent_color) {
+      _suppressSettingSave = true;
+      if (s.color_scheme) {
+        applyColorScheme(s.color_scheme, (s.accent_color || _widgetCfg.accent_color) || undefined);
+      } else if (s.accent_color) {
+        applyAccentColor(s.accent_color);
+      }
+      _suppressSettingSave = false;
     }
   if(s.wallpaper_interval) State.wpInterval = parseInt(s.wallpaper_interval) || 300;
   else State.wpInterval = 300;
+  applyWidgetChrome();
 }
 
 var _ENGINE_MAP = {
@@ -1799,17 +1926,25 @@ function updateClock(){
   if(el) el.textContent=now.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:!h24});
   var de=document.getElementById('dateDisplay');
   if(de) de.textContent=now.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+  applyWidgetChrome();
+}
+
+function applyWidgetChrome(){
+  var hero = document.getElementById('heroSection');
+  if (!hero) return;
+  var style = _widgetCfg.widget_style || 'bar';
+  hero.setAttribute('data-widget-style', style);
+  document.body.setAttribute('data-widget-style', style);
 }
 
 async function fetchWeather(){
   var el=document.getElementById('weather'); if(!el) return;
   var city = _widgetCfg.weather_city || 'Beijing';
-  var size = _widgetCfg.weather_size || 'medium';
   try{
     var resp=await fetch('https://wttr.in/'+encodeURIComponent(city)+'?format=j1');
     var data=await resp.json(); var cur=data.current_condition[0];
     var map={'113':'☀️','116':'⛅','119':'☁️','122':'☁️','143':'🌫️','176':'🌦️','179':'🌨️','182':'🌨️','185':'🌨️','200':'⛈️','227':'🌨️','230':'🌨️','248':'🌫️','260':'🌫️','263':'🌦️','266':'🌦️','281':'🌧️','284':'🌧️','293':'🌦️','296':'🌦️','299':'🌧️','302':'🌧️','305':'🌧️','308':'🌧️','311':'🌧️','314':'🌧️','317':'🌧️','320':'🌨️','323':'🌨️','326':'🌨️','329':'❄️','332':'❄️','335':'❄️','338':'❄️','350':'🌧️','353':'🌦️','356':'🌧️','359':'🌧️','362':'🌨️','365':'🌨️','368':'❄️','371':'❄️','374':'🌧️','377':'🌧️','386':'⛈️','389':'⛈️','392':'⛈️','395':'❄️'};
-    el.setAttribute('data-size', size);
+    applyWidgetChrome();
     el.innerHTML='<span class="weather-icon">'+(map[cur.weatherCode]||'<img src=\"/static/icons/cloudy-line.svg\" class=\"ico\" alt=\"\">')+'</span><span class="weather-temp">'+cur.temp_C+'°C</span><span class="weather-city">'+escHtml(city)+'</span>';
   }catch(e){ el.innerHTML='<span class="weather-icon"><img src=\"/static/icons/cloudy-line.svg\" class=\"ico\" alt=\"\"></span><span class=\"weather-city\">加载失败</span>'; }
 }
@@ -1835,7 +1970,7 @@ async function init(){
   try{
     // Settings
     var s={};
-    try{ var resp=await fetch('/api/settings'); s=await resp.json(); }catch(e){}
+    try{ var resp=await fetch('/api/settings', State.token ? {headers:{Authorization:'Bearer '+State.token}} : {}); s=await resp.json(); }catch(e){}
     if(s.pattern) document.body.setAttribute('data-pattern',s.pattern);
     loadWidgetCfg(s);
     // Widgets
@@ -1869,6 +2004,7 @@ async function init(){
     });
     document.getElementById('bookmarkFileInput').addEventListener('change',function(e){ var f=e.target.files[0]; if(f) uploadBookmarks(f); e.target.value=''; });
     document.getElementById('modalOverlay').addEventListener('click',function(e){ if(e.target===e.currentTarget) closeModal(); });
+    initDragAndDrop();
   }catch(e){ var el=document.getElementById('authError'); if(el) el.textContent='Error: '+e.message; console.error(e); }
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();

@@ -4,16 +4,17 @@
 
 ## 特性
 
-- **📑 书签管理** — 分组 + 拖拽排序，支持紧凑/详情两种展示模式
+- **📑 书签管理** — 分组 + 链接拖拽排序，支持跨组移动和紧凑/详情/图标展示模式
 - **🔄 浏览器插件同步** — Chrome / Edge / Firefox 插件，收藏夹实时双向同步
 - **🖼️ 壁纸系统** — 必应每日壁纸 + SteamGridDB 游戏壁纸 + 自定义 API 源，支持随机/上一条/下一条切换
 - **🔤 字体系统** — 内置汇文明朝体/京华老宋体/LXGW WenKai/抖音美好体，支持自定义 CDN 字体
 - **🤖 AI 功能** — LLM 自动生成链接描述、链接有效性检测
 - **🔒 密码保护** — Bearer Token 认证，保护个人数据
-- **📤 导入导出** — 支持 Netscape HTML / Chrome JSON 格式的书签导入导出
-- **🎨 主题定制** — 毛玻璃效果、网格/点阵图案、渐变色方案、纯色背景
+- **📤 导入导出** — 支持 Netscape HTML 书签导入预览、重复跳过和导出
+- **🎨 主题定制** — 毛玻璃效果、网格/点阵图案、渐变色方案、纯色背景，以及时间天气组件风格
 - **📡 SSE 实时推送** — 网页端变更实时通知浏览器插件
 - **🏷️ 图标自动获取** — 多源 favicon 抓取 + SQLite 缓存
+- **🧹 维护工具** — URL 级重复链接检查、图标刷新、操作日志
 
 ## 快速开始
 
@@ -42,21 +43,54 @@ docker compose up -d
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `SECRET_KEY` | Flask 密钥 | 自动生成 |
 | `TZ` | 时区 | `Asia/Shanghai` |
 | `PIP_INDEX_URL` | pip 镜像源 | 清华镜像 |
 
-设置 `SECRET_KEY` 可避免容器重启后 session 失效：
-
-```yaml
-environment:
-  - SECRET_KEY=your-secure-random-key
-  - TZ=Asia/Shanghai
-```
+认证 token 存储在 SQLite 中，容器重启后不会因为内存清空而失效。
 
 ### 端口
 
 默认映射 `5080:5000`，可根据需要修改 `docker-compose.yml` 中的端口映射。
+
+### 反向代理
+
+**先验证直连可用：** `curl http://localhost:5080/health` 应返回 `{"status":"ok"}`。
+
+然后将反代上游指向容器：
+
+| 场景 | 上游地址 |
+|------|----------|
+| 反代在同一台宿主机 | `http://127.0.0.1:5080` |
+| 反代在同一 docker-compose 内 | `http://suenweb:5000` |
+| 反代在另一 docker-compose（需加入同一网络） | `http://suenweb:5000` |
+
+**跨 compose 方案：** 在反代的 compose 中加入外部网络 `suenweb-net`，并在 suenweb 的 compose 中将网络设为 `external: true`。
+
+**关键：SSE 必须禁用缓冲和延长超时。**
+
+Nginx:
+```nginx
+location / {
+    proxy_pass http://suenweb:5000;          # 按上表替换
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_buffering off;                     # SSE 实时推送
+    proxy_read_timeout 86400s;               # 不超时断开
+}
+```
+
+Caddy:
+```
+example.com {
+    reverse_proxy suenweb:5000 {
+        flush_interval -1
+    }
+}
+```
 
 ## 浏览器插件
 
@@ -87,8 +121,15 @@ environment:
 | `/api/groups` | POST | 是 | 创建分组 |
 | `/api/links` | POST | 是 | 创建链接 |
 | `/api/sync` | POST | 是 | 同步浏览器书签 |
+| `/api/import/preview` | POST | 是 | 导入前预览新增和重复数量 |
+| `/api/sync/status` | GET | 是 | 获取同步状态 |
+| `/api/sync/heartbeat` | POST | 是 | 插件心跳 |
 | `/api/export` | GET | 是 | 导出为 Netscape HTML |
-| `/api/settings` | GET/PUT | 部分 | 读取/更新设置 |
+| `/api/reorder/groups` | POST | 是 | 保存分组拖拽排序 |
+| `/api/reorder/links` | POST | 是 | 保存链接排序和跨组移动 |
+| `/api/tools/duplicates` | GET | 是 | 按完整 URL 检查重复链接 |
+| `/api/ops/logs` | GET | 是 | 查看操作日志 |
+| `/api/settings` | GET/PUT | 部分 | 未登录只返回非敏感显示设置，登录后返回完整设置；更新需认证 |
 | `/api/wallpaper` | GET | 否 | 获取当前壁纸 |
 | `/api/wallpaper/refresh` | POST | 是 | 切换壁纸 |
 | `/api/fonts` | GET/POST | 部分 | 字体管理 |
@@ -96,8 +137,9 @@ environment:
 | `/api/ai/check` | POST | 是 | 检测链接有效性 |
 | `/api/events/stream` | GET | 是 | SSE 实时事件流 |
 | `/api/icon/proxy` | GET | 否 | Favicon 代理 |
+| `/api/icon/refresh` | POST | 是 | 刷新指定站点图标缓存 |
 
-认证方式：请求头 `Authorization: Bearer <密码>`
+认证方式：登录后使用返回的 token，请求头为 `Authorization: Bearer <token>`。为兼容旧版插件，服务端仍临时接受密码作为 Bearer 值。
 
 ## 壁纸源配置
 
@@ -117,19 +159,20 @@ environment:
 
 ## 技术栈
 
-- **后端**: Python 3.12 + Flask 3.1
+- **后端**: Python 3.12 + FastAPI
 - **数据库**: SQLite（自动建表 + 迁移）
 - **前端**: 原生 HTML/CSS/JS，毛玻璃 + 网格图案 + 渐变背景
 - **部署**: Docker + docker-compose，官方 `python:3.12-slim` 镜像
-- **运行**: Gunicorn (2 workers)
+- **运行**: Uvicorn
 - **书签解析**: BeautifulSoup4 + 正则回退
-- **浏览器插件**: Manifest V3 (Chrome/Edge) + Manifest V2 (Firefox)
+- **实时推送**: SSE + SQLite 事件轮询，支持多 worker 场景
+- **浏览器插件**: Manifest V3 (Chrome/Edge) + Manifest V2 (Firefox)，内置 `browser` / `chrome` API 兼容层
 
 ## 目录结构
 
 ```
 suenweb/
-├── app.py                 # Flask 主应用
+├── app.py                 # FastAPI 主应用
 ├── bookmark_parser.py     # 书签文件解析器
 ├── requirements.txt       # Python 依赖
 ├── docker-compose.yml     # Docker 部署

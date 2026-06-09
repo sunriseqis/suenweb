@@ -1,6 +1,34 @@
 /**
  * SuenWeb — Popup
  */
+const browser = globalThis.browser || (() => {
+  const c = globalThis.chrome;
+  if (!c) throw new Error('WebExtension API unavailable');
+  const p = (fn, ctx) => (...args) => new Promise((resolve, reject) => {
+    try {
+      const ret = fn.call(ctx, ...args, (res) => {
+        const err = c.runtime && c.runtime.lastError;
+        err ? reject(new Error(err.message)) : resolve(res);
+      });
+      if (ret && typeof ret.then === 'function') ret.then(resolve, reject);
+    } catch (e) { reject(e); }
+  });
+  return {
+    storage: { local: { get: p(c.storage.local.get, c.storage.local), set: p(c.storage.local.set, c.storage.local) } },
+    runtime: {
+      sendMessage: p(c.runtime.sendMessage, c.runtime),
+      onMessage: {
+        addListener(fn) {
+          c.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+            Promise.resolve(fn(msg, sender)).then(sendResponse).catch(() => sendResponse());
+            return true;
+          });
+        }
+      },
+    },
+  };
+})();
+
 const els = {
   connDot:       document.getElementById('connDot'),
   serverStatus:  document.getElementById('serverStatus'),
@@ -60,7 +88,8 @@ async function refresh() {
   );
   if (!editing) {
     els.serverUrl.value = d.serverUrl || '';
-    els.authToken.value = d.authToken || '';
+    els.authToken.value = '';
+    els.authToken.placeholder = d.authToken ? '已保存；修改时输入访问密码' : '导航页密码';
     els.webdavUrl.value = d.webdavUrl || '';
     els.webdavUser.value = d.webdavUser || '';
     els.webdavPass.value = d.webdavPass || '';
@@ -156,9 +185,17 @@ document.getElementById('cancelRestoreBtn').onclick = () => { els.restorePicker.
 /* ── Save ── */
 document.getElementById('saveServerBtn').onclick = async () => {
   const url = els.serverUrl.value.trim().replace(/\/+$/, ''), pwd = els.authToken.value.trim();
-  if (!url || !pwd) { showResult('请填写地址和密码', 'b'); return; }
+  if (!url) { showResult('请填写服务器地址', 'b'); return; }
   try {
-    await browser.runtime.sendMessage({ action: 'updateConfig', serverUrl: url, authToken: pwd,
+    const saved = await browser.storage.local.get(['authToken']);
+    let token = saved.authToken || '';
+    if (pwd) {
+      const login = await browser.runtime.sendMessage({ action: 'loginServer', serverUrl: url, password: pwd });
+      if (!login || !login.ok) throw new Error(login?.error || '登录失败');
+      token = login.token;
+    }
+    if (!token) { showResult('请填写访问密码', 'b'); return; }
+    await browser.runtime.sendMessage({ action: 'updateConfig', serverUrl: url, authToken: token,
       webdavUrl: els.webdavUrl.value.trim().replace(/\/+$/, ''),
       webdavUser: els.webdavUser.value.trim(), webdavPass: els.webdavPass.value.trim() });
     showResult('配置已保存', 'g'); refresh();
@@ -168,18 +205,23 @@ document.getElementById('testServerBtn').onclick = async () => {
   const url = els.serverUrl.value.trim().replace(/\/+$/, '');
   if (!url) { showResult('请填写服务器地址', 'b'); return; }
   try {
-    const r = await fetch(url + '/api/sync/status');
+    const saved = await browser.storage.local.get(['authToken']);
+    const token = els.authToken.value.trim() || saved.authToken || '';
+    const r = await fetch(url + '/api/sync/status', {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    });
     if (r.ok) { const d = await r.json(); showResult('连接成功 · ' + (d.total_links||0) + ' 个链接', 'g'); }
     else showResult('服务器无响应', 'b');
   } catch(e) { showResult('无法连接', 'b'); }
 };
 document.getElementById('saveWebdavBtn').onclick = async () => {
   try {
+    const saved = await browser.storage.local.get(['authToken']);
     await browser.runtime.sendMessage({ action: 'updateConfig',
       webdavUrl: els.webdavUrl.value.trim().replace(/\/+$/, ''),
       webdavUser: els.webdavUser.value.trim(), webdavPass: els.webdavPass.value.trim(),
       serverUrl: els.serverUrl.value.trim().replace(/\/+$/, ''),
-      authToken: els.authToken.value.trim() });
+      authToken: els.authToken.value.trim() || saved.authToken || '' });
     showResult('WebDAV 配置已保存', 'g'); refresh();
   } catch(e) { showResult(e.message, 'b'); }
 };

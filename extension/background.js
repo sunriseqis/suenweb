@@ -7,9 +7,69 @@
  *   Auto-backup:        compares server total_links with lastBackupCount → WebDAV snapshot
  *   Manual backup:      popup button → full browser bookmarks HTML → WebDAV PUT
  *   Restore:            PROPFIND list → download → parse → import to browser
- *   Delete from browser: bookmarks.onRemoved → DELETE /api/sync/bookmark?url=...
  *   Watchdog:           alarm every 5min
  */
+
+/* ── Browser API compatibility (Firefox browser.* / Chrome chrome.*) ── */
+const browser = globalThis.browser || (() => {
+  const c = globalThis.chrome;
+  if (!c) throw new Error('WebExtension API unavailable');
+  const lastError = () => c.runtime && c.runtime.lastError;
+  const p = (fn, ctx) => (...args) => new Promise((resolve, reject) => {
+    let settled = false;
+    const cb = (res) => {
+      if (settled) return;
+      settled = true;
+      const err = lastError();
+      err ? reject(new Error(err.message)) : resolve(res);
+    };
+    try {
+      const ret = fn.call(ctx, ...args, cb);
+      if (ret && typeof ret.then === 'function') ret.then(resolve, reject);
+      else if (fn.length <= args.length && !settled) resolve(ret);
+    } catch (e) {
+      reject(e);
+    }
+  });
+  return {
+    storage: { local: { get: p(c.storage.local.get, c.storage.local), set: p(c.storage.local.set, c.storage.local) } },
+    bookmarks: {
+      getTree: p(c.bookmarks.getTree, c.bookmarks),
+      create: p(c.bookmarks.create, c.bookmarks),
+    },
+    alarms: {
+      onAlarm: c.alarms.onAlarm,
+      clear: p(c.alarms.clear, c.alarms),
+      create: (name, info) => { c.alarms.create(name, info); return Promise.resolve(); },
+    },
+    contextMenus: c.contextMenus && {
+      onClicked: c.contextMenus.onClicked,
+      removeAll: p(c.contextMenus.removeAll, c.contextMenus),
+      create: (info) => new Promise((resolve, reject) => {
+        try {
+          c.contextMenus.create(info, () => {
+            const err = lastError();
+            err ? reject(new Error(err.message)) : resolve();
+          });
+        } catch (e) { reject(e); }
+      }),
+    },
+    menus: c.contextMenus,
+    runtime: {
+      onMessage: {
+        addListener(fn) {
+          c.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+            Promise.resolve(fn(msg, sender)).then(sendResponse).catch(e => sendResponse({ ok: false, error: e.message }));
+            return true;
+          });
+        }
+      },
+      sendMessage: p(c.runtime.sendMessage, c.runtime),
+    },
+    action: c.action,
+    browserAction: c.browserAction,
+  };
+})();
 
 const SYNC_ALARM = 'suenweb-sync-watchdog';
 const WATCHDOG_MIN = 5;
@@ -188,46 +248,43 @@ async function restoreBackup(index) {
 }
 
 async function _importBookmarksHTML(html) {
-  // Parse Netscape bookmark HTML and import into browser
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const links = _parseBookmarksHTMLFlat(html);
+
+  const tree = await browser.bookmarks.getTree();
+  const roots = tree[0]?.children || [];
+  const other = roots.find(r => r.title === '其他书签' || r.title === 'Other bookmarks')
+            || roots[roots.length - 1];
+  if (!other || links.length === 0) return 0;
+  const folder = await browser.bookmarks.create({ parentId: other.id, title: 'SuenWeb 恢复' });
   let count = 0;
-
-  function parseDL(dl, parentId) {
-    const items = dl.querySelectorAll(':scope > dt');
-    items.forEach(dt => {
-      const a = dt.querySelector(':scope > a');
-      const h3 = dt.querySelector(':scope > h3');
-      const childDL = dt.querySelector(':scope > dl');
-      if (a) {
-        const url = a.getAttribute('href');
-        if (url) {
-          browser.bookmarks.create({ parentId, title: a.textContent || url, url }).then(() => count++).catch(() => {});
-        }
-      } else if (h3 && childDL) {
-        browser.bookmarks.create({ parentId, title: h3.textContent, type: 'folder' }).then(folder => {
-          parseDL(childDL, folder.id);
-        }).catch(() => {});
-      } else if (h3) {
-        browser.bookmarks.create({ parentId, title: h3.textContent }).catch(() => {});
-      }
-    });
+  for (const item of links) {
+    try {
+      await browser.bookmarks.create({ parentId: folder.id, title: item.title || item.url, url: item.url });
+      count++;
+    } catch {}
   }
+  return count;
+}
 
-  return new Promise(resolve => {
-    const rootDL = doc.querySelector('dl');
-    if (!rootDL) { resolve(0); return; }
-    browser.bookmarks.getTree().then(tree => {
-      const roots = tree[0]?.children || [];
-      const other = roots.find(r => r.title === '其他书签' || r.title === 'Other bookmarks')
-                || roots[roots.length - 1];
-      if (!other) { resolve(0); return; }
-      browser.bookmarks.create({ parentId: other.id, title: 'SuenWeb 恢复', type: 'folder' }).then(folder => {
-        parseDL(rootDL, folder.id);
-        setTimeout(() => resolve(count), 2000); // Wait for creates to finish
-      });
-    });
-  });
+function _decodeHtml(s) {
+  return String(s || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function _parseBookmarksHTMLFlat(html) {
+  const links = [];
+  const re = /<A\b[^>]*\bHREF=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/A>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const url = _decodeHtml(m[2]).trim();
+    const title = _decodeHtml(m[3].replace(/<[^>]*>/g, '')).trim() || url;
+    if (/^(https?|ftp):\/\//i.test(url)) links.push({ title, url });
+  }
+  return links;
 }
 
 function _bookmarksToHTML(nodes, depth = 0) {
@@ -264,9 +321,21 @@ async function apiFetch(path, opts = {}) {
   if (resp.status === 401) throw new Error('令牌无效 (401)');
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${resp.status}`);
+    throw new Error(body.detail || body.error || `HTTP ${resp.status}`);
   }
   return resp;
+}
+
+async function loginServer(serverUrl, password) {
+  const base = String(serverUrl || '').replace(/\/+$/, '');
+  const resp = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.detail || data.error || `HTTP ${resp.status}`);
+  return data.token || password;
 }
 
 /* ── Sync check + auto-backup ────────────────────────────── */
@@ -286,6 +355,10 @@ async function runSync({ source = 'manual' } = {}) {
           if (sr.ok) {
             const sd = await sr.json();
             const serverCount = sd.total_links || 0;
+            fetch(`${c.serverUrl}/api/sync/heartbeat`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${c.authToken}` }
+            }).catch(() => {});
             if (serverCount !== c.lastBackupCount) {
               console.log(`[SuenWeb] auto-backup: server ${serverCount} vs last ${c.lastBackupCount}`);
               _doBackup(c, serverCount).catch(() => {});
@@ -408,26 +481,6 @@ async function badge(text, color, title) {
     if (color) await api.setBadgeBackgroundColor({ color });
     if (title !== undefined) await api.setBadgeTitle({ title: `SuenWeb Sync · ${title}` });
   } catch {}
-}
-
-/* ── Bookmark delete → server ────────────────────────────── */
-function setupBookmarkListeners() {
-  // When user deletes a bookmark from browser, also delete from server
-  browser.bookmarks.onRemoved.addListener(async (id, removeInfo) => {
-    const url = removeInfo?.node?.url;
-    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-      try {
-        const resp = await apiFetch(`/api/sync/bookmark?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
-        const data = await resp.json();
-        if (data.deleted) {
-          console.log(`[SuenWeb] deleted bookmark from server: ${url}`);
-          runSync({ source: 'bookmark_removed' });
-        }
-      } catch (e) {
-        console.warn('[SuenWeb] delete bookmark error:', e);
-      }
-    }
-  });
 }
 
 /* ── Watchdog alarm ─────────────────────────────────────── */
@@ -604,6 +657,8 @@ browser.runtime.onMessage.addListener(async (msg) => {
       refreshContextMenu();
       return { ok: true };
     }
+    case 'loginServer':
+      return { ok: true, token: await loginServer(msg.serverUrl, msg.password) };
     case 'manualBackup':
       try { return await manualBackup(); } catch(e) { return { ok: false, error: e.message }; }
     case 'listBackups':
@@ -659,7 +714,6 @@ async function testWebDAV() {
 /* ── Init ────────────────────────────────────────────────── */
 async function init() {
   await setupAlarm();
-  setupBookmarkListeners();
   await setupContextMenu();
 
   // Connect SSE and do initial status check
