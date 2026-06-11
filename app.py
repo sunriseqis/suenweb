@@ -4,7 +4,7 @@ Async I/O for concurrent icon proxy; uvicorn for production.
 Browser extension syncs bookmarks to this server.
 """
 
-import os, json, sqlite3, hashlib, secrets, time, re, io, asyncio, warnings, ipaddress, socket, shutil
+import os, json, sqlite3, hashlib, secrets, time, re, io, asyncio, warnings, ipaddress, socket, shutil, datetime, random
 from pathlib import Path
 from urllib.parse import urlparse
 from contextlib import asynccontextmanager
@@ -17,6 +17,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
 
 from bookmark_parser import parse_bookmarks
 
@@ -127,6 +128,7 @@ def _ensure_tables(conn: sqlite3.Connection):
             id              INTEGER PRIMARY KEY DEFAULT 1,
             current_url     TEXT DEFAULT '',
             current_index   INTEGER DEFAULT 0,
+            current_image_idx INTEGER DEFAULT 0,
             last_refresh_at TEXT
         );
         CREATE TABLE IF NOT EXISTS fonts (
@@ -159,13 +161,13 @@ def _ensure_tables(conn: sqlite3.Connection):
         INSERT OR IGNORE INTO settings (key, value) VALUES ('pattern', 'grid');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('glass_intensity', '1');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('weather_city', 'Beijing');
-        INSERT OR IGNORE INTO settings (key, value) VALUES ('clock_format', '24');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('clock_format', '24h');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('weather_size', 'medium');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('widget_style', 'bar');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('clock_size', 'medium');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('auth_password_hash', '');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('background_type', 'gradient');
-        INSERT OR IGNORE INTO settings (key, value) VALUES ('wallpaper_interval', '300');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('wallpaper_interval', '900');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('font_body', '');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('font_title', '');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('font_code', '');
@@ -176,6 +178,10 @@ def _ensure_tables(conn: sqlite3.Connection):
         INSERT OR IGNORE INTO settings (key, value) VALUES ('bg_solid_color', '#0d0e14');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('steamgriddb_api_key', '');
     """)
+    # Performance indexes
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_links_group_id ON links(group_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_links_synced ON links(synced_to_browser)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_links_imported ON links(is_imported)")
     # Migrations
     existing = {r[1] for r in conn.execute("PRAGMA table_info(links)")}
     if 'synced_to_browser' not in existing:
@@ -186,6 +192,9 @@ def _ensure_tables(conn: sqlite3.Connection):
     wcols = {r[1] for r in conn.execute("PRAGMA table_info(wallpapers)")}
     if 'source_type' not in wcols:
         conn.execute("ALTER TABLE wallpapers ADD COLUMN source_type TEXT DEFAULT 'url'")
+    wscols = {r[1] for r in conn.execute("PRAGMA table_info(wallpaper_state)")}
+    if 'current_image_idx' not in wscols:
+        conn.execute("ALTER TABLE wallpaper_state ADD COLUMN current_image_idx INTEGER DEFAULT 0")
 
     wcount = conn.execute("SELECT COUNT(*) FROM wallpapers").fetchone()[0]
     if wcount == 0:
@@ -353,8 +362,7 @@ def _is_bearer_authorized(token: str) -> bool:
     row = db.execute("SELECT expires_at FROM auth_tokens WHERE token_hash=?", (_hash_token(token),)).fetchone()
     if row and row['expires_at'] >= int(time.time()):
         return True
-    # Compatibility for existing browser/plugin configurations that still send the password.
-    return _verify_pw(token, _get_setting('auth_password_hash', ''))
+    return False
 
 async def require_auth(request: Request):
     auth = request.headers.get('Authorization', '')
@@ -375,17 +383,18 @@ def _normalize_url(url: str) -> str:
 def _get_all_data():
     db = get_db()
     groups = db.execute("SELECT * FROM groups_table ORDER BY sort_order, id").fetchall()
+    all_links = db.execute("SELECT * FROM links ORDER BY group_id, sort_order, id").fetchall()
+    links_by_group = {}
+    for l in all_links:
+        links_by_group.setdefault(l['group_id'], []).append(dict(l))
     result = []
     for g in groups:
-        links = db.execute(
-            "SELECT * FROM links WHERE group_id=? ORDER BY sort_order, id", (g['id'],)
-        ).fetchall()
         result.append({
             'id': g['id'], 'name': g['name'], 'icon': g['icon'],
             'type': g['type'], 'display_mode': g['display_mode'] or 'compact',
             'sort_order': g['sort_order'],
             'is_imported': bool(g['is_imported']),
-            'links': [dict(l) for l in links],
+            'links': links_by_group.get(g['id'], []),
         })
     return result
 
@@ -494,6 +503,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title='SuenWeb', lifespan=lifespan)
 app.add_middleware(DBMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 app.mount('/static', StaticFiles(directory=str(BASE_DIR / 'static')), name='static')
 
 # ═══════════════════════════════════════════════════════════
@@ -591,10 +607,9 @@ async def api_sync_bookmarks(request: Request, _=Depends(require_auth)):
         except UnicodeDecodeError:
             text = content.decode('gbk', errors='replace')
         try:
-            parsed = parse_bookmarks(text)
+            folders = _parse_uploaded_bookmarks(text)
         except Exception as e:
             raise HTTPException(400, detail=f'解析失败: {e}')
-        folders = _parse_uploaded_bookmarks(text)
         imported_count = _merge_bookmark_folders(db, folders)
 
     db.execute(
@@ -1065,6 +1080,124 @@ async def api_update_settings(request: Request, _=Depends(require_auth)):
 
 
 # ═══════════════════════════════════════════════════════════
+#  ROUTES — Config Export/Import
+# ═══════════════════════════════════════════════════════════
+@app.get('/api/config/export')
+async def api_config_export(_=Depends(require_auth)):
+    """导出所有配置（设置、分组、链接、壁纸源）"""
+    db = get_db()
+    
+    # 导出所有设置（包括密码、API Key等）
+    settings_rows = db.execute("SELECT key, value FROM settings").fetchall()
+    settings = {r['key']: r['value'] for r in settings_rows}
+    
+    # 导出分组
+    groups_rows = db.execute("SELECT id, name, icon, display_mode, sort_order FROM groups_table ORDER BY sort_order").fetchall()
+    groups = []
+    for g in groups_rows:
+        links_rows = db.execute("SELECT title, url, description, icon, icon_type, sort_order FROM links WHERE group_id=? ORDER BY sort_order", (g['id'],)).fetchall()
+        links = [dict(l) for l in links_rows]
+        groups.append({
+            'name': g['name'],
+            'icon': g['icon'],
+            'display_mode': g['display_mode'],
+            'sort_order': g['sort_order'],
+            'links': links
+        })
+    
+    # 导出壁纸源（排除内置源，只导出用户自定义的）
+    wp_rows = db.execute("SELECT name, url, category, enabled, sort_order, source_type FROM wallpapers WHERE category!='builtin' ORDER BY sort_order").fetchall()
+    wallpapers = [dict(w) for w in wp_rows]
+    
+    # 导出字体设置（排除内置字体）
+    font_rows = db.execute("SELECT name, family, category, cdn_url, language, sort_order FROM fonts WHERE category!='builtin' ORDER BY sort_order").fetchall()
+    fonts = [dict(f) for f in font_rows]
+    
+    return {
+        'version': 1,
+        'exported_at': datetime.datetime.now().isoformat(),
+        'settings': settings,
+        'groups': groups,
+        'wallpapers': wallpapers,
+        'fonts': fonts
+    }
+
+@app.post('/api/config/import')
+async def api_config_import(request: Request, _=Depends(require_auth)):
+    """导入配置"""
+    data = await request.json() or {}
+    
+    if data.get('version') != 1:
+        raise HTTPException(400, detail='不支持的配置版本')
+    
+    db = get_db()
+    imported = {'settings': 0, 'groups': 0, 'links': 0, 'wallpapers': 0, 'fonts': 0}
+    
+    # 导入设置（包括密码、API Key等）
+    if 'settings' in data:
+        allowed = ['pattern', 'glass_intensity', 'weather_city',
+                   'clock_format', 'weather_size', 'widget_style', 'clock_size', 'search_engines', 'search_default',
+                   'llm_url', 'llm_key', 'llm_model',
+                   'background_type', 'wallpaper_interval',
+                   'font_body', 'font_title', 'font_body_en', 'font_code', 'font_size',
+                   'accent_color', 'style', 'bg_solid_color', 'color_scheme',
+                   'steamgriddb_api_key',
+                   'auth_password', 'auth_password_hash']
+        for key, value in data['settings'].items():
+            if key in allowed:
+                _set_setting(key, str(value))
+                imported['settings'] += 1
+    
+    # 导入分组和链接
+    if 'groups' in data:
+        # 清空现有分组和链接
+        db.execute("DELETE FROM links")
+        db.execute("DELETE FROM groups_table WHERE id > 0")
+        
+        for g in data['groups']:
+            cur = db.execute(
+                "INSERT INTO groups_table (name, icon, display_mode, sort_order) VALUES (?,?,?,?)",
+                (g.get('name', ''), g.get('icon', '📁'), g.get('display_mode', 'grid'), g.get('sort_order', 0))
+            )
+            gid = cur.lastrowid
+            imported['groups'] += 1
+            
+            for l in g.get('links', []):
+                db.execute(
+                    "INSERT INTO links (group_id, title, url, description, icon, icon_type, sort_order) VALUES (?,?,?,?,?,?,?)",
+                    (gid, l.get('title', ''), l.get('url', ''), l.get('description', ''), l.get('icon', ''), l.get('icon_type', 'emoji'), l.get('sort_order', 0))
+                )
+                imported['links'] += 1
+    
+    # 导入壁纸源
+    if 'wallpapers' in data:
+        for w in data['wallpapers']:
+            try:
+                db.execute(
+                    "INSERT INTO wallpapers (name, url, category, enabled, sort_order, source_type) VALUES (?,?,?,?,?,?)",
+                    (w.get('name', ''), w.get('url', ''), w.get('category', 'custom'), int(w.get('enabled', 1)), w.get('sort_order', 0), w.get('source_type', 'url'))
+                )
+                imported['wallpapers'] += 1
+            except Exception:
+                pass
+    
+    # 导入字体
+    if 'fonts' in data:
+        for f in data['fonts']:
+            try:
+                db.execute(
+                    "INSERT INTO fonts (name, family, category, cdn_url, language, sort_order) VALUES (?,?,?,?,?,?)",
+                    (f.get('name', ''), f.get('family', ''), f.get('category', 'custom'), f.get('cdn_url', ''), f.get('language', 'zh'), f.get('sort_order', 0))
+                )
+                imported['fonts'] += 1
+            except Exception:
+                pass
+    
+    db.commit()
+    return {'ok': True, 'imported': imported}
+
+
+# ═══════════════════════════════════════════════════════════
 #  ROUTES — Wallpaper
 # ═══════════════════════════════════════════════════════════
 @app.get('/api/wallpaper')
@@ -1084,7 +1217,7 @@ async def api_wallpaper_sources():
     db = get_db()
     rows = db.execute("SELECT * FROM wallpapers ORDER BY sort_order, id").fetchall()
     sources = [dict(r) for r in rows]
-    interval = _get_setting('wallpaper_interval', '300')
+    interval = _get_setting('wallpaper_interval', '900')
     bg_type = _get_setting('background_type', 'pattern')
     state = db.execute("SELECT * FROM wallpaper_state WHERE id=1").fetchone()
     sgdb_key = _get_setting('steamgriddb_api_key', '')
@@ -1186,14 +1319,15 @@ async def _fetch_wallpaper_url(db, direction='next'):
         return ''
     state = db.execute("SELECT * FROM wallpaper_state WHERE id=1").fetchone()
     current_index = state['current_index'] if state else 0
+    current_image_idx = state['current_image_idx'] if state and 'current_image_idx' in state else 0
     total = len(sources)
     if direction == 'next':
         current_index = (current_index + 1) % total
     elif direction == 'prev':
         current_index = (current_index - 1) % total
     elif direction == 'random':
-        import random
         current_index = random.randint(0, total - 1)
+        current_image_idx = 0
     # Try every source starting from current_index, wrap around if needed
     for offset in range(total):
         idx = (current_index + offset) % total
@@ -1207,10 +1341,14 @@ async def _fetch_wallpaper_url(db, direction='next'):
         url = ''
         if stype == 'steamgriddb':
             url = await _resolve_steamgriddb(db, source['url'], source['name'])
+            current_image_idx = 0
+        elif 'bing.com' in source['url']:
+            url, current_image_idx = await _resolve_bing_wallpaper(source['url'], current_image_idx, direction)
         else:
             url = await _resolve_wallpaper(source['url'])
+            current_image_idx = 0
         if url:
-            db.execute("UPDATE wallpaper_state SET current_index=? WHERE id=1", (idx,))
+            db.execute("UPDATE wallpaper_state SET current_index=?, current_image_idx=? WHERE id=1", (idx, current_image_idx))
             db.commit()
             return url
     return ''
@@ -1225,7 +1363,6 @@ async def _resolve_steamgriddb(db, steam_app_id, game_name=''):
         (steam_app_id,)
     ).fetchall()
     if cached:
-        import random
         return random.choice([r['image_url'] for r in cached])
     try:
         async with httpx.AsyncClient(timeout=12) as client:
@@ -1257,31 +1394,40 @@ async def _resolve_steamgriddb(db, steam_app_id, game_name=''):
                 except Exception:
                     pass
             db.commit()
-            import random
             return random.choice([url for _, url, _ in top])
     except Exception:
         return ''
+
+async def _resolve_bing_wallpaper(api_url, current_idx, direction):
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+            if resp.is_success:
+                data = resp.json()
+                images = data.get('images', [])
+                if images:
+                    if direction == 'next':
+                        current_idx = (current_idx + 1) % len(images)
+                    elif direction == 'prev':
+                        current_idx = (current_idx - 1) % len(images)
+                    elif direction == 'random':
+                        current_idx = random.randint(0, len(images) - 1)
+                    return 'https://cn.bing.com' + images[current_idx]['url'], current_idx
+        return '', 0
+    except Exception:
+        return '', 0
 
 async def _resolve_wallpaper(api_url):
     try:
         if not _is_safe_remote_url(api_url):
             return ''
-        if 'bing.com' in api_url:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(api_url, headers={'User-Agent': 'Mozilla/5.0'})
-                if resp.is_success:
-                    data = resp.json()
-                    images = data.get('images', [])
-                    if images:
-                        return 'https://cn.bing.com' + images[0]['url']
-            return ''
-        else:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.head(api_url, follow_redirects=True, headers={'User-Agent': 'Mozilla/5.0'})
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(api_url, follow_redirects=True, headers={'User-Agent': 'Mozilla/5.0'})
+            if resp.status_code == 200:
                 content_type = resp.headers.get('Content-Type', '')
-                if 'image' in content_type or resp.status_code == 200:
+                if 'image' in content_type:
                     return api_url
-            return ''
+        return ''
     except Exception:
         return ''
 
@@ -1482,12 +1628,12 @@ async def api_icon_proxy(url: str = Query(''), domain: str = Query('')):
             return Response(row['content'], media_type=row['content_type'],
                            headers={'Cache-Control': 'public, max-age=86400', 'X-Icon-Cache': 'hit'})
 
-    # 构建来源列表：优先直连 favicon，再使用本机测速最快的两个第三方 API。
+    # 构建来源列表：优先直连 favicon，再使用可靠的第三方 API。
     sources = []
     if domain:
         sources.append(f'https://{domain}/favicon.ico')
-        sources.append(f'https://icon.bqb.cool/?url={domain}')
-        sources.append(f'https://icon.horse/icon/{domain}')
+        sources.append(f'https://favicon.vemetric.com/{domain}')
+        sources.append(f'https://a.favicon.im/{domain}?larger=true')
     if url:
         sources.insert(0, url)
 

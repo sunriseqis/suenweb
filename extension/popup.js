@@ -47,6 +47,7 @@ const els = {
   result:        document.getElementById('resultBox'),
   restorePicker: document.getElementById('restorePicker'),
   restoreList:   document.getElementById('restoreList'),
+  newtabToggle:  document.getElementById('newtabToggle'),
 };
 
 function fmtTime(iso) {
@@ -76,10 +77,18 @@ function toggleSection(id) {
 document.getElementById('serverToggle').onclick = () => toggleSection('serverCfg');
 document.getElementById('webdavToggle').onclick = () => toggleSection('webdavCfg');
 
+/* ── New Tab Toggle ── */
+els.newtabToggle.onchange = async () => {
+  const enabled = els.newtabToggle.checked;
+  await browser.storage.local.set({ newtabEnabled: enabled });
+  await browser.runtime.sendMessage({ action: 'updateNewtab', enabled });
+  showResult(enabled ? '已设为新标签页' : '已恢复默认新标签', enabled ? 'g' : 'i');
+};
+
 /* ── Refresh ── */
 async function refresh() {
   const d = await browser.storage.local.get([
-    'serverUrl','authToken','lastSync','webdavUrl','webdavUser','webdavPass','lastBackupAt'
+    'serverUrl','authToken','lastSync','webdavUrl','webdavUser','webdavPass','lastBackupAt','newtabEnabled'
   ]);
   const editing = document.activeElement && (
     document.activeElement === els.serverUrl || document.activeElement === els.authToken ||
@@ -110,6 +119,11 @@ async function refresh() {
   // Last backup
   els.lastBackup.textContent = d.lastBackupAt ? fmtTime(d.lastBackupAt) : '—';
   els.lastBackup.className = 'v ' + (d.lastBackupAt ? 'g' : 'm');
+
+  // New Tab toggle
+  const ntEnabled = !!d.newtabEnabled;
+  els.newtabToggle.checked = ntEnabled;
+  els.newtabToggle.disabled = !srvOk;
 
   // Connection
   try {

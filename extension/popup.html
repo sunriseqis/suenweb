@@ -117,7 +117,32 @@
   .rlist .ri .rn{color:var(--text);font-weight:500}
   .rlist .ri .rs{color:var(--muted);font-size:10px}
 
-  /* ── Result ── */
+  /* ── New Tab Toggle ── */
+  .nt-row{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:14px;padding:8px 10px;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  }
+  .nt-label{font-size:12px;color:var(--dim);font-weight:500}
+  .switch{position:relative;display:inline-block;width:38px;height:21px;flex-shrink:0}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .slider{
+    position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+    background:var(--surface2);border:1px solid var(--border);
+    border-radius:21px;transition:all .25s;
+  }
+  .switch .slider::before{
+    content:'';position:absolute;height:15px;width:15px;left:2px;bottom:2px;
+    background:var(--muted);border-radius:50%;transition:all .25s;
+  }
+  .switch input:checked+.slider{
+    background:var(--accent);border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--a-soft);
+  }
+  .switch input:checked+.slider::before{
+    transform:translateX(17px);background:#fff;
+  }
+  .switch input:disabled+.slider{opacity:.35;cursor:not-allowed}
   .msg{
     margin-top:8px;padding:8px 12px;border-radius:var(--rs);font-size:12px;line-height:1.3;
     display:none;font-weight:500
@@ -137,6 +162,15 @@
     <div class="hdr-sub">书签同步</div>
   </div>
   <div class="hdr-dot" id="connDot" title="检查中..."></div>
+</div>
+
+<!-- New Tab Toggle -->
+<div class="nt-row">
+  <span class="nt-label">设为新标签</span>
+  <label class="switch">
+    <input type="checkbox" id="newtabToggle">
+    <span class="slider"></span>
+  </label>
 </div>
 
 <!-- Server -->

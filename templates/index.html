@@ -122,6 +122,21 @@
 </div>
 <div class="toast-container" id="toastContainer"></div>
 
+<!-- ═══════════ ONLINE ICON PICKER ═══════════ -->
+<div class="icon-picker-overlay" id="onlineIconPickerOverlay" style="display:none">
+  <div class="icon-picker-panel" id="onlineIconPickerPanel">
+    <div class="icon-picker-header">
+      <h4>在线图标</h4>
+    </div>
+    <div id="onlineIconPickerContent"></div>
+    <div class="icon-picker-footer">
+      <button id="onlineIconPickerReset">重置</button>
+      <button onclick="closeOnlineIconPicker()">取消</button>
+      <button class="btn-primary" id="onlineIconPickerConfirm">确定</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ ICON PICKER ═══════════ -->
 <div class="icon-picker-overlay" id="iconPickerOverlay">
   <div class="icon-picker-panel" id="iconPickerPanel">
@@ -176,12 +191,164 @@ function closeModal() {
   document.getElementById('modalOverlay').style.display = 'none';
 }
 
+// ====== ONLINE ICON PICKER ======
+var _ONLINE_ICON_APIS = [
+  { name: 'vemetric', template: 'https://favicon.vemetric.com/{domain}' },
+  { name: 'im', template: 'https://a.favicon.im/{domain}?larger=true' },
+  { name: '自定义', template: '' }
+];
+
+var _onlineIconPickerTarget = null;
+var _onlineIconUrlInputId = null;
+var _onlineIconPickerInitialDomain = '';
+
+function showOnlineIconPicker(iconInputId, urlInputId) {
+  _onlineIconPickerTarget = iconInputId;
+  _onlineIconUrlInputId = urlInputId;
+  
+  var urlInput = document.getElementById(urlInputId);
+  var targetUrl = (urlInput && urlInput.value.trim()) || '';
+  
+  var domain = '';
+  try { domain = targetUrl ? new URL(targetUrl).hostname : ''; } catch(e) {}
+  
+  _onlineIconPickerInitialDomain = domain;
+
+  var html = '<div style="min-width:360px;padding:16px">' +
+    '<div style="display:flex;justify-content:center;margin-bottom:16px">' +
+      '<div id="onlinePreview" style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-md);border:2px dashed var(--glass-border);font-size:28px"></div>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;text-align:center">选择图标代理 API，填入目标网站域名</div>' +
+    '<div style="margin-bottom:12px">' +
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">目标网址（域名）</div>' +
+      '<input id="onlineTargetUrl" value="' + escAttr(domain) + '" placeholder="github.com" style="width:100%;padding:8px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:14px;box-sizing:border-box"> ' +
+    '</div>' +
+    '<div style="margin-bottom:16px">' +
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">图标 API</div>' +
+      '<select id="onlineApiSelect" style="width:100%;padding:8px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:13px;cursor:pointer">' +
+        _ONLINE_ICON_APIS.map(function(api, idx) {
+          return '<option value="' + idx + '">' + escHtml(api.name) + '</option>';
+        }).join('') +
+      '</select>' +
+    '</div>' +
+    '<div id="onlineCustomPanel" style="display:none;margin-bottom:16px;padding:12px;background:var(--bg-hover);border-radius:var(--radius-sm)">' +
+      '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">自定义 API 前缀</div>' +
+      '<input id="onlineCustomTpl" placeholder="https://favicon.im/" style="width:100%;padding:8px 12px;background:var(--bg-primary);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:13px;box-sizing:border-box">' +
+      '<div style="font-size:10px;color:var(--text-muted);margin-top:6px">格式：https://example.com/ （会自动拼接域名）</div>' +
+    '</div>' +
+    '<div id="onlineUrlPreview" style="display:none;margin-bottom:12px;padding:10px;background:rgba(167,139,250,0.1);border-radius:var(--radius-sm);font-size:12px;color:var(--text-secondary);word-break:break-all"></div>' +
+  '</div>';
+
+  document.getElementById('onlineIconPickerContent').innerHTML = html;
+  document.getElementById('onlineIconPickerOverlay').style.display = 'flex';
+
+  function generateAndPreview() {
+    var domain = document.getElementById('onlineTargetUrl').value.trim();
+    var apiIdx = parseInt(document.getElementById('onlineApiSelect').value);
+    var preview = document.getElementById('onlinePreview');
+    var urlPreview = document.getElementById('onlineUrlPreview');
+
+    if (!domain) {
+      preview.innerHTML = '';
+      preview.style.border = '2px dashed var(--glass-border)';
+      urlPreview.style.display = 'none';
+      return;
+    }
+
+    var api = _ONLINE_ICON_APIS[apiIdx];
+    var apiTpl = api.template;
+    
+    if (apiIdx === _ONLINE_ICON_APIS.length - 1) {
+      var customPrefix = document.getElementById('onlineCustomTpl').value.trim();
+      apiTpl = customPrefix ? customPrefix + '{domain}' : '';
+    }
+
+    if (!apiTpl) {
+      preview.innerHTML = '';
+      preview.style.border = '2px dashed var(--glass-border)';
+      urlPreview.style.display = 'none';
+      return;
+    }
+
+    var iconUrl = apiTpl.replace('{domain}', domain);
+    preview.innerHTML = '<img src="' + escAttr(iconUrl) + '" style="width:40px;height:40px"><span style="display:none">🌐</span>';
+    preview.style.border = 'none';
+    urlPreview.innerHTML = '<strong>图标 URL：</strong>' + escHtml(iconUrl);
+    urlPreview.style.display = 'block';
+  }
+
+  document.getElementById('onlineApiSelect').addEventListener('change', function() {
+    var idx = parseInt(this.value);
+    var customPanel = document.getElementById('onlineCustomPanel');
+    customPanel.style.display = idx === _ONLINE_ICON_APIS.length - 1 ? 'block' : 'none';
+    generateAndPreview();
+  });
+
+  document.getElementById('onlineTargetUrl').addEventListener('input', generateAndPreview);
+  document.getElementById('onlineCustomTpl').addEventListener('input', generateAndPreview);
+
+  document.getElementById('onlineIconPickerReset').onclick = function() {
+    document.getElementById('onlineTargetUrl').value = _onlineIconPickerInitialDomain;
+    document.getElementById('onlineApiSelect').value = '0';
+    document.getElementById('onlineCustomPanel').style.display = 'none';
+    document.getElementById('onlineCustomTpl').value = '';
+    generateAndPreview();
+  };
+
+  document.getElementById('onlineIconPickerConfirm').onclick = function() {
+    var domain = document.getElementById('onlineTargetUrl').value.trim();
+    var apiIdx = parseInt(document.getElementById('onlineApiSelect').value);
+
+    if (!domain) {
+      toast('请输入目标网址', 'info');
+      return;
+    }
+
+    var api = _ONLINE_ICON_APIS[apiIdx];
+    var apiTpl = api.template;
+    
+    if (apiIdx === _ONLINE_ICON_APIS.length - 1) {
+      var customPrefix = document.getElementById('onlineCustomTpl').value.trim();
+      if (!customPrefix) {
+        toast('请输入自定义 API 前缀', 'info');
+        return;
+      }
+      apiTpl = customPrefix + '{domain}';
+    }
+
+    var iconUrl = apiTpl.replace('{domain}', domain);
+    var iconInput = document.getElementById(_onlineIconPickerTarget);
+    if (iconInput) {
+      iconInput.value = iconUrl;
+      iconInput.dispatchEvent(new Event('input'));
+      var preview = document.getElementById(_onlineIconPickerTarget + '_preview');
+      if (preview && iconUrl) {
+        preview.innerHTML = '<img src="' + escAttr(iconUrl) + '" style="width:20px;height:20px">';
+      }
+    }
+    closeOnlineIconPicker();
+  };
+
+  generateAndPreview();
+}
+
+function closeOnlineIconPicker() {
+  document.getElementById('onlineIconPickerOverlay').style.display = 'none';
+  _onlineIconPickerTarget = null;
+  _onlineIconUrlInputId = null;
+}
+
+document.getElementById('onlineIconPickerOverlay').addEventListener('click', function(e){
+  if (e.target === this) closeOnlineIconPicker();
+});
+
 // ====== ICON PICKER ======
 var _iconPickerTarget = null;
 var _suppressSettingSave = false;
 var _dragState = null;
 
-function showIconPicker(inputId, currentValue) {
+function showIconPicker(inputId) {
+  var currentValue = document.getElementById(inputId).value;
   _iconPickerTarget = inputId;
   var grid = document.getElementById('iconPickerGrid');
   var search = document.getElementById('iconPickerSearch');
@@ -578,7 +745,7 @@ async function deleteGroup(gid){
   catch(e){ await refresh(); toast(e.message,'error'); }
 }
 async function addLink(gid) {
-  showModal('<h3>添加链接</h3><div class="form-group"><label>标题 *</label><input id="elTitle" placeholder="网站名称"></div><div class="form-group"><label>URL *</label><input id="elUrl" placeholder="https://..."></div><div class="form-group"><label>描述</label><input id="elDesc" placeholder="简短描述"></div><div class="form-group"><label>图标 (emoji 或 URL)</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:18px"></span><input id="elIcon" placeholder="📌 或 https://..." style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\',document.getElementById(\'elIcon\').value);return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置图标</button></div></div><div class="btn-row"><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">添加</button></div>');
+  showModal('<h3>添加链接</h3><div class="form-group"><label>标题 *</label><input id="elTitle" placeholder="网站名称"></div><div class="form-group"><label>URL *</label><input id="elUrl" placeholder="https://..."></div><div class="form-group"><label>描述</label><input id="elDesc" placeholder="简短描述"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)"></span><input id="elIcon" placeholder="📌 或 URL" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置</button><button class="btn btn-sm" onclick="showOnlineIconPicker(\'elIcon\',\'elUrl\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">在线</button></div></div><div class="btn-row"><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">添加</button></div>');
   document.getElementById('elCancel').onclick = closeModal;
   document.getElementById('elSave').onclick = async function(){
     var title=document.getElementById('elTitle').value.trim();
@@ -601,7 +768,19 @@ async function editLink(lid) {
   State.groups.forEach(function(g){ var f=g.links.find(function(l){return l.id===lid;}); if(f) link=f; });
   if(!link) return;
   var groupOpts=State.groups.map(function(g){ return '<option value="'+g.id+'"'+(g.id===link.group_id?' selected':'')+'>'+escHtml(g.name)+'</option>'; }).join('');
-  showModal('<h3>编辑链接</h3><div class="form-group"><label>所属组</label><select id="elGroup">'+groupOpts+'</select></div><div class="form-group"><label>标题</label><input id="elTitle" value="'+escAttr(link.title)+'"></div><div class="form-group"><label>URL</label><input id="elUrl" value="'+escAttr(link.url)+'"></div><div class="form-group"><label>描述 <button class="ai-desc-btn-modal" id="elAiBtn" style="font-size:11px;padding:2px 8px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);border-radius:4px;color:#a78bfa;cursor:pointer">'+(link.description?'重新生成':'补全生成')+'</button></label><input id="elDesc" value="'+escAttr(link.description||'')+'"></div><div class="form-group"><label>图标 (emoji 或 URL)</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:18px">'+escHtml(link.icon||'')+'</span><input id="elIcon" value="'+escAttr(link.icon||'')+'" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\',document.getElementById(\'elIcon\').value);return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置图标</button></div></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="elDelete">删除</button><button class="btn btn-secondary" id="elRefreshIcon">刷新图标</button><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">保存</button></div>');
+  
+  var iconPreview = '';
+  if (link.icon) {
+    if (link.icon.indexOf('/static/icons/') === 0) {
+      iconPreview = '<img src="' + escAttr(link.icon) + '" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">';
+    } else if (link.icon.indexOf('http') === 0) {
+      iconPreview = '<img src="' + escAttr(link.icon) + '" style="width:20px;height:20px">';
+    } else {
+      iconPreview = escHtml(link.icon);
+    }
+  }
+  
+  showModal('<h3>编辑链接</h3><div class="form-group"><label>所属组</label><select id="elGroup">'+groupOpts+'</select></div><div class="form-group"><label>标题</label><input id="elTitle" value="'+escAttr(link.title)+'"></div><div class="form-group"><label>URL</label><input id="elUrl" value="'+escAttr(link.url)+'"></div><div class="form-group"><label>描述 <button class="ai-desc-btn-modal" id="elAiBtn" style="font-size:11px;padding:2px 8px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);border-radius:4px;color:#a78bfa;cursor:pointer">'+(link.description?'重新生成':'补全生成')+'</button></label><input id="elDesc" value="'+escAttr(link.description||'')+'"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">'+iconPreview+'</span><input id="elIcon" value="'+escAttr(link.icon||'')+'" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置</button><button class="btn btn-sm" onclick="showOnlineIconPicker(\'elIcon\',\'elUrl\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">在线</button></div></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="elDelete">删除</button><button class="btn btn-secondary" id="elRefreshIcon">刷新</button><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">保存</button></div>');
   document.getElementById('elDelete').onclick=async function(){ if(!confirm('确定删除此链接？')) return; try{await api('DELETE','/api/links/'+lid); closeModal(); await refresh(); toast('已删除','info');} catch(e){toast(e.message,'error');} };
   document.getElementById('elRefreshIcon').onclick=async function(){ try{ await api('POST','/api/icon/refresh',{url:document.getElementById('elUrl').value.trim()}); toast('图标缓存已刷新','success'); await refresh(); } catch(e){ toast(e.message,'error'); } };
   document.getElementById('elAiBtn').onclick=async function(){ var btn=document.getElementById('elAiBtn'); if(!btn) return; btn.disabled=true; btn.textContent='...'; var ok=await aiDescribeOne(lid); if(ok){ var d=document.getElementById('elDesc'); if(d) d.value=ok; btn.textContent='重新生成'; } btn.disabled=false; };
@@ -1036,15 +1215,13 @@ function _buildSettingsSection(tab) {
           '<div class="settings-row">'+
             '<div class="row-label">切换间隔<div class="row-desc">壁纸自动轮换间隔</div></div>'+
             '<div class="row-control">'+
-              '<div class="slider-row">'+
-                '<input type="range" class="settings-slider" id="wpIntervalSlider" min="30" max="1800" step="30" value="'+(State.wpInterval||300)+'" style="width:140px">'+
-                '<span class="slider-val" id="wpIntervalValue">'+formatInterval(State.wpInterval||300)+'</span>'+
-              '</div>'+
+              '<select id="wpIntervalSelect" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:13px">'+
+                '<option value="900"' + (State.wpInterval === 900 ? ' selected' : '') + '>15分钟</option>'+
+                '<option value="1800"' + (State.wpInterval === 1800 ? ' selected' : '') + '>30分钟</option>'+
+                '<option value="3600"' + (State.wpInterval === 3600 ? ' selected' : '') + '>1小时</option>'+
+                '<option value="9999"' + (State.wpInterval >= 9999 ? ' selected' : '') + '>永不</option>'+
+              '</select>'+
             '</div>'+
-          '</div>'+
-          '<div class="settings-row">'+
-            '<div class="row-label">不自动切换<div class="row-desc">关闭定时轮播</div></div>'+
-            '<div class="row-control"><input type="checkbox" id="wpIntervalNever" '+(State.wpInterval>=9999?'checked':'')+' style="width:18px;height:18px;accent-color:var(--accent)"></div>'+
           '</div>'+
           '<div class="settings-action-row" style="gap:6px">'+
             '<button class="btn btn-secondary" id="wpPrevBtn">上一张</button>'+
@@ -1228,6 +1405,25 @@ function _buildSettingsSection(tab) {
           '<button class="btn btn-primary" id="changePwBtn">保存</button>'+
         '</div>'+
       '</div>'+
+    '</div>'+
+    '<div class="settings-section active">'+
+      '<div class="settings-section-title">配置管理</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">导出或导入所有配置（设置、分组、链接、壁纸源）</p>'+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+          '<button class="btn btn-secondary" id="exportConfigBtn">导出配置</button>'+
+          '<button class="btn btn-secondary" id="importConfigBtn">导入配置</button>'+
+          '<input type="file" id="importConfigFile" accept=".json" style="display:none">'+
+        '</div>'+
+        '<div id="importPreview" style="display:none;margin-top:12px;padding:12px;background:var(--bg-hover);border-radius:var(--radius-sm);font-size:13px">'+
+          '<div style="color:var(--text-muted);margin-bottom:8px">待导入内容：</div>'+
+          '<div id="importPreviewContent"></div>'+
+          '<div style="margin-top:12px;display:flex;gap:8px">'+
+            '<button class="btn btn-primary" id="confirmImportBtn">确认导入</button>'+
+            '<button class="btn btn-secondary" id="cancelImportBtn">取消</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
     '</div>';
   }
 
@@ -1405,33 +1601,16 @@ function _bindSettingsEvents() {
     // 壁纸源管理 + 轮播
     if (document.getElementById('wpBingRow')) {
       loadWallpaperSources();
-      var wpSlider = document.getElementById('wpIntervalSlider');
-      if (wpSlider) {
-        wpSlider.oninput = function(){
-          var never = document.getElementById('wpIntervalNever');
-          document.getElementById('wpIntervalValue').textContent = formatInterval(parseInt(wpSlider.value));
-          if (never) never.checked = false;
-        };
-        wpSlider.onchange = function(){
-          var v = parseInt(wpSlider.value);
+      var wpIntervalSelect = document.getElementById('wpIntervalSelect');
+      if (wpIntervalSelect) {
+        wpIntervalSelect.onchange = function(){
+          var v = parseInt(wpIntervalSelect.value);
           State.wpInterval = v;
           saveSetting('wallpaper_interval', String(v));
-          resetWallpaperTimer();
-        };
-      }
-      var wpNever = document.getElementById('wpIntervalNever');
-      if (wpNever) {
-        wpNever.onchange = function(){
-          if (wpNever.checked) {
-            State.wpInterval = 9999;
-            saveSetting('wallpaper_interval', '9999');
+          if (v >= 9999) {
             clearWallpaperTimer();
-            document.getElementById('wpIntervalValue').textContent = '从不';
           } else {
-            State.wpInterval = 300;
-            saveSetting('wallpaper_interval', '300');
             resetWallpaperTimer();
-            document.getElementById('wpIntervalValue').textContent = '5分钟';
           }
         };
       }
@@ -1466,7 +1645,13 @@ function _bindSettingsEvents() {
       var sgdbSave = document.getElementById('sgdbSaveBtn');
       if (sgdbSave) sgdbSave.onclick = async function(){
         var key = document.getElementById('sgdbApiKey').value.trim();
-        try { await saveSetting('steamgriddb_api_key', key); toast('API Key 已保存','success'); loadWallpaperSources(); } catch(e){ toast(e.message,'error'); }
+        try { 
+          await saveSetting('steamgriddb_api_key', key); 
+          toast('API Key 已保存','success'); 
+          loadWallpaperSources(); 
+          var masked = key.length > 8 ? key.substring(0,4) + '****' + key.substring(key.length-4) : key;
+          document.getElementById('sgdbApiKey').value = masked;
+        } catch(e){ toast(e.message,'error'); }
       };
     }
   }
@@ -1552,6 +1737,102 @@ function _bindSettingsEvents() {
         document.getElementById('newPassword').value='';
       } catch(e){ toast(e.message,'error'); }
     };
+
+    // 导出配置
+    var exportBtn = document.getElementById('exportConfigBtn');
+    if (exportBtn) exportBtn.onclick = async function(){
+      try {
+        var resp = await fetch('/api/config/export', {headers: {Authorization: 'Bearer ' + State.token}});
+        var data = await resp.json();
+        var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'suenweb_config_' + new Date().toISOString().slice(0,10) + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('配置已导出','success');
+      } catch(e) { toast(e.message || '导出失败','error'); }
+    };
+
+    // 导入配置
+    var importBtn = document.getElementById('importConfigBtn');
+    var importFile = document.getElementById('importConfigFile');
+    var importPreview = document.getElementById('importPreview');
+    var importPreviewContent = document.getElementById('importPreviewContent');
+    var confirmImportBtn = document.getElementById('confirmImportBtn');
+    var cancelImportBtn = document.getElementById('cancelImportBtn');
+    var pendingImportData = null;
+
+    if (importBtn && importFile) {
+      importBtn.onclick = function(){ importFile.click(); };
+      importFile.onchange = function(e){
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev){
+          try {
+            var data = JSON.parse(ev.target.result);
+            if (data.version !== 1) {
+              toast('不支持的配置版本','error');
+              return;
+            }
+            pendingImportData = data;
+            // 显示预览
+            var previewHtml = '<div style="color:var(--text-primary);font-weight:500;margin-bottom:6px">导出时间：' + (data.exported_at || '未知') + '</div>';
+            previewHtml += '<div style="display:flex;gap:16px;flex-wrap:wrap;color:var(--text-secondary)">';
+            if (data.settings) previewHtml += '<span>设置：' + Object.keys(data.settings).length + ' 项</span>';
+            if (data.groups) previewHtml += '<span>分组：' + data.groups.length + ' 个</span>';
+            if (data.groups && data.groups.length > 0) {
+              var linkCount = data.groups.reduce(function(sum, g){ return sum + (g.links ? g.links.length : 0); }, 0);
+              previewHtml += '<span>链接：' + linkCount + ' 个</span>';
+            }
+            if (data.wallpapers) previewHtml += '<span>壁纸源：' + data.wallpapers.length + ' 个</span>';
+            if (data.fonts) previewHtml += '<span>字体：' + data.fonts.length + ' 个</span>';
+            previewHtml += '</div>';
+            previewHtml += '<div style="color:var(--warning);margin-top:8px;font-size:12px">⚠️ 导入将覆盖现有的分组和链接数据</div>';
+            importPreviewContent.innerHTML = previewHtml;
+            importPreview.style.display = 'block';
+          } catch(e) {
+            toast('配置文件格式错误','error');
+          }
+        };
+        reader.readAsText(file);
+        importFile.value = '';
+      };
+    }
+
+    if (confirmImportBtn) {
+      confirmImportBtn.onclick = async function(){
+        if (!pendingImportData) return;
+        try {
+          var resp = await fetch('/api/config/import', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + State.token},
+            body: JSON.stringify(pendingImportData)
+          });
+          var result = await resp.json();
+          if (result.ok) {
+            toast('配置已导入：' + (result.imported.groups || 0) + ' 个分组，' + (result.imported.links || 0) + ' 个链接','success');
+            importPreview.style.display = 'none';
+            pendingImportData = null;
+            await refresh();
+            loadSettings();
+          } else {
+            toast(result.detail || '导入失败','error');
+          }
+        } catch(e) {
+          toast(e.message || '导入失败','error');
+        }
+      };
+    }
+
+    if (cancelImportBtn) {
+      cancelImportBtn.onclick = function(){
+        importPreview.style.display = 'none';
+        pendingImportData = null;
+      };
+    }
   }
 }
 function onGroupChange(prefix){
@@ -1577,7 +1858,7 @@ async function saveSetting(key,value){ if(_suppressSettingSave) return; try{ awa
 // ====== WALLPAPER SYSTEM ======
 function formatInterval(sec){ if(sec>=9999||sec===0) return '从不'; if(sec<60) return sec+'秒'; var m=Math.floor(sec/60); if(m<60) return m+'分钟'; var h=Math.floor(m/60); return h+'小时'+((m%60)?(m%60)+'分钟':''); }
 function clearWallpaperTimer(){ if(_wpTimer){ clearInterval(_wpTimer); _wpTimer=null; } }
-function resetWallpaperTimer(){ clearWallpaperTimer(); var iv=State.wpInterval||300; if(iv>=9999||iv===0) return; _wpTimer=setInterval(function(){ refreshWallpaper('next'); }, iv*1000); }
+function resetWallpaperTimer(){ clearWallpaperTimer(); var iv=State.wpInterval||900; if(iv>=9999||iv===0) return; _wpTimer=setInterval(function(){ refreshWallpaper('next'); }, iv*1000); }
 
 async function refreshWallpaper(direction){
   try{
@@ -1601,9 +1882,9 @@ function applyWallpaper(url){
   var layer=document.getElementById('wallpaperLayer');
   if(!layer) return;
   var img=new Image();
-  img.onload=function(){ layer.style.backgroundImage='url('+url+')'; layer.style.opacity='1'; };
+  img.onload=function(){ layer.style.backgroundImage='url('+url+')'; layer.style.display='block'; layer.style.opacity='1'; };
   img.onerror=function(){ layer.style.opacity='0'; };
-  img.src=url;
+  img.src=url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
 }
 
 function applyBackgroundType(type){
@@ -1622,7 +1903,7 @@ async function loadWallpaperSources(){
   try{
     var resp=await fetch('/api/wallpaper/sources');
     var data=await resp.json();
-    State.wpInterval=data.interval||300;
+    State.wpInterval=data.interval||900;
     State.wpSources=data.sources||[];
     var currentIndex=data.current_index||0;
 
@@ -1681,9 +1962,8 @@ async function loadWallpaperSources(){
       }
     }
 
-    // Update interval slider if it exists
-    var slider=document.getElementById('wpIntervalSlider'); if(slider){ slider.value=State.wpInterval; var val=document.getElementById('wpIntervalValue'); if(val) val.textContent=formatInterval(State.wpInterval); }
-    var never=document.getElementById('wpIntervalNever'); if(never){ never.checked=State.wpInterval>=9999; }
+    // Update interval select if it exists
+    var intervalSelect=document.getElementById('wpIntervalSelect'); if(intervalSelect){ intervalSelect.value=State.wpInterval >= 9999 ? '9999' : String(State.wpInterval); }
 
     // SGDB status
     var st=document.getElementById('sgdbStatus');
@@ -1878,8 +2158,8 @@ function loadWidgetCfg(s) {
       }
       _suppressSettingSave = false;
     }
-  if(s.wallpaper_interval) State.wpInterval = parseInt(s.wallpaper_interval) || 300;
-  else State.wpInterval = 300;
+  if(s.wallpaper_interval) State.wpInterval = parseInt(s.wallpaper_interval) || 900;
+  else State.wpInterval = 900;
   applyWidgetChrome();
 }
 

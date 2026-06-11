@@ -7,6 +7,7 @@
  *   Auto-backup:        compares server total_links with lastBackupCount → WebDAV snapshot
  *   Manual backup:      popup button → full browser bookmarks HTML → WebDAV PUT
  *   Restore:            PROPFIND list → download → parse → import to browser
+ *   New Tab override:   tabs.onCreated listener → redirect chrome://newtab/ to server URL
  *   Watchdog:           alarm every 5min
  */
 
@@ -76,7 +77,7 @@ const WATCHDOG_MIN = 5;
 
 /* ── Config ──────────────────────────────────────────────── */
 async function cfg() {
-  const d = await browser.storage.local.get(['serverUrl', 'authToken', 'lastSync', 'lastError', 'webdavUrl', 'webdavUser', 'webdavPass', 'lastBackupCount']);
+  const d = await browser.storage.local.get(['serverUrl', 'authToken', 'lastSync', 'lastError', 'webdavUrl', 'webdavUser', 'webdavPass', 'lastBackupCount', 'newtabEnabled']);
   return {
     serverUrl: (d.serverUrl || '').replace(/\/+$/, ''),
     authToken: d.authToken || '',
@@ -86,6 +87,7 @@ async function cfg() {
     webdavUser: d.webdavUser || '',
     webdavPass: d.webdavPass || '',
     lastBackupCount: d.lastBackupCount || 0,
+    newtabEnabled: !!d.newtabEnabled,
   };
 }
 
@@ -657,6 +659,10 @@ browser.runtime.onMessage.addListener(async (msg) => {
       refreshContextMenu();
       return { ok: true };
     }
+    case 'updateNewtab': {
+      await saveCfg({ newtabEnabled: !!msg.enabled });
+      return { ok: true };
+    }
     case 'loginServer':
       return { ok: true, token: await loginServer(msg.serverUrl, msg.password) };
     case 'manualBackup':
@@ -715,6 +721,16 @@ async function testWebDAV() {
 async function init() {
   await setupAlarm();
   await setupContextMenu();
+
+  // New Tab override listener
+  chrome.tabs.onCreated.addListener(async (tab) => {
+    const c = await cfg();
+    if (!c.newtabEnabled || !c.serverUrl) return;
+    const url = tab.pendingUrl || tab.url || '';
+    if (url === 'chrome://newtab/' || url === 'about:newtab' || url === 'about:home') {
+      chrome.tabs.update(tab.id, { url: c.serverUrl });
+    }
+  });
 
   // Connect SSE and do initial status check
   setTimeout(async () => {
