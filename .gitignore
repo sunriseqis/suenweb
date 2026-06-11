@@ -5,3 +5,17 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 .workbuddy/
+.env
+*.env
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+venv/
+.venv/
+*.sqlite3
+*.sqlite
+*.xpi
+*.xpi.bak
+lint-result.txt

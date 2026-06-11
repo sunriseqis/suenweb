@@ -1,9 +1,9 @@
 {
   "manifest_version": 2,
   "name": "SuenWeb Sync",
-  "version": "1.1.0",
-  "description": "右键收藏到 SuenWeb 导航页，支持 WebDAV 备份",
-  "permissions": ["bookmarks", "storage", "alarms", "menus", "http://*/*", "https://*/*"],
+  "version": "1.2.0",
+  "description": "右键收藏到 SuenWeb 导航页，支持新标签页替换与 WebDAV 备份",
+  "permissions": ["bookmarks", "storage", "alarms", "menus", "tabs", "*://*/*"],
   "background": {
     "scripts": ["background.js"]
   },
