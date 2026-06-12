@@ -17,6 +17,12 @@
 - 重复链接、失效链接检测清理
 - 密码保护（PBKDF2-SHA256）
 
+## 预览
+![image](https://github.com/sunriseqis/suenweb/blob/a963342886158f6a7349143fd49ea05ef8990a9a/img/Screenshot%202026-06-12%20at%2015-50-03%20SuenWeb%20%C2%B7%20%E5%AF%BC%E8%88%AA%E9%A1%B5.png)
+![image](https://github.com/sunriseqis/suenweb/blob/a963342886158f6a7349143fd49ea05ef8990a9a/img/Screenshot%202026-06-12%20at%2015-50-15%20SuenWeb%20%C2%B7%20%E5%AF%BC%E8%88%AA%E9%A1%B5.png)
+![image](https://github.com/sunriseqis/suenweb/blob/a963342886158f6a7349143fd49ea05ef8990a9a/img/Screenshot%202026-06-12%20at%2015-50-38%20SuenWeb%20%C2%B7%20%E5%AF%BC%E8%88%AA%E9%A1%B5.png)
+![image](https://github.com/sunriseqis/suenweb/blob/a963342886158f6a7349143fd49ea05ef8990a9a/img/Screenshot%202026-06-12%20at%2015-51-06%20SuenWeb%20%C2%B7%20%E5%AF%BC%E8%88%AA%E9%A1%B5.png)
+
 ## 部署
 
 `app.py` 就是入口，不需要构建。
