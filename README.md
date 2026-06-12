@@ -49,7 +49,8 @@ Chrome / Edge（Manifest V3）和 Firefox。装完后：
 
 ## 开始使用
 
-访问 http://your-server:5080，设置密码，导入收藏夹，配置插件。
+访问 http://your-server:5080
+设置密码，导入收藏夹，配置插件。
 
 ## 技术栈
 
