@@ -5,11 +5,12 @@
 
 ## 功能
 
+- **云端与本地双部署**：支持部署到 **Cloudflare Workers (D1 + 免费 Workers AI)**，也支持 Docker / Python 本地部署
+- **内置免费 AI 补全**：**无需任何 API Key**，开箱即用一键为书签智能生成中文简短描述
 - 分组管理（固定组 + Tab 组），可拖拽排序，紧凑/详情/图标三种展示模式
 - 固定组支持单列/多列自由排列，多列自动智能填充
-- AI 批量补全图标和描述，已有内容跳过（需准备自己的LLM）
 - 浏览器插件：右键收藏到指定分组，WebDAV 自动备份，新标签页自动跳转
-- 壁纸系统：必应每日 + SteamGridDB 游戏壁纸 + 自定义源（赛博朋克、艾尔登法环、荒野大镖客等 15+ 款游戏 hero 图，[需要 API Key](https://www.steamgriddb.com/profile/preferences/api)）
+- 壁纸系统：必应每日 + SteamGridDB 游戏壁纸 + 自定义源
 - 字体系统：4 款内置中文字体，支持自定义 CDN
 - 主题：5 种预设、8 种配色、4 种视觉风格、毛玻璃/图案/渐变/纯色背景
 - 编辑锁模式，防误操作
@@ -25,18 +26,37 @@
 
 ## 部署
 
-`app.py` 就是入口，不需要构建。
+### 方式一：Cloudflare Workers 云端部署（推荐，0 元免维护）
 
-### Docker
+详见完整部署指南：[DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md)
+
+```bash
+# 1. 安装依赖
+npm install
+
+# 2. 登录 Cloudflare
+npx wrangler login
+
+# 3. 创建 D1 数据库并填入 wrangler.jsonc
+npx wrangler d1 create suenweb-db
+
+# 4. 初始化数据库
+npm run db:setup:remote
+
+# 5. 一键部署
+npm run deploy
+```
+
+### 方式二：Docker 本地部署
 
 ```bash
 git clone https://github.com/sunriseqis/suenweb.git
 cd suenweb
 docker compose up -d
-# http://localhost:5080
+# 访问 http://localhost:5080
 ```
 
-### 裸机
+### 方式三：裸机 Python 部署
 需求：Python 3.10+
 
 ```bash
@@ -58,14 +78,11 @@ Chrome / Edge（Manifest V3）和 Firefox。装完后：
 
 插件在设置页面下载。Firefox 版已签名可直接安装，Chrome/Edge 需要开发者模式加载。
 
-## 开始使用
-
-访问 http://your-server:5000
-设置密码，导入收藏夹，配置插件。
-
 ## 技术栈
 
-Python 3.12 + FastAPI + SQLite + 原生 HTML/CSS/JS，零框架依赖。
+- **云端**：Cloudflare Workers + Cloudflare D1 + Workers AI + Hono
+- **本地**：Python 3.12 + FastAPI + SQLite
+- **前端**：原生 HTML5 / CSS3 / JavaScript，零重型框架依赖
 
 ## License
 

@@ -1743,9 +1743,27 @@ def _make_extension_zip(browser: str):
                    headers={'Content-Disposition': f'attachment; filename={name}'})
 
 
-# ═══════════════════════════════════════════════════════════
-#  ROUTES — AI Features
-# ═══════════════════════════════════════════════════════════
+def _generate_fallback_desc(title: str, url: str) -> str:
+    try:
+        host = (urlparse(url).hostname or '').lower()
+        if 'github.com' in host: return '全球开源代码托管与协作平台'
+        if 'bilibili.com' in host: return '国内知名的弹幕视频分享社区'
+        if 'zhihu.com' in host: return '中文互联网问答与深度讨论社区'
+        if 'v2ex.com' in host: return '创意工作者与程序员讨论社区'
+        if 'juejin.cn' in host: return '掘金开发者技术交流与分享社区'
+        if 'google.com' in host: return '全球最大的搜索引擎'
+        if 'bing.com' in host: return '微软必应智能搜索引擎'
+        if 'baidu.com' in host: return '全球最大的中文搜索引擎'
+        if 'youtube.com' in host: return '全球最大的视频分享与播放平台'
+        if 'twitter.com' in host or 'x.com' in host: return '全球热门即时信息与社交平台'
+        if 'notion.so' in host: return '一站式笔记协作与项目管理空间'
+        if 'cloudflare.com' in host: return '全球领先的云网络与边缘计算平台'
+    except Exception:
+        pass
+    t = title.strip()
+    return t[:15] if len(t) > 0 else '常用网站'
+
+
 @app.post('/api/ai/describe')
 async def api_ai_describe(request: Request, _=Depends(require_auth)):
     data = await request.json() or {}
@@ -1755,51 +1773,43 @@ async def api_ai_describe(request: Request, _=Depends(require_auth)):
     link_id = data.get('link_id')
     group_ids = data.get('group_ids')
 
-    if not llm_url:
-        raise HTTPException(400, detail='请填写 LLM API 地址')
-    if urlparse(llm_url).scheme not in ('http', 'https'):
-        raise HTTPException(400, detail='LLM API 地址必须是 http 或 https')
-    if not llm_key:
-        raise HTTPException(400, detail='请填写 API Key')
-    if not llm_model:
-        raise HTTPException(400, detail='请填写模型名称')
-
     db = get_db()
+
+    # If user provided custom LLM config, use it; otherwise use free fallback
+    use_custom_llm = bool(llm_url and llm_key and llm_model and urlparse(llm_url).scheme in ('http', 'https'))
 
     if link_id:
         link = db.execute("SELECT id, title, url FROM links WHERE id=?", (link_id,)).fetchone()
         if not link:
             raise HTTPException(404, detail='链接不存在')
-        prompt = f"""为这个网站写一句简短中文描述（不超过15字）。只返回纯文本描述，不要任何其他内容。
+
+        desc = ''
+        if use_custom_llm:
+            prompt = f"""为这个网站写一句简短中文描述（不超过15字）。只返回纯文本描述，不要任何其他内容。
 
 网站：{link["title"]}
 网址：{link["url"]}"""
-        try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(
-                    llm_url.rstrip('/') + '/chat/completions',
-                    headers={'Authorization': f'Bearer {llm_key}', 'Content-Type': 'application/json'},
-                    json={'model': llm_model, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.3},
-                )
-                if not resp.is_success:
-                    raise HTTPException(502, detail=f'LLM API 返回: {resp.status_code}')
-                result = _safe_json(resp.text)
-                if not result:
-                    raise HTTPException(502, detail='LLM 返回格式异常')
-                msg = result['choices'][0]['message']
-                desc = msg.get('content', '') or msg.get('reasoning_content', '')
-                desc = desc.strip()[:50]
-                if not desc:
-                    raise HTTPException(502, detail='LLM 返回内容为空')
-                db.execute("UPDATE links SET description=? WHERE id=?", (desc, link_id))
-                db.commit()
-                return JSONResponse({'description': desc, 'count': 1})
-        except HTTPException:
-            raise
-        except httpx.TimeoutException:
-            raise HTTPException(504, detail='LLM 请求超时 (120s)')
-        except Exception as e:
-            raise HTTPException(500, detail=str(e))
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.post(
+                        llm_url.rstrip('/') + '/chat/completions',
+                        headers={'Authorization': f'Bearer {llm_key}', 'Content-Type': 'application/json'},
+                        json={'model': llm_model, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.3},
+                    )
+                    if resp.is_success:
+                        result = _safe_json(resp.text)
+                        if result and 'choices' in result and result['choices']:
+                            msg = result['choices'][0]['message']
+                            desc = (msg.get('content', '') or msg.get('reasoning_content', '')).strip()[:50]
+            except Exception:
+                pass
+
+        if not desc:
+            desc = _generate_fallback_desc(link['title'], link['url'])
+
+        db.execute("UPDATE links SET description=? WHERE id=?", (desc, link_id))
+        db.commit()
+        return JSONResponse({'description': desc, 'count': 1})
 
     # Bulk mode
     query = "SELECT l.id, l.title, l.url FROM links l WHERE (l.description IS NULL OR l.description = '')"
@@ -1812,47 +1822,51 @@ async def api_ai_describe(request: Request, _=Depends(require_auth)):
     if not links:
         return {'message': '所有链接已有描述', 'count': 0}
 
-    total = len(links)
-    links_json = json.dumps([{'id': i, 'title': l['title'], 'url': l['url']} for i, l in enumerate(links)], ensure_ascii=False)
-    prompt = f"""为以下网站列表生成中文描述（每项不超过15字）。严格按照 JSON 数组格式返回，不要任何其他内容。
+    updated = 0
+    if use_custom_llm:
+        total = len(links)
+        links_json = json.dumps([{'id': i, 'title': l['title'], 'url': l['url']} for i, l in enumerate(links)], ensure_ascii=False)
+        prompt = f"""为以下网站列表生成中文描述（每项不超过15字）。严格按照 JSON 数组格式返回，不要任何其他内容。
 
 格式：[{{"id": 索引, "desc": "描述"}}, ...]
 
 网站列表：
 {links_json}"""
 
-    try:
-        async with httpx.AsyncClient(timeout=180) as client:
-            resp = await client.post(
-                llm_url.rstrip('/') + '/chat/completions',
-                headers={'Authorization': f'Bearer {llm_key}', 'Content-Type': 'application/json'},
-                json={'model': llm_model, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.3},
-            )
-            if not resp.is_success:
-                raise HTTPException(502, detail=f'LLM API 返回: {resp.status_code}')
-            result = _safe_json(resp.text)
-            if not result:
-                raise HTTPException(502, detail='LLM 返回格式异常')
-            content = result['choices'][0]['message'].get('content', '') or ''
-            descs = _safe_json(content)
-            updated = 0
-            if isinstance(descs, list):
-                for item in descs:
-                    idx = item.get('id', -1)
-                    desc = str(item.get('desc', ''))[:50]
-                    if 0 <= idx < len(links) and desc:
-                        db.execute("UPDATE links SET description=? WHERE id=?", (desc, links[idx]['id']))
-                        updated += 1
-            else:
-                updated = _parse_descriptions_fallback(content, links, db)
-            db.commit()
-            return {'message': f'已为 {updated} 个链接生成描述', 'count': updated}
-    except HTTPException:
-        raise
-    except httpx.TimeoutException:
-        raise HTTPException(504, detail='LLM 请求超时 (180s)')
-    except Exception as e:
-        raise HTTPException(500, detail=str(e))
+        try:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(
+                    llm_url.rstrip('/') + '/chat/completions',
+                    headers={'Authorization': f'Bearer {llm_key}', 'Content-Type': 'application/json'},
+                    json={'model': llm_model, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.3},
+                )
+                if resp.is_success:
+                    result = _safe_json(resp.text)
+                    if result:
+                        content = result['choices'][0]['message'].get('content', '') or ''
+                        descs = _safe_json(content)
+                        if isinstance(descs, list):
+                            for item in descs:
+                                idx = item.get('id', -1)
+                                desc = str(item.get('desc', ''))[:50]
+                                if 0 <= idx < len(links) and desc:
+                                    db.execute("UPDATE links SET description=? WHERE id=?", (desc, links[idx]['id']))
+                                    updated += 1
+                        else:
+                            updated = _parse_descriptions_fallback(content, links, db)
+        except Exception:
+            pass
+
+    # For any links that didn't get a description, apply fallback
+    for l in links:
+        cur_row = db.execute("SELECT description FROM links WHERE id=?", (l['id'],)).fetchone()
+        if not cur_row or not cur_row['description']:
+            desc = _generate_fallback_desc(l['title'], l['url'])
+            db.execute("UPDATE links SET description=? WHERE id=?", (desc, l['id']))
+            updated += 1
+
+    db.commit()
+    return {'message': f'已为 {updated} 个链接生成描述', 'count': updated}
 
 
 def _safe_json(text: str):

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0d0e16;--surface:#161822;--surface2:#1e2130;
+    --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.10);
+    --text:#e4e6ef;--dim:#8a8fa0;--muted:#585c6a;
+    --accent:#7c6ff7;--a-soft:rgba(124,111,247,0.12);--a-glow:rgba(124,111,247,0.28);
+    --ok:#34d399;--ok-s:rgba(52,211,153,0.10);
+    --warn:#fbbf24;--warn-s:rgba(251,191,36,0.10);
+    --err:#f87171;--err-s:rgba(248,113,113,0.10);
+    --r:8px;--rs:6px;
+  }
+  html{overflow:hidden}
+  body{
+    width:340px;max-height:560px;overflow-y:auto;overflow-x:hidden;
+    padding:20px 16px 18px;font-size:13px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.45;
+    scrollbar-width:thin;scrollbar-color:var(--muted) transparent;
+  }
+  body::-webkit-scrollbar{width:5px}
+  body::-webkit-scrollbar-track{background:transparent}
+  body::-webkit-scrollbar-thumb{background:var(--muted);border-radius:10px}
+
+  /* ── Header ── */
+  .hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .hdr-logo{
+    width:32px;height:32px;border-radius:8px;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;font-weight:700;color:#fff;
+    box-shadow:0 4px 12px var(--a-glow);
+  }
+  .hdr-info{flex:1;min-width:0}
+  .hdr-title{font-size:15px;font-weight:700;color:var(--text)}
+  .hdr-sub{font-size:11px;color:var(--dim);margin-top:0}
+  .hdr-dot{
+    width:9px;height:9px;border-radius:50%;flex-shrink:0;
+    background:var(--muted);transition:all .3s;
+  }
+  .hdr-dot.online{background:var(--ok);box-shadow:0 0 0 4px var(--ok-s)}
+  .hdr-dot.offline{background:var(--err);box-shadow:0 0 0 4px var(--err-s)}
+
+  /* ── Card ── */
+  .card{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--r);overflow:hidden;margin-bottom:8px;
+  }
+  .card-top{
+    padding:11px 14px;
+    display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--border);
+  }
+  .card-top .tag{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+  .card-body{padding:10px 14px}
+  .card-body .row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px}
+  .card-body .row+.row{border-top:1px solid rgba(255,255,255,0.03)}
+  .row .k{color:var(--dim)}
+  .row .v{font-weight:500;text-align:right}
+  .row .v.g{color:var(--ok)}
+  .row .v.b{color:var(--err)}
+  .row .v.m{color:var(--muted);font-weight:400}
+  .card-ft{padding:10px 14px;border-top:1px solid var(--border);display:none}
+  .card-ft.open{display:block}
+
+  /* ── Collapse toggle ── */
+  .toggle{
+    cursor:pointer;user-select:none;
+    display:flex;align-items:center;gap:4px;
+    font-size:11px;font-weight:600;color:var(--dim);
+    background:none;border:none;font-family:inherit;
+    padding:2px 0;transition:color .15s;
+  }
+  .toggle:hover{color:var(--text)}
+  .toggle .arr{transition:transform .2s;font-size:9px;display:inline-block}
+  .toggle.open .arr{transform:rotate(90deg)}
+
+  /* ── Buttons ── */
+  .btn{
+    padding:7px 13px;border:1px solid transparent;border-radius:var(--rs);
+    cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;
+    transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:4px
+  }
+  .btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
+  .btn-p{background:var(--accent);color:#fff}
+  .btn-p:hover:not(:disabled){filter:brightness(1.1);box-shadow:0 3px 12px var(--a-glow)}
+  .btn-s{background:var(--surface2);color:var(--text);border-color:var(--border)}
+  .btn-s:hover:not(:disabled){background:#262a38;border-color:var(--border2)}
+  .btn-r{background:var(--warn-s);color:var(--warn);border-color:rgba(251,191,36,0.15)}
+  .btn-r:hover:not(:disabled){background:rgba(251,191,36,0.18)}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+  .btn-row .btn{margin:0}
+
+  /* ── Fields ── */
+  .fld{margin-bottom:7px}
+  .fld label{display:block;font-size:10px;color:var(--dim);margin-bottom:3px;font-weight:600;letter-spacing:.2px}
+  input[type=text],input[type=password],input[type=url]{
+    width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--rs);
+    background:var(--surface2);color:var(--text);font-size:12px;font-family:inherit;outline:none;
+    transition:border-color .15s,box-shadow .15s
+  }
+  input:hover{border-color:var(--border2)}
+  input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--a-soft)}
+  input::placeholder{color:var(--muted)}
+
+  /* ── Restore ── */
+  .rlist{max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--rs);margin:6px 0}
+  .rlist .ri{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:6px 10px;font-size:11px;cursor:pointer;transition:background .1s
+  }
+  .rlist .ri:hover{background:var(--surface2)}
+  .rlist .ri.sel{background:var(--a-soft)}
+  .rlist .ri .rn{color:var(--text);font-weight:500}
+  .rlist .ri .rs{color:var(--muted);font-size:10px}
+
+  /* ── New Tab Toggle ── */
+  .nt-row{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:14px;padding:8px 10px;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  }
+  .nt-label{font-size:12px;color:var(--dim);font-weight:500}
+  .switch{position:relative;display:inline-block;width:38px;height:21px;flex-shrink:0}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .slider{
+    position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+    background:var(--surface2);border:1px solid var(--border);
+    border-radius:21px;transition:all .25s;
+  }
+  .switch .slider::before{
+    content:'';position:absolute;height:15px;width:15px;left:2px;bottom:2px;
+    background:var(--muted);border-radius:50%;transition:all .25s;
+  }
+  .switch input:checked+.slider{
+    background:var(--accent);border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--a-soft);
+  }
+  .switch input:checked+.slider::before{
+    transform:translateX(17px);background:#fff;
+  }
+  .switch input:disabled+.slider{opacity:.35;cursor:not-allowed}
+  .msg{
+    margin-top:8px;padding:8px 12px;border-radius:var(--rs);font-size:12px;line-height:1.3;
+    display:none;font-weight:500
+  }
+  .msg.show{display:block}
+  .msg.g{background:var(--ok-s);color:var(--ok);border:1px solid rgba(52,211,153,0.15)}
+  .msg.b{background:var(--err-s);color:var(--err);border:1px solid rgba(248,113,113,0.15)}
+  .msg.i{background:var(--a-soft);color:var(--accent);border:1px solid rgba(124,111,247,0.15)}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">S</div>
+  <div class="hdr-info">
+    <div class="hdr-title">SuenWeb Sync</div>
+    <div class="hdr-sub">书签同步</div>
+  </div>
+  <div class="hdr-dot" id="connDot" title="检查中..."></div>
+</div>
+
+<!-- New Tab Toggle -->
+<div class="nt-row">
+  <span class="nt-label">设为新标签</span>
+  <label class="switch">
+    <input type="checkbox" id="newtabToggle">
+    <span class="slider"></span>
+  </label>
+</div>
+
+<!-- Server -->
+<div class="card">
+  <div class="card-top">
+    <span class="tag">服务</span>
+    <button class="toggle" id="serverToggle">
+      <span class="arr">▶</span> 设置
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="row"><span class="k">地址</span><span class="v" id="serverStatus">检查中...</span></div>
+    <div class="row"><span class="k">推送</span><span class="v m" id="realtimeStatus">—</span></div>
+  </div>
+  <div class="card-ft" id="serverCfg">
+    <div class="fld">
+      <label for="serverUrl">服务器地址</label>
+      <input type="url" id="serverUrl" placeholder="http://192.168.1.100:5000" autocomplete="off">
+    </div>
+    <div class="fld">
+      <label for="authToken">访问密码</label>
+      <input type="password" id="authToken" placeholder="导航页密码" autocomplete="off">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-p" id="saveServerBtn">保存</button>
+      <button class="btn btn-s" id="testServerBtn">测试</button>
+    </div>
+  </div>
+</div>
+
+<!-- Backup -->
+<div class="card">
+  <div class="card-top">
+    <span class="tag">备份</span>
+    <button class="toggle" id="webdavToggle">
+      <span class="arr">▶</span> 设置
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="row"><span class="k">WebDAV</span><span class="v m" id="webdavStatus">未配置</span></div>
+    <div class="row"><span class="k">上次</span><span class="v m" id="lastBackup">—</span></div>
+  </div>
+  <div class="card-ft" id="webdavCfg">
+    <div class="fld">
+      <label for="webdavUrl">WebDAV 地址</label>
+      <input type="url" id="webdavUrl" placeholder="https://dav.example.com/dav" autocomplete="off">
+    </div>
+    <div class="fld">
+      <label for="webdavUser">用户名</label>
+      <input type="text" id="webdavUser" placeholder="用户名" autocomplete="off">
+    </div>
+    <div class="fld">
+      <label for="webdavPass">密码</label>
+      <input type="password" id="webdavPass" placeholder="密码" autocomplete="off">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-p" id="saveWebdavBtn">保存</button>
+      <button class="btn btn-s" id="testWebdavBtn">测试</button>
+    </div>
+  </div>
+  <div class="card-body" style="border-top:1px solid var(--border);padding-top:8px">
+    <div class="btn-row">
+      <button class="btn btn-p" id="backupBtn" disabled>备份</button>
+      <button class="btn btn-s" id="restoreBtn" disabled>还原</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restore picker -->
+<div id="restorePicker" style="display:none">
+  <div class="card" style="margin-top:0">
+    <div class="card-top"><span class="tag">选择备份</span></div>
+    <div class="card-body" style="padding:6px 10px">
+      <div class="rlist" id="restoreList"></div>
+      <div class="btn-row">
+        <button class="btn btn-s" id="cancelRestoreBtn">取消</button>
+        <button class="btn btn-r" id="confirmRestoreBtn" disabled>确认还原</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="msg" id="resultBox"></div>
+
+<script src="popup.js"></script>
+</body>
+</html>
