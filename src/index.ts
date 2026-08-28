@@ -44,10 +44,28 @@ app.use(
 );
 
 // ═══════════════════════════════════════════════════════════
-//  Auto-initialization / Migration Middleware
+//  Auto-initialization / DB Verification Middleware
 // ═══════════════════════════════════════════════════════════
 let _tablesEnsured = false;
 app.use('*', async (c, next) => {
+  // Allow health check to pass through
+  if (c.req.path === '/health') {
+    return await next();
+  }
+
+  // Gracefully handle missing D1 binding
+  if (!c.env.DB) {
+    if (c.req.path.startsWith('/api/')) {
+      return c.json(
+        {
+          error: 'D1 数据库未绑定',
+          detail: '请在 Cloudflare 控制台 -> Workers -> suenweb -> Settings -> Bindings 中添加 D1 绑定（变量名填 DB，数据库选择 suenweb-db）'
+        },
+        500
+      );
+    }
+  }
+
   if (!_tablesEnsured && c.env.DB) {
     try {
       await ensureDatabaseTables(c.env.DB);
