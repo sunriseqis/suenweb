@@ -2,6 +2,12 @@
 
 自托管个人导航页。不花哨，能用。
 
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sunriseqis/suenweb)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1%20Database-FAAD3F?logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
+[![Workers AI](https://img.shields.io/badge/AI-Workers%20AI%20(Free)-green)](https://developers.cloudflare.com/workers-ai/)
+
 
 ## 功能
 
