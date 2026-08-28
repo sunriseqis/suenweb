@@ -26,7 +26,7 @@
 
 ## 部署
 
-### 方式一：Cloudflare Workers 云端部署（推荐，0 元免维护）
+### 方式一：Cloudflare Workers 云端一键部署（推荐，0 元免维护）
 
 详见完整部署指南：[DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md)
 
@@ -34,18 +34,11 @@
 # 1. 安装依赖
 npm install
 
-# 2. 登录 Cloudflare
-npx wrangler login
-
-# 3. 创建 D1 数据库并填入 wrangler.jsonc
-npx wrangler d1 create suenweb-db
-
-# 4. 初始化数据库
-npm run db:setup:remote
-
-# 5. 一键部署
-npm run deploy
+# 2. 全自动一键部署（自动同步静态资产、创建D1数据库并发布到Cloudflare）
+npm run setup
 ```
+
+> 💡 **自动同步**：项目已配置 GitHub Actions 工作流，在 GitHub 仓库中添加 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` 后，每次 `git push` 将自动同步代码与资产到 Cloudflare！
 
 ### 方式二：Docker 本地部署
 

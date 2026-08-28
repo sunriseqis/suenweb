@@ -1,6 +1,6 @@
-# SuenWeb — Cloudflare Workers 云端部署指南
+# SuenWeb — Cloudflare Workers 云端资产同步与一键部署指南
 
-本指南将带你将 **SuenWeb 个人导航页** 部署到 **Cloudflare Workers** 边缘云平台。
+本指南将带你将 **SuenWeb 个人导航页** 及其全部前端静态资产一键同步并部署到 **Cloudflare Workers** 边缘云平台。
 
 部署后你将获得：
 - ⚡ **全球边缘 0ms 冷启动**：通过 Cloudflare 全球 CDN 网络加速访问。
@@ -10,85 +10,61 @@
 
 ---
 
-## 快速开始（5 分钟部署）
+## 方式一：全自动一键部署（最简单，1 分钟搞定）
 
-### 1. 准备工作
-
-确保本地已安装 Node.js (v18+) 和 npm。
+本项目内置了自动化部署脚本，可自动同步所有静态资产、自动创建 D1 数据库、自动更新配置并部署到 Cloudflare：
 
 ```bash
-# 进入项目目录并安装依赖
+# 1. 克隆项目并安装依赖
+git clone https://github.com/sunriseqis/suenweb.git
 cd suenweb
 npm install
+
+# 2. 运行一键全自动部署
+npm run setup
 ```
 
-### 2. 登录 Cloudflare 账号
+脚本将自动执行以下全套流程：
+1. 自动同步 HTML、CSS、图标及浏览器插件至 `public` 静态资产目录。
+2. 自动检测并唤起 Cloudflare 登录授权。
+3. 自动检测/创建 Cloudflare D1 数据库并绑定 ID 到 `wrangler.jsonc`。
+4. 自动导入 `schema.sql` 完成数据库表与内置字体/壁纸初始化。
+5. 自动一键发布至 Cloudflare Workers 并输出你的在线访问网址！
+
+---
+
+## 方式二：GitHub Actions 自动同步部署（推送代码自动同步）
+
+如果你希望每次向 GitHub 推送代码或资产时自动部署到 Cloudflare，只需配置一次 GitHub Secrets：
+
+1. 打开你的 GitHub 仓库（`https://github.com/sunriseqis/suenweb`）。
+2. 进入 **Settings** -> **Secrets and variables** -> **Actions**。
+3. 点击 **New repository secret** 添加以下 Secret：
+   - **`CLOUDFLARE_API_TOKEN`**：你的 Cloudflare API Token（在 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens) 点击「Create Token」-> 使用「Edit Cloudflare Workers」模板生成）。
+   - **`CLOUDFLARE_ACCOUNT_ID`**：你的 Cloudflare Account ID（在 Cloudflare 控制台 Workers & Pages 右侧侧边栏复制）。
+4. 今后只要你执行 `git push`，GitHub Actions 就会全自动编译并无缝将最新代码与资产同步发布到 Cloudflare Workers！
+
+---
+
+## 方式三：分步手动部署
+
+如果你更喜欢手动逐步执行：
 
 ```bash
+# 1. 登录 Cloudflare
 npx wrangler login
-```
-> 终端会自动弹出浏览器窗口，点击「Allow」授权即可。
 
----
-
-### 3. 创建 Cloudflare D1 数据库
-
-执行以下命令创建名为 `suenweb-db` 的 D1 数据库：
-
-```bash
+# 2. 创建 D1 数据库
 npx wrangler d1 create suenweb-db
-```
 
-命令输出示例如下：
-```text
-✅ Successfully created DB 'suenweb-db'
-[[d1_databases]]
-binding = "DB"
-database_name = "suenweb-db"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-```
+# 3. 将生成的 database_id 填入 wrangler.jsonc 中
 
-复制输出中的 `database_id`，打开项目根目录下的 **`wrangler.jsonc`**，将 `SUENWEB_D1_DATABASE_ID` 替换为你刚刚生成的真实 ID：
-
-```jsonc
-"d1_databases": [
-  {
-    "binding": "DB",
-    "database_name": "suenweb-db",
-    "database_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" // 👈 替换这里
-  }
-]
-```
-
----
-
-### 4. 初始化云端数据库表结构
-
-运行以下命令，将预设的数据表结构、内置字体与内置壁纸源导入到云端 D1 数据库中：
-
-```bash
+# 4. 初始化云端数据库
 npm run db:setup:remote
-```
-*(此命令等同于 `npx wrangler d1 execute suenweb-db --remote --file=./schema.sql`)*
 
----
-
-### 5. 一键部署到 Cloudflare Workers
-
-```bash
+# 5. 发布部署
 npm run deploy
 ```
-
-部署完成后，终端会输出你的专属访问地址，例如：
-```text
-Total Upload: ... KiB / gzip: ... KiB
-Uploaded suenweb (... sec)
-Deployed suenweb triggers (1.23 sec)
-  https://suenweb.<你的用户名>.workers.dev
-Current Version ID: ...
-```
-
-打开该网址，即可开始使用你的云端导航页！
 
 ---
 
@@ -111,16 +87,3 @@ Current Version ID: ...
 2. 页面默认提示 **✨ 默认已启用免费 AI 模型（无需任何 API Key，开箱即用）**。
 3. 勾选需要补全描述的分组，点击「**一键智能补全描述**」即可自动为缺少描述的书签生成精炼中文摘要。
 4. *（高级选项）*：若需连接自己搭建的 Ollama 或第三方 OpenAI 兼容 API，可展开「高级选项」填入自定义 API Key 与地址。
-
----
-
-## 双模部署支持（本地 Python 与 Cloudflare 云端）
-
-SuenWeb 同时支持两种部署模式：
-
-| 模式 | 运行环境 | 数据存储 | 适用场景 |
-| :--- | :--- | :--- | :--- |
-| **Cloudflare Workers 版** | Node / Edge Worker | Cloudflare D1 (云端 SQLite) | 个人主力云端导航页，0 成本免运维，全球访问 |
-| **Python FastAPI 版** | Python 3.10+ / Docker | 本地 `data/suenweb.db` | 家用 NAS、局域网内网服务器、离线环境 |
-
-> 💡 **数据迁移**：无论使用哪种模式，均可通过导航页设置中的「**配置管理 -> 导出配置 / 导入配置**」将分组、链接、壁纸设置 100% 无损互相迁移！
