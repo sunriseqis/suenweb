@@ -31,34 +31,40 @@
 
 ## 部署
 
-### 方式一：Cloudflare Workers 云端一键部署（自用，0 元免维护）
+### 方式一：Cloudflare Workers 云端部署（控制台 UI 操作，0 元免维护）
 
-**首次部署**（只需一次）：
+全程在 Cloudflare 控制台点选完成，无需命令行。分四步，前两步只需做一次。
 
-```bash
-# 0. 前置：Node.js 18+，并在 Cloudflare 控制台注册 workers.dev 子域
-#    （Workers 和 Pages 概览页 -> 右侧「子域」，新账号需一次性设置，否则部署后没有访问地址）
+**第 0 步：注册 workers.dev 子域（新账号一次性）**
 
-# 1. 安装依赖
-npm install
+控制台 → **Workers 和 Pages** → 概览页右侧 **子域 (Subdomain)** → 注册一个子域名称。
 
-# 2. 登录 Cloudflare（浏览器授权，首次一次即可）
-npx wrangler login
+> ⚠️ 不注册的话，部署会显示成功，但**不会分配任何访问地址**。
 
-# 3. 一键全自动部署
-npm run setup
-```
+**第 1 步：创建 D1 数据库并初始化（一次性）**
 
-`npm run setup` 会自动完成：同步静态资产到 `public/` → 复用或创建 D1 数据库并写入 `wrangler.jsonc` → 远程初始化 `schema.sql` 表结构 → 发布并**在终端直接打印访问地址**（`https://suenweb.<你的子域>.workers.dev`）。
+1. 控制台 → **存储和数据库** → **D1 SQL 数据库** → **创建**，名称填 `suenweb-db`
+2. 进入数据库详情页，复制页面上的 **数据库 ID (Database ID)**
+3. 切换到数据库的 **控制台 (Console)** 标签，把仓库根目录 `schema.sql` 的全部内容粘贴进去，点击执行——完成建表和内置壁纸/字体的初始化
 
-**日常更新**：改完代码后一条命令重新发布：
+**第 2 步：把数据库 ID 写入仓库（一次性）**
 
-```bash
-npm run deploy
-```
+1. 编辑仓库根目录的 `wrangler.jsonc`，将 `"database_id": "SUENWEB_D1_DATABASE_ID"` 的占位符替换为第 1 步复制的真实 ID
+2. 提交并推送到 `main` 分支
 
-> 💡 可选：想要 `git push` 自动部署，把根目录的 `deploy.workflow.yml` 移到 `.github/workflows/deploy.yml`，并在仓库 Settings -> Secrets 中添加 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。
->
+**第 3 步：连接 GitHub 仓库，自动构建部署**
+
+1. 控制台 → **Workers 和 Pages** → **创建** → **导入现有 Git 仓库**
+2. 授权 GitHub 后选择 `sunriseqis/suenweb`，点击 **开始设置**
+3. 项目名称填 `suenweb`（若提示名称已被占用，先删除账号里同名的旧 Worker，或改用其他名称）
+4. 构建命令留空，部署命令保持默认 `npx wrangler deploy`——Worker 入口、静态资产、D1、Workers AI 绑定都会自动从 `wrangler.jsonc` 读取挂载
+5. 点击 **创建并部署**，等待构建完成
+
+**部署完成后**
+
+- 打开 Worker 概览页的 **访问 (Visit)** 按钮，地址为 `https://<项目名>.<你的子域>.workers.dev`
+- 日常更新：`git push` 到 `main` 即自动重新构建发布，无需任何手动操作
+
 > 🌐 进阶操作（绑定自定义域名、免费 AI 说明）见 [DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md)。
 
 ### 方式二：Docker 本地部署
