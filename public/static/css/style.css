@@ -556,7 +556,31 @@ img { max-width: 100%; }
   right: 22px; bottom: 22px;
   display: flex; flex-direction: column; gap: 10px;
   z-index: 60;
+  opacity: 0;
+  transform: translateX(14px);
+  transition: opacity var(--transition), transform var(--transition);
+  pointer-events: none;
 }
+/* invisible hover pad extending past the buttons, so the cluster reveals early */
+.fab-actions::before {
+  content: '';
+  position: fixed;
+  right: 0; bottom: 0;
+  width: 130px; height: 240px;
+  pointer-events: auto;
+}
+.fab-actions:hover,
+.fab-actions:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+.fab-actions .fab-btn { pointer-events: none; }
+.fab-actions:hover .fab-btn,
+.fab-actions:focus-within .fab-btn { pointer-events: auto; }
+/* touch devices have no hover — keep the cluster always visible */
+@media (hover: none) {
+  .fab-actions { opacity: 1; transform: none; pointer-events: auto; }
+  .fab-actions .fab-btn { pointer-events: auto; }
+}
+.fab-btn-off { opacity: .5; }
+.fab-btn-off:hover { opacity: 1; }
 .fab-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px;
@@ -779,28 +803,33 @@ body[data-widget-style="stacked"] .fab-actions { right: 22px; bottom: 22px; }
 
 /* ── Pinned Cards ─────────────────────────────────────── */
 .pinned-area {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--space-4);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 .pinned-card {
   position: relative;
   background: var(--glass-bg);
   backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur));
-  border: var(--border-width) solid var(--border-color);
+  border: var(--border-width) solid rgba(var(--accent-rgb), 0.28);
   border-radius: var(--radius-lg);
   padding: var(--spacing-card);
   transition: all var(--transition);
   box-shadow: var(--shadow-card);
   display: flex; flex-direction: column; gap: var(--space-3);
-  min-height: 80px;
+  min-height: 140px;
   width: 100%;
 }
-.pinned-card:hover { background: var(--glass-strong); transform: translateY(var(--link-hover-translate)); box-shadow: var(--shadow-hover); }
-.pinned-header {
+.pinned-card:hover { background: var(--glass-strong); transform: translateY(var(--link-hover-translate)); box-shadow: var(--shadow-hover); border-color: rgba(var(--accent-rgb), 0.55); }
+.pinned-card .pinned-header {
   display: flex; align-items: center; gap: var(--space-2);
-  font-size: var(--text-md); font-weight: var(--title-weight);
+  font-size: 17px; font-weight: var(--title-weight);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px dashed var(--border-color);
+}
+.pinned-card .section-icon {
+  width: 34px; height: 34px; font-size: 20px;
 }
 .section-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1611,6 +1640,17 @@ body[data-widget-style="stacked"] .fab-actions { right: 22px; bottom: 22px; }
 .guest-mode .tab-remove,
 .guest-mode .display-mode-tag { display: none !important; }
 .guest-mode .pin-link { padding-right: var(--space-4); }
+
+/* ── Browse Mode (logged in, edit mode off) ───────────── */
+body.browse-mode .group-actions,
+body.browse-mode .link-edit-btn,
+body.browse-mode .pinned-edit,
+body.browse-mode .add-link-btn,
+body.browse-mode .add-group-tab,
+body.browse-mode .tab-remove,
+body.browse-mode .display-mode-tag,
+body.browse-mode .drag-handle { display: none !important; }
+body.browse-mode .pin-link { padding-right: var(--space-4); }
 
 .drag-handle {
   display: inline-flex;

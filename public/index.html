@@ -71,7 +71,7 @@
           <div class="onboard-opt-icon"><img src="/static/icons/upload-line.svg" class="ico ico-lg" alt=""></div>
           <h4>上传书签文件</h4>
           <p>从浏览器导出 HTML 书签上传</p>
-          <label class="upload-btn" for="bookmarkFileInput">📁 选择文件</label>
+          <label class="upload-btn" for="bookmarkFileInput">选择文件</label>
           <input type="file" id="bookmarkFileInput" accept=".html,.htm" style="display:none">
         </div>
         <div class="onboard-opt auth-only">
@@ -89,6 +89,7 @@
 <div class="fab-actions" id="fabActions" aria-label="快捷操作">
   <button class="fab-btn guest-only" id="guestLoginBtn" title="登录" aria-label="登录"><img src="/static/icons/login-box-line.svg" class="ico" alt=""></button>
   <button class="fab-btn auth-only" id="settingsBtn" title="设置" aria-label="设置"><img src="/static/icons/settings-3-line.svg" class="ico" alt=""></button>
+  <button class="fab-btn auth-only" id="editModeBtn" title="退出编辑模式" aria-label="切换编辑模式"><img src="/static/icons/edit-line.svg" class="ico" alt=""></button>
   <button class="fab-btn fab-btn-logout auth-only" id="logoutBtn" title="退出登录" aria-label="退出登录"><img src="/static/icons/logout-box-line.svg" class="ico" alt=""></button>
 </div>
 
@@ -438,10 +439,12 @@ function renderLinkIcon(link) {
   try { var d = new URL(link.url).hostname; return '<img class="link-icon-img" src="/api/icon/proxy?domain='+encodeURIComponent(d)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline\'"><span class="link-icon" style="display:none"></span>'; }
   catch(e) { return '<span class="link-icon"></span>'; }
 }
+var DEFAULT_GROUP_ICON = '/static/icons/bookmark-line.svg';
+var DEFAULT_GROUP_ICON_TAG = '<img src="/static/icons/bookmark-line.svg" class="group-icon-svg" alt="">';
 function renderGroupIcon(icon) {
-  if (!icon) return '📁';
+  if (!icon || icon === '📁') return DEFAULT_GROUP_ICON_TAG;
   if (icon.indexOf('/static/icons/')===0) {
-    return '<img src="'+escAttr(icon)+'" class="group-icon-svg" alt="" onerror="this.style.display=\'none\';this.parentElement.textContent=\'📁\'">';
+    return '<img src="'+escAttr(icon)+'" class="group-icon-svg" alt="" onerror="this.onerror=null;this.src=\''+DEFAULT_GROUP_ICON+'\'">';
   }
   return escHtml(icon);
 }
@@ -488,7 +491,7 @@ function renderAll() {
   document.getElementById('tabContentArea').style.display = hasData ? '' : 'none';
   if (!hasData) return;
   var pinned = State.groups.filter(function(g){ return g.type==='pinned'; });
-  var tabs   = State.groups.filter(function(g){ return g.type==='tab'; });
+  var tabs   = State.groups.filter(function(g){ return g.type==='tab' && !pinned.some(function(p){ return p.id===g.id || p.name===g.name; }); });
   renderPinned(pinned); renderTabs(tabs);
 }
 function renderPinned(groups) {
@@ -564,7 +567,7 @@ async function handleDashboardClick(e) {
 
 function initDragAndDrop(){
   document.addEventListener('dragstart', function(e){
-    if (_isGuest) return;
+    if (_isGuest || !_editMode) return;
     var link = e.target.closest('.drag-link');
     var group = e.target.closest('.drag-group');
     if (link) {
@@ -666,6 +669,7 @@ async function showAuth() {
     btn.disabled = true; btn.textContent = '...';
     try {
       if (hasPassword) await doLogin(pw); else await doSetup(pw);
+      setEditMode(true);
       error.textContent = '';
       hideAuth();
       await initDashboard();
@@ -691,13 +695,14 @@ async function initDashboard() {
 async function addGroup(type){
   showModal('<h3>'+(type==='pinned'?'添加固定组':'添加标签组')+'</h3>'+
     '<div class="form-group"><label>组名 *</label><input id="egName" placeholder="如：常用工具"></div>'+
-    '<div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">📁</span><input type="hidden" id="egIcon" value=""><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'📁\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div>'+
+    '<div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)"><img src="/static/icons/bookmark-line.svg" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)" alt=""></span><input type="hidden" id="egIcon" value=""><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'<img src="/static/icons/bookmark-line.svg" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)" alt="">\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div>'+
     '<div class="btn-row"><button class="btn btn-secondary" id="egCancel">取消</button><button class="btn btn-primary" id="egSave">创建</button></div>');
   document.getElementById('egCancel').onclick = closeModal;
   document.getElementById('egSave').onclick = async function(){
     var name = document.getElementById('egName').value.trim();
     var icon = document.getElementById('egIcon').value.trim() || '';
     if (!name) { toast('请输入组名','error'); return; }
+    if (State.groups.some(function(g){ return g.name===name; })) { toast('已存在同名分组，请换一个名称','error'); return; }
     try {
       await api('POST','/api/groups',{name:name,icon:icon,type:type});
       closeModal();
@@ -711,8 +716,8 @@ async function editGroup(gid) {
   var group = State.groups.find(function(g){ return g.id===gid; }); if(!group) return;
   var iconVal = escAttr(group.icon||'');
   var isBuiltin = iconVal.indexOf('/static/icons/')===0;
-  var previewHtml = isBuiltin ? '<img src="'+iconVal+'" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">' : (group.icon||'📁');
-  showModal('<h3>编辑组</h3><div class="form-group"><label>组名</label><input id="egName" value="'+escAttr(group.name)+'"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">'+previewHtml+'</span><input type="hidden" id="egIcon" value="'+iconVal+'"><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\''+iconVal+'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'📁\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div><div class="form-group"><label>显示模式</label><select id="egMode"><option value="compact"'+(group.display_mode==='compact'?' selected':'')+'>紧凑</option><option value="grid"'+(group.display_mode==='grid'?' selected':'')+'>详情</option><option value="icon"'+(group.display_mode==='icon'?' selected':'')+'>仅图标</option></select></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="egDelete">删除</button><button class="btn btn-secondary" id="egCancel">取消</button><button class="btn btn-primary" id="egSave">保存</button></div>');
+  var previewHtml = isBuiltin ? '<img src="'+iconVal+'" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">' : (group.icon ? group.icon : '<img src="/static/icons/bookmark-line.svg" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">');
+  showModal('<h3>编辑组</h3><div class="form-group"><label>组名</label><input id="egName" value="'+escAttr(group.name)+'"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">'+previewHtml+'</span><input type="hidden" id="egIcon" value="'+iconVal+'"><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\''+iconVal+'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'<img src="/static/icons/bookmark-line.svg" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)" alt="">\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div><div class="form-group"><label>显示模式</label><select id="egMode"><option value="compact"'+(group.display_mode==='compact'?' selected':'')+'>紧凑</option><option value="grid"'+(group.display_mode==='grid'?' selected':'')+'>详情</option><option value="icon"'+(group.display_mode==='icon'?' selected':'')+'>仅图标</option></select></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="egDelete">删除</button><button class="btn btn-secondary" id="egCancel">取消</button><button class="btn btn-primary" id="egSave">保存</button></div>');
   document.getElementById('egDelete').onclick=async function(){ if(!confirm('确定删除「'+group.name+'」及其所有链接？')) return; try{await api('DELETE','/api/groups/'+gid); closeModal(); await refresh(); toast('已删除','info');} catch(e){toast(e.message,'error');} };
   document.getElementById('egCancel').onclick = closeModal;
   document.getElementById('egSave').onclick = async function(){
@@ -720,7 +725,7 @@ async function editGroup(gid) {
     var icon=document.getElementById('egIcon').value.trim();
     var mode=document.getElementById('egMode').value;
     if(!name){ toast('名称不能为空','error'); return; }
-    try{ await api('PUT','/api/groups/'+gid,{name:name,icon:icon||'📁',display_mode:mode}); closeModal(); await refresh(); toast('已更新','success'); }
+    try{ await api('PUT','/api/groups/'+gid,{name:name,icon:icon||'',display_mode:mode}); closeModal(); await refresh(); toast('已更新','success'); }
     catch(e){ toast(e.message,'error'); }
   };
 }
@@ -745,7 +750,7 @@ async function deleteGroup(gid){
   catch(e){ await refresh(); toast(e.message,'error'); }
 }
 async function addLink(gid) {
-  showModal('<h3>添加链接</h3><div class="form-group"><label>标题 *</label><input id="elTitle" placeholder="网站名称"></div><div class="form-group"><label>URL *</label><input id="elUrl" placeholder="https://..."></div><div class="form-group"><label>描述</label><input id="elDesc" placeholder="简短描述"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)"></span><input id="elIcon" placeholder="📌 或 URL" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置</button><button class="btn btn-sm" onclick="showOnlineIconPicker(\'elIcon\',\'elUrl\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">在线</button></div></div><div class="btn-row"><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">添加</button></div>');
+  showModal('<h3>添加链接</h3><div class="form-group"><label>标题 *</label><input id="elTitle" placeholder="网站名称"></div><div class="form-group"><label>URL *</label><input id="elUrl" placeholder="https://..."></div><div class="form-group"><label>描述</label><input id="elDesc" placeholder="简短描述"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="elIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)"></span><input id="elIcon" placeholder="可留空自动获取" style="flex:1"><button class="btn btn-sm" onclick="showIconPicker(\'elIcon\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">内置</button><button class="btn btn-sm" onclick="showOnlineIconPicker(\'elIcon\',\'elUrl\');return false" style="padding:6px 10px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer;white-space:nowrap">在线</button></div></div><div class="btn-row"><button class="btn btn-secondary" id="elCancel">取消</button><button class="btn btn-primary" id="elSave">添加</button></div>');
   document.getElementById('elCancel').onclick = closeModal;
   document.getElementById('elSave').onclick = async function(){
     var title=document.getElementById('elTitle').value.trim();
@@ -2234,14 +2239,23 @@ async function fetchWeather(){
   }catch(e){ el.innerHTML='<span class="weather-icon"><img src=\"/static/icons/cloudy-line.svg\" class=\"ico\" alt=\"\"></span><span class=\"weather-city\">加载失败</span>'; }
 }
 
-// ====== GUEST MODE ======
+// ====== GUEST MODE / EDIT MODE ======
 var _isGuest = true;
+var _editMode = localStorage.getItem('suenweb_edit_mode') !== '0';
+function setEditMode(on) {
+  _editMode = on;
+  try{ localStorage.setItem('suenweb_edit_mode', on ? '1' : '0'); }catch(e){}
+  document.body.classList.toggle('browse-mode', !_isGuest && !on);
+  var b = document.getElementById('editModeBtn');
+  if (b) { b.title = on ? '退出编辑模式' : '进入编辑模式'; b.classList.toggle('fab-btn-off', !on); }
+}
 function setGuestMode(guest) {
   _isGuest = guest;
   document.querySelectorAll('.auth-only').forEach(function(el){ el.style.display = guest ? 'none' : ''; });
   document.querySelectorAll('.guest-only').forEach(function(el){ el.style.display = guest ? '' : 'none'; });
   // No edit buttons in guest mode
   document.body.classList.toggle('guest-mode', guest);
+  if (guest) { document.body.classList.remove('browse-mode'); } else { setEditMode(_editMode); }
 }
 function showGuestDashboard() {
   document.getElementById('authOverlay').style.display = 'none';
@@ -2278,6 +2292,7 @@ async function init(){
     // Events
     document.getElementById('guestLoginBtn').addEventListener('click', showAuth);
     document.getElementById('settingsBtn').addEventListener('click',openSettings);
+    document.getElementById('editModeBtn').addEventListener('click',function(){ setEditMode(!_editMode); toast(_editMode?'已进入编辑模式':'已退出编辑模式','info'); });
     document.getElementById('panelClose').addEventListener('click',closeSettings);
     document.getElementById('settingsOverlay').addEventListener('click',function(e){ if(e.target===e.currentTarget) closeSettings(); });
     document.getElementById('logoutBtn').addEventListener('click',async function(){ await doLogout(); State.groups=[]; State.token=''; localStorage.removeItem('suenweb_token'); window.location.reload(); });
