@@ -2,7 +2,6 @@
 
 自托管个人导航页。不花哨，能用。
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sunriseqis/suenweb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1%20Database-FAAD3F?logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
@@ -32,19 +31,35 @@
 
 ## 部署
 
-### 方式一：Cloudflare Workers 云端一键部署（推荐，0 元免维护）
+### 方式一：Cloudflare Workers 云端一键部署（自用，0 元免维护）
 
-详见完整部署指南：[DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md)
+**首次部署**（只需一次）：
 
 ```bash
+# 0. 前置：Node.js 18+，并在 Cloudflare 控制台注册 workers.dev 子域
+#    （Workers 和 Pages 概览页 -> 右侧「子域」，新账号需一次性设置，否则部署后没有访问地址）
+
 # 1. 安装依赖
 npm install
 
-# 2. 全自动一键部署（自动同步静态资产、创建D1数据库并发布到Cloudflare）
+# 2. 登录 Cloudflare（浏览器授权，首次一次即可）
+npx wrangler login
+
+# 3. 一键全自动部署
 npm run setup
 ```
 
-> 💡 **自动同步**：项目已配置 GitHub Actions 工作流，在 GitHub 仓库中添加 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` 后，每次 `git push` 将自动同步代码与资产到 Cloudflare！
+`npm run setup` 会自动完成：同步静态资产到 `public/` → 复用或创建 D1 数据库并写入 `wrangler.jsonc` → 远程初始化 `schema.sql` 表结构 → 发布并**在终端直接打印访问地址**（`https://suenweb.<你的子域>.workers.dev`）。
+
+**日常更新**：改完代码后一条命令重新发布：
+
+```bash
+npm run deploy
+```
+
+> 💡 可选：想要 `git push` 自动部署，把根目录的 `deploy.workflow.yml` 移到 `.github/workflows/deploy.yml`，并在仓库 Settings -> Secrets 中添加 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。
+>
+> 🌐 进阶操作（绑定自定义域名、免费 AI 说明）见 [DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md)。
 
 ### 方式二：Docker 本地部署
 
