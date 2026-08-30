@@ -803,10 +803,27 @@ body[data-widget-style="stacked"] .fab-actions { right: 22px; bottom: 22px; }
 
 /* ── Pinned Cards ─────────────────────────────────────── */
 .pinned-area {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
   margin-bottom: var(--space-5);
+}
+.pinned-single-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.pinned-multi-grid {
+  display: flex;
+  gap: var(--space-4);
+}
+.pinned-multi-grid .pinned-card { flex: 1 1 0; min-width: 0; }
+.pinned-multi-grid.cols-1 .pinned-card { flex: 1 1 100%; }
+.pinned-multi-grid.cols-2 .pinned-card { flex: 1 1 calc(50% - var(--space-4) / 2); }
+.pinned-multi-grid.cols-3 .pinned-card { flex: 1 1 calc(33.333% - var(--space-4) * 2 / 3); }
+@media (max-width: 900px) {
+  .pinned-multi-grid { flex-direction: column; }
+  .pinned-multi-grid .pinned-card { flex: 1 1 100%; }
 }
 .pinned-card {
   position: relative;

@@ -1,4 +1,5 @@
 import { Env } from './types';
+import { BUILTIN_ICONS } from './icons';
 
 export interface AIConfig {
   llm_url?: string;
@@ -285,6 +286,91 @@ function generateHeuristicDescription(title: string, url: string): string {
   const t = title.trim();
   if (t.length > 0 && t.length <= 15) return t;
   return t.substring(0, 15);
+}
+
+/**
+ * Suggest a builtin icon for each group (by group name) using AI
+ */
+export async function suggestGroupIcons(
+  groups: { id: number; name: string }[],
+  config: AIConfig,
+  env: Env
+): Promise<{ suggestions: { id: number; icon: string }[]; error?: string }> {
+  const iconList = BUILTIN_ICONS.join(', ');
+  const groupsJson = JSON.stringify(groups.map(g => ({ id: g.id, name: g.name })));
+  const prompt = `你是一个图标选择助手。根据每个组的名称，从可用图标列表中为每个组选择一个最合适的图标。
+
+组列表：
+${groupsJson}
+
+可用图标：${iconList}
+
+规则：
+- 严格按照 JSON 数组格式返回：[{"id": 组的id值, "icon": "图标名称"}]
+- 图标名称不含 .svg 后缀，例如：code-line、chat-3-line、book-line
+- 只返回 JSON，不要任何其他内容`;
+
+  let responseText = '';
+
+  // 1. Custom OpenAI-compatible endpoint
+  if (config.llm_url && config.llm_key) {
+    responseText = await callCustomOpenAI(prompt, config);
+  }
+
+  // 2. Cloudflare Workers AI (Free fallback)
+  if (!responseText && env.AI) {
+    try {
+      const model = config.llm_model && config.llm_model.startsWith('@cf/')
+        ? config.llm_model
+        : '@cf/meta/llama-3.1-8b-instruct';
+      const aiRes: any = await runWithTimeout(
+        env.AI.run(model, {
+          messages: [
+            { role: 'system', content: '你是图标选择助手。严格输出合法的 JSON 数组，包含 id 和 icon 字段，icon 必须来自可用图标列表，不要输出任何其他文字。' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 800
+        }),
+        20000
+      );
+      responseText = aiRes?.response || aiRes?.choices?.[0]?.message?.content || '';
+    } catch (e) {
+      console.warn('Suggest icons Workers AI failed:', e);
+    }
+  }
+
+  if (!responseText) {
+    return { suggestions: [], error: 'AI 服务不可用，请稍后重试或配置自定义 LLM' };
+  }
+
+  const parsed = safeParseJsonArray(responseText);
+  const raw: { id: any; icon: any }[] = Array.isArray(parsed) ? parsed : [];
+  if (raw.length === 0) {
+    const re = /"id"\s*:\s*(\d+)\s*,\s*"icon"\s*:\s*"([^"]+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(responseText)) !== null) {
+      raw.push({ id: parseInt(m[1], 10), icon: m[2] });
+    }
+  }
+
+  const validNames = new Set(BUILTIN_ICONS);
+  const groupIds = new Set(groups.map(g => g.id));
+  const suggestions: { id: number; icon: string }[] = [];
+  const seen = new Set<number>();
+  for (const item of raw) {
+    const id = typeof item.id === 'number' ? item.id : parseInt(item.id, 10);
+    const name = String(item.icon || '').replace(/\.svg$/i, '').trim();
+    if (groupIds.has(id) && !seen.has(id) && validNames.has(name)) {
+      suggestions.push({ id, icon: `/static/icons/${name}.svg` });
+      seen.add(id);
+    }
+  }
+
+  if (suggestions.length === 0) {
+    return { suggestions: [], error: 'AI 返回格式异常，请重试' };
+  }
+  return { suggestions };
 }
 
 /**

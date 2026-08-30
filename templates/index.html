@@ -21,7 +21,7 @@
     <h2 class="auth-title" id="authTitle">欢迎使用 SuenWeb</h2>
     <p class="auth-desc" id="authDesc">轻量个人导航页 · 搭配浏览器插件同步收藏夹 · SuenWeb</p>
     <div class="auth-form">
-      <input type="password" id="authPassword" class="auth-input" placeholder="设置访问密码 (至少4位)" autofocus>
+      <input type="password" id="authPassword" class="auth-input" placeholder="设置访问密码 (至少6位)" autofocus>
       <div class="auth-error" id="authError"></div>
       <button class="auth-btn" id="authBtn">设置密码并进入</button>
     </div>
@@ -494,26 +494,56 @@ function renderAll() {
   var tabs   = State.groups.filter(function(g){ return g.type==='tab' && !pinned.some(function(p){ return p.id===g.id || p.name===g.name; }); });
   renderPinned(pinned); renderTabs(tabs);
 }
+function renderPinnedCard(g) {
+  var mode = g.display_mode || 'compact';
+  var linksHtml = '';
+  if (mode === 'icon') {
+    linksHtml = '<div class="links-icon-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+      return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="icon-only-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
+    }).join('')+'</div>';
+  } else if (mode === 'grid') {
+    linksHtml = '<div class="links-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+      return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="grid-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+    }).join('')+'</div>';
+  } else { // compact
+    linksHtml = '<div class="pinned-links link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
+      return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="pin-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<span class="link-title">'+escHtml(l.title)+'</span><button class="link-edit-btn pinned-edit" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
+    }).join('')+'</div>';
+  }
+  return '<div class="pinned-card drag-group" draggable="'+(! _isGuest)+'" data-group-id="'+g.id+'"><div class="pinned-header"><span class="drag-handle auth-only" title="拖动排序">⋮⋮</span><span class="section-icon">'+renderGroupIcon(g.icon)+'</span>'+escHtml(g.name)+'<span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">解固</button><button class="group-action-btn group-action-text" data-action="delete-group" data-id="'+g.id+'" style="color:#f87171">删除</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加链接</button></div>';
+}
 function renderPinned(groups) {
   var area = document.getElementById('pinnedArea');
-  area.innerHTML = groups.map(function(g){
-    var mode = g.display_mode || 'compact';
-    var linksHtml = '';
-    if (mode === 'icon') {
-      linksHtml = '<div class="links-icon-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
-        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="icon-only-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'" title="'+escAttr(l.title)+'">'+renderLinkIcon(l)+'</a>';
-      }).join('')+'</div>';
-    } else if (mode === 'grid') {
-      linksHtml = '<div class="links-grid link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
-        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="grid-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<div class="link-info"><div class="link-title">'+escHtml(l.title)+'</div><div class="link-desc">'+escHtml(l.description)+'</div></div><button class="link-edit-btn" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
-      }).join('')+'</div>';
-    } else { // compact
-      linksHtml = '<div class="pinned-links link-drop-zone" data-group-id="'+g.id+'">'+g.links.map(function(l){
-        return '<a href="'+escAttr(safeHref(l.url))+'" target="_blank" rel="noopener noreferrer" class="pin-link drag-link" draggable="'+(! _isGuest)+'" data-link-id="'+l.id+'">'+renderLinkIcon(l)+'<span class="link-title">'+escHtml(l.title)+'</span><button class="link-edit-btn pinned-edit" data-action="edit-link" data-id="'+l.id+'"><img src="/static/icons/edit-line.svg" class="ico-xs" alt=""></button></a>';
-      }).join('')+'</div>';
+  var singleGroups = groups.filter(function(g){ return (g.layout_mode || 'single') === 'single'; });
+  var multiGroups = groups.filter(function(g){ return g.layout_mode === 'multi'; });
+  var html = '';
+  if (singleGroups.length) {
+    html += '<div class="pinned-single-list">' + singleGroups.map(renderPinnedCard).join('') + '</div>';
+  }
+  if (multiGroups.length) {
+    var rows = packMultiRows(multiGroups.length);
+    var idx = 0;
+    for (var r = 0; r < rows.length; r++) {
+      var cols = rows[r];
+      var slice = multiGroups.slice(idx, idx + cols);
+      idx += cols;
+      html += '<div class="pinned-multi-grid cols-' + cols + '">' + slice.map(renderPinnedCard).join('') + '</div>';
     }
-    return '<div class="pinned-card drag-group" draggable="'+(! _isGuest)+'" data-group-id="'+g.id+'"><div class="pinned-header"><span class="drag-handle auth-only" title="拖动排序">⋮⋮</span><span class="section-icon">'+renderGroupIcon(g.icon)+'</span>'+escHtml(g.name)+'<span class="display-mode-tag">'+({'compact':'紧凑','grid':'详情','icon':'图标'}[mode]||'')+'</span><div class="group-actions"><button class="group-action-btn group-action-text" data-action="edit-group" data-id="'+g.id+'">编辑</button><button class="group-action-btn group-action-text" data-action="toggle-group" data-id="'+g.id+'">解固</button><button class="group-action-btn group-action-text" data-action="delete-group" data-id="'+g.id+'" style="color:#f87171">删除</button></div></div>'+linksHtml+'<button class="add-link-btn" data-action="add-link" data-id="'+g.id+'">+ 添加链接</button></div>';
-  }).join('') + '<button class="add-link-btn" data-action="add-group-pinned" style="min-height:80px">+ 添加固定组</button>';
+  }
+  html += '<button class="add-link-btn" data-action="add-group-pinned" style="min-height:80px">+ 添加固定组</button>';
+  area.innerHTML = html;
+}
+function packMultiRows(n) {
+  if (n <= 0) return [];
+  var rows = [];
+  while (n > 0) {
+    if (n === 1) { rows.push(1); break; }
+    if (n === 2) { rows.push(2); break; }
+    if (n === 4) { rows.push(2, 2); break; }
+    if (n >= 3) { rows.push(3); n -= 3; continue; }
+    rows.push(n); break;
+  }
+  return rows;
 }
 function renderTabs(groups) {
   var tabBar = document.getElementById('tabBar');
@@ -660,12 +690,12 @@ async function showAuth() {
     title.textContent = '欢迎使用 SuenWeb';
     desc.textContent  = '轻量个人导航页 · 搭配浏览器插件同步收藏夹 · SuenWeb';
     btn.textContent   = '设置密码并进入';
-    input.placeholder = '设置访问密码 (至少4位)';
+    input.placeholder = '设置访问密码 (至少6位)';
   }
   error.textContent = '';
   btn.onclick = async function() {
     var pw = input.value.trim();
-    if (pw.length < 4) { error.textContent = '密码至少4位'; return; }
+    if (pw.length < 6) { error.textContent = '密码至少6位'; return; }
     btn.disabled = true; btn.textContent = '...';
     try {
       if (hasPassword) await doLogin(pw); else await doSetup(pw);
@@ -717,15 +747,18 @@ async function editGroup(gid) {
   var iconVal = escAttr(group.icon||'');
   var isBuiltin = iconVal.indexOf('/static/icons/')===0;
   var previewHtml = isBuiltin ? '<img src="'+iconVal+'" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">' : (group.icon ? group.icon : '<img src="/static/icons/bookmark-line.svg" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)">');
-  showModal('<h3>编辑组</h3><div class="form-group"><label>组名</label><input id="egName" value="'+escAttr(group.name)+'"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">'+previewHtml+'</span><input type="hidden" id="egIcon" value="'+iconVal+'"><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\''+iconVal+'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'<img src="/static/icons/bookmark-line.svg" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)" alt="">\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div><div class="form-group"><label>显示模式</label><select id="egMode"><option value="compact"'+(group.display_mode==='compact'?' selected':'')+'>紧凑</option><option value="grid"'+(group.display_mode==='grid'?' selected':'')+'>详情</option><option value="icon"'+(group.display_mode==='icon'?' selected':'')+'>仅图标</option></select></div><div class="btn-row"><button class="btn btn-danger btn-sm" id="egDelete">删除</button><button class="btn btn-secondary" id="egCancel">取消</button><button class="btn btn-primary" id="egSave">保存</button></div>');
+  var lm = group.layout_mode || 'single';
+  showModal('<h3>编辑组</h3><div class="form-group"><label>组名</label><input id="egName" value="'+escAttr(group.name)+'"></div><div class="form-group"><label>图标</label><div style="display:flex;align-items:center;gap:8px"><span id="egIcon_preview" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);border-radius:var(--radius-sm)">'+previewHtml+'</span><input type="hidden" id="egIcon" value="'+iconVal+'"><button class="btn btn-sm" onclick="showIconPicker(\'egIcon\',\''+iconVal+'\');return false" style="padding:6px 12px;background:var(--bg-hover);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);cursor:pointer">选择图标</button><button class="btn btn-sm" onclick="document.getElementById(\'egIcon\').value=\'\';document.getElementById(\'egIcon_preview\').innerHTML=\'<img src="/static/icons/bookmark-line.svg" style="width:20px;height:20px;filter:brightness(0) saturate(100%) invert(1)" alt="">\';return false" style="padding:6px 8px;background:none;border:none;color:var(--text-secondary);cursor:pointer">✕</button></div></div><div class="form-group"><label>显示模式</label><select id="egMode"><option value="compact"'+(group.display_mode==='compact'?' selected':'')+'>紧凑</option><option value="grid"'+(group.display_mode==='grid'?' selected':'')+'>详情</option><option value="icon"'+(group.display_mode==='icon'?' selected':'')+'>仅图标</option></select></div>'+(group.type==='pinned'?'<div class="form-group"><label>排列方式</label><select id="egLayout"><option value="single"'+(lm==='single'?' selected':'')+'>单列（独占一行）</option><option value="multi"'+(lm==='multi'?' selected':'')+'>多列（与其他多列组并排）</option></select></div>':'')+'<div class="btn-row"><button class="btn btn-danger btn-sm" id="egDelete">删除</button><button class="btn btn-secondary" id="egCancel">取消</button><button class="btn btn-primary" id="egSave">保存</button></div>');
   document.getElementById('egDelete').onclick=async function(){ if(!confirm('确定删除「'+group.name+'」及其所有链接？')) return; try{await api('DELETE','/api/groups/'+gid); closeModal(); await refresh(); toast('已删除','info');} catch(e){toast(e.message,'error');} };
   document.getElementById('egCancel').onclick = closeModal;
   document.getElementById('egSave').onclick = async function(){
     var name=document.getElementById('egName').value.trim();
     var icon=document.getElementById('egIcon').value.trim();
     var mode=document.getElementById('egMode').value;
+    var layoutEl=document.getElementById('egLayout');
+    var layoutMode=layoutEl?layoutEl.value:'single';
     if(!name){ toast('名称不能为空','error'); return; }
-    try{ await api('PUT','/api/groups/'+gid,{name:name,icon:icon||'',display_mode:mode}); closeModal(); await refresh(); toast('已更新','success'); }
+    try{ await api('PUT','/api/groups/'+gid,{name:name,icon:icon||'',display_mode:mode,layout_mode:layoutMode}); closeModal(); await refresh(); toast('已更新','success'); }
     catch(e){ toast(e.message,'error'); }
   };
 }
@@ -1312,8 +1345,12 @@ function _buildSettingsSection(tab) {
 
       '<div class="settings-section-title">搜索引擎</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">勾选启用的引擎；第一个为默认</p>'+
+        '<p class="card-desc">勾选启用的引擎，并指定首选默认引擎</p>'+
         '<div id="cfgEngines" class="checkbox-group">'+Object.keys(_ENGINE_MAP).map(function(k){ var info=_ENGINE_MAP[k]; var checked=_widgetCfg.search_engines.indexOf(k)>=0; return '<label><input type="checkbox" value="'+k+'"'+(checked?' checked':'')+'> '+info.name+'</label>'; }).join('')+'</div>'+
+        '<div class="settings-row">'+
+          '<div class="row-label">首选引擎</div>'+
+          '<div class="row-control"><select id="cfgSearchDefault" class="settings-select"></select></div>'+
+        '</div>'+
       '</div>'+
     '</div>';
   }
@@ -1381,16 +1418,16 @@ function _buildSettingsSection(tab) {
         '</details>'+
       '</div>'+
 
-      '<div class="settings-section-title">一键智能补全描述</div>'+
+      '<div class="settings-section-title">智能补全</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">选择要补全的目标分组，AI 将自动分析并填充简短中文描述</p>'+
+        '<p class="card-desc">选择要补全的组，补全组图标和网站描述，已有则跳过</p>'+
         '<div class="checkbox-group">'+
-          '<button type=button class="btn-tiny" onclick="toggleAllGroups(\'ai-desc\',true)">全选</button>'+
-          '<button type=button class="btn-tiny" onclick="toggleRevGroups(\'ai-desc\')">反选</button>'+
+          '<button type=button class="btn-tiny" onclick="toggleAllGroups(\'ai-complete\',true)">全选</button>'+
+          '<button type=button class="btn-tiny" onclick="toggleRevGroups(\'ai-complete\')">反选</button>'+
         '</div>'+
-        '<div class="checkbox-group" style="margin-top:8px">'+State.groups.map(function(g){return '<label><input type="checkbox" class="ai-desc-grp" value="'+g.id+'" onchange="onGroupChange(\'ai-desc\')"> '+escHtml(g.name)+'</label>';}).join('')+'</div>'+
-        '<button class="btn btn-primary" id="aiDescribeAllBtn" disabled style="margin-top:8px">请先勾选目标分组</button>'+
-        '<div id="aiDescribeResult" style="margin-top:10px;font-size:12px"></div>'+
+        '<div class="checkbox-group" style="margin-top:8px">'+State.groups.map(function(g){return '<label><input type="checkbox" class="ai-complete-grp" value="'+g.id+'" onchange="onGroupChange(\'ai-complete\')"> '+escHtml(g.name)+'</label>';}).join('')+'</div>'+
+        '<button class="btn btn-primary" id="aiSmartCompleteBtn" disabled style="margin-top:8px">请先勾选目标分组</button>'+
+        '<div id="aiSmartCompleteResult" style="margin-top:10px;font-size:12px"></div>'+
       '</div>'+
 
       '<div class="settings-section-title">链接健康检查</div>'+
@@ -1415,7 +1452,7 @@ function _buildSettingsSection(tab) {
         '<p class="card-desc">修改后需要重新登录，插件也需更新密码</p>'+
         '<div style="display:flex;flex-direction:column;gap:8px">'+
           '<input type="password" id="oldPassword" class="settings-input" placeholder="旧密码">'+
-          '<input type="password" id="newPassword" class="settings-input" placeholder="新密码（至少4位）">'+
+          '<input type="password" id="newPassword" class="settings-input" placeholder="新密码（至少6位）">'+
           '<button class="btn btn-primary" id="changePwBtn">保存</button>'+
         '</div>'+
       '</div>'+
@@ -1678,6 +1715,16 @@ function _bindSettingsEvents() {
     var cfgCity = document.getElementById('cfgWeatherCity');
     if (cfgCity) cfgCity.onchange = function(){ _widgetCfg.weather_city = cfgCity.value.trim() || 'Beijing'; fetchWeather(); saveWidgetCfg(); };
     var cfgEngs = document.getElementById('cfgEngines');
+    var cfgDef = document.getElementById('cfgSearchDefault');
+    function updateDefaultDropdown() {
+      if (!cfgDef) return;
+      var cbs = cfgEngs.querySelectorAll('input:checked');
+      var opts = []; cbs.forEach(function(cb){ opts.push(cb.value); });
+      var prev = cfgDef.value;
+      cfgDef.innerHTML = opts.map(function(k){ return '<option value="'+k+'"'+(k===prev?' selected':'')+'>'+(_ENGINE_MAP[k]?_ENGINE_MAP[k].name:k)+'</option>'; }).join('');
+      if (opts.indexOf(cfgDef.value)<0 && opts.length>0) cfgDef.value = opts[0];
+      _searchEngine = cfgDef.value;
+    }
     if (cfgEngs) cfgEngs.addEventListener('change', function(){
       var cbs = cfgEngs.querySelectorAll('input:checked');
       var engs = []; cbs.forEach(function(cb){engs.push(cb.value)});
@@ -1685,7 +1732,9 @@ function _bindSettingsEvents() {
       _widgetCfg.search_engines = engs.join(',');
       if (engs.indexOf(_searchEngine)<0) _searchEngine = engs[0];
       renderSearchEngines(); initSearch(); saveWidgetCfg();
+      updateDefaultDropdown();
     });
+    if (cfgDef) { updateDefaultDropdown(); cfgDef.onchange = function(){ _searchEngine = cfgDef.value; renderSearchEngines(); initSearch(); saveWidgetCfg(); }; }
   }
 
   if (_currentSettingsTab === 'bookmarks') {
@@ -1721,8 +1770,8 @@ function _bindSettingsEvents() {
   }
 
   if (_currentSettingsTab === 'ai') {
-    var aiDescBtn = document.getElementById('aiDescribeAllBtn');
-    if (aiDescBtn) aiDescBtn.onclick = aiDescribeAll;
+    var aiCompleteBtn = document.getElementById('aiSmartCompleteBtn');
+    if (aiCompleteBtn) aiCompleteBtn.onclick = aiSmartComplete;
     var aiCheckBtn = document.getElementById('aiCheckBtn');
     if (aiCheckBtn) aiCheckBtn.onclick = aiCheck;
     var cfgLlmSave = document.getElementById('cfgLlmSave');
@@ -1741,7 +1790,7 @@ function _bindSettingsEvents() {
       var o = document.getElementById('oldPassword').value;
       var n = document.getElementById('newPassword').value;
       if (!o || !n) { toast('请填写新旧密码','error'); return; }
-      if (n.length<4) { toast('新密码至少4位','error'); return; }
+      if (n.length<6) { toast('新密码至少6位','error'); return; }
       try {
         var r = await api('POST','/api/auth/change-password',{old_password:o,new_password:n});
         State.token = r.token || State.token;
@@ -1851,9 +1900,10 @@ function _bindSettingsEvents() {
 }
 function onGroupChange(prefix){
   var cbs=document.querySelectorAll('.'+prefix+'-grp');
-  var btn=document.querySelector('#'+(prefix==='ai-desc'?'aiDescribeAllBtn':'aiCheckBtn'));
+  var btnId=prefix==='ai-complete'?'aiSmartCompleteBtn':'aiCheckBtn';
+  var btn=document.querySelector('#'+btnId);
   var checked=Array.from(cbs).filter(function(c){return c.checked});
-  if(btn){ btn.disabled=checked.length===0; btn.textContent=checked.length===0?'请先勾选目标分组':(prefix==='ai-desc'?'补全 '+checked.length+' 组':'检测 '+checked.length+' 组'); }
+  if(btn){ btn.disabled=checked.length===0; btn.textContent=checked.length===0?'请先勾选目标分组':(prefix==='ai-complete'?'补全 '+checked.length+' 组':'检测 '+checked.length+' 组'); }
 }
 function toggleAllGroups(prefix){
   document.querySelectorAll('.'+prefix+'-grp').forEach(function(cb){cb.checked=true});
@@ -2078,21 +2128,31 @@ function applyFontSettings(){
 }
 
 // ====== AI HANDLERS ======
-async function aiDescribeAll(){
-  var btn=document.getElementById('aiDescribeAllBtn'); if(!btn) return;
+async function aiSmartComplete(){
+  var btn=document.getElementById('aiSmartCompleteBtn'); if(!btn) return;
   var llm_url=_widgetCfg.llm_url||'', llm_key=_widgetCfg.llm_key||'', llm_model=_widgetCfg.llm_model||'';
-  btn.disabled=true; btn.textContent='补全中...';
-  var result=document.getElementById('aiDescribeResult');
-  var gids=[]; document.querySelectorAll('.ai-desc-grp:checked').forEach(function(cb){gids.push(parseInt(cb.value))});
-  if(gids.length===0){ result.innerHTML='<span style="color:#f87171">请先勾选目标分组</span>'; btn.disabled=false; onGroupChange('ai-desc'); return; }
-  result.innerHTML='<span style="color:#a78bfa">AI 补全中，请稍候...</span>';
+  var result=document.getElementById('aiSmartCompleteResult');
+  var gids=[]; document.querySelectorAll('.ai-complete-grp:checked').forEach(function(cb){gids.push(parseInt(cb.value))});
+  if(gids.length===0){ result.innerHTML='<span style="color:#f87171">请先勾选目标分组</span>'; return; }
+  btn.disabled=true;
+  var msgs=[];
+  result.innerHTML='<span style="color:#a78bfa">正在补全图标...</span>';
   try{
-    var resp=await fetch('/api/ai/describe',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({llm_url:llm_url,llm_key:llm_key,llm_model:llm_model,group_ids:gids})});
-    var data=await resp.json();
-    if(resp.ok){ result.innerHTML='<span style="color:#4ade80">✅ '+(data.message||'补全完成')+'</span>'; await refresh(); }
-    else { result.innerHTML='<span style="color:#f87171">❌ '+(data.detail||data.error||'补全失败')+'</span>'; }
-  }catch(e){ result.innerHTML='<span style="color:#f87171">❌ '+e.message+'</span>'; }
-  btn.disabled=false; onGroupChange('ai-desc');
+    var r1=await fetch('/api/ai/suggest-icons',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({llm_url:llm_url,llm_key:llm_key,llm_model:llm_model,group_ids:gids})});
+    var d1=await r1.json();
+    if(r1.ok) msgs.push('图标: '+(d1.message||'完成'));
+    else msgs.push('图标: '+(d1.detail||d1.error||'失败'));
+  }catch(e){ msgs.push('图标: '+e.message); }
+  result.innerHTML='<span style="color:#a78bfa">正在补全描述...</span>';
+  try{
+    var r2=await fetch('/api/ai/describe',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+State.token},body:JSON.stringify({llm_url:llm_url,llm_key:llm_key,llm_model:llm_model,group_ids:gids})});
+    var d2=await r2.json();
+    if(r2.ok) msgs.push('描述: '+(d2.message||'完成'));
+    else msgs.push('描述: '+(d2.detail||d2.error||'失败'));
+  }catch(e){ msgs.push('描述: '+e.message); }
+  result.innerHTML='<span style="color:#4ade80">✅ '+msgs.join(' · ')+'</span>';
+  await refresh();
+  btn.disabled=false; onGroupChange('ai-complete');
 }
 
 async function aiDescribeOne(lid){

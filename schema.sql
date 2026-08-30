@@ -8,9 +8,10 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS groups_table (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     name         TEXT NOT NULL,
-    icon         TEXT DEFAULT '📁',
+    icon         TEXT DEFAULT '',
     type         TEXT DEFAULT 'tab',
     display_mode TEXT DEFAULT 'compact',
+    layout_mode  TEXT DEFAULT 'single',
     sort_order   INTEGER DEFAULT 0,
     is_imported  INTEGER DEFAULT 0,
     created_at   TEXT DEFAULT (datetime('now','localtime'))

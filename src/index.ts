@@ -23,7 +23,8 @@ import { parseBookmarks } from './bookmark_parser';
 import {
   generateSingleDescription,
   generateBulkDescriptions,
-  checkLinksHealth
+  checkLinksHealth,
+  suggestGroupIcons
 } from './ai';
 import { fetchWallpaperUrl } from './wallpaper';
 import { fetchFontCss, fetchFontWoff2 } from './fonts';
@@ -78,6 +79,17 @@ app.use('*', async (c, next) => {
 });
 
 async function ensureDatabaseTables(db: D1Database) {
+  // Migrate: add layout_mode column for databases created before it existed
+  try {
+    await db.prepare('SELECT layout_mode FROM groups_table LIMIT 1').first();
+  } catch {
+    try {
+      await db.prepare("ALTER TABLE groups_table ADD COLUMN layout_mode TEXT DEFAULT 'single'").run();
+    } catch (e) {
+      console.warn('layout_mode migration warning:', e);
+    }
+  }
+
   // Check if settings table exists
   const check = await db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")
@@ -90,9 +102,10 @@ async function ensureDatabaseTables(db: D1Database) {
     `CREATE TABLE IF NOT EXISTS groups_table (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      icon TEXT DEFAULT '📁',
+      icon TEXT DEFAULT '',
       type TEXT DEFAULT 'tab',
       display_mode TEXT DEFAULT 'compact',
+      layout_mode TEXT DEFAULT 'single',
       sort_order INTEGER DEFAULT 0,
       is_imported INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now','localtime'))
@@ -177,8 +190,8 @@ app.post('/api/auth/setup', async c => {
   }
   const body = (await c.req.json().catch(() => ({}))) as any;
   const password = (body.password || '').trim();
-  if (password.length < 4) {
-    return c.json({ detail: '密码至少4位' }, 400);
+  if (password.length < 6) {
+    return c.json({ detail: '密码至少6位' }, 400);
   }
   const newHash = await hashPassword(password);
   await setSetting(c.env.DB, 'auth_password_hash', newHash);
@@ -215,8 +228,8 @@ app.post('/api/auth/change-password', requireAuth, async c => {
   const body = (await c.req.json().catch(() => ({}))) as any;
   const oldPw = body.old_password || '';
   const newPw = (body.new_password || '').trim();
-  if (newPw.length < 4) {
-    return c.json({ detail: '新密码至少4位' }, 400);
+  if (newPw.length < 6) {
+    return c.json({ detail: '新密码至少6位' }, 400);
   }
   const currentHash = await getSetting(c.env.DB, 'auth_password_hash', '');
   if (!(await verifyPassword(oldPw, currentHash))) {
@@ -264,7 +277,7 @@ app.put('/api/groups/:gid', requireAuth, async c => {
   const body = (await c.req.json().catch(() => ({}))) as any;
   const db = c.env.DB;
 
-  for (const field of ['name', 'icon', 'type', 'display_mode', 'sort_order']) {
+  for (const field of ['name', 'icon', 'type', 'display_mode', 'layout_mode', 'sort_order']) {
     if (field in body) {
       await db.prepare(`UPDATE groups_table SET ${field} = ? WHERE id = ?`).bind(body[field], gid).run();
     }
@@ -1141,6 +1154,48 @@ app.get('/extension/download/firefox', c => {
 // ═══════════════════════════════════════════════════════════
 //  ROUTES — AI Features (Zero API Key Free Models by Default!)
 // ═══════════════════════════════════════════════════════════
+app.post('/api/ai/suggest-icons', requireAuth, async c => {
+  const body = (await c.req.json().catch(() => ({}))) as any;
+  const db = c.env.DB;
+
+  const savedUrl = await getSetting(db, 'llm_url', '');
+  const savedKey = await getSetting(db, 'llm_key', '');
+  const savedModel = await getSetting(db, 'llm_model', '');
+  const aiConfig = {
+    llm_url: body.llm_url || savedUrl,
+    llm_key: body.llm_key || savedKey,
+    llm_model: body.llm_model || savedModel
+  };
+
+  const groupIds = body.group_ids;
+  let query = "SELECT id, name FROM groups_table WHERE (icon IS NULL OR icon = '' OR icon = '📁')";
+  const params: any[] = [];
+  if (Array.isArray(groupIds) && groupIds.length > 0) {
+    const placeholders = groupIds.map(() => '?').join(',');
+    query += ` AND id IN (${placeholders})`;
+    params.push(...groupIds);
+  }
+
+  const groupsRes = await db.prepare(query).bind(...params).all<{ id: number; name: string }>();
+  const groups = groupsRes.results || [];
+  if (groups.length === 0) {
+    return c.json({ message: '所有组已有图标，无需补全', updated: 0 });
+  }
+
+  const outcome = await suggestGroupIcons(groups, aiConfig, c.env);
+  let updated = 0;
+  for (const s of outcome.suggestions) {
+    await db.prepare('UPDATE groups_table SET icon = ? WHERE id = ?').bind(s.icon, s.id).run();
+    updated++;
+  }
+  if (outcome.error) {
+    return c.json({ detail: outcome.error, updated }, 502);
+  }
+
+  await logAction(db, 'ai_suggest_icons', 'groups', { updated });
+  return c.json({ message: `已为 ${updated} 个组补全图标`, updated });
+});
+
 app.post('/api/ai/describe', requireAuth, async c => {
   const body = (await c.req.json().catch(() => ({}))) as any;
   const db = c.env.DB;

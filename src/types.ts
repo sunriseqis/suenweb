@@ -10,6 +10,7 @@ export interface Group {
   icon: string;
   type: string;
   display_mode: string;
+  layout_mode?: string;
   sort_order: number;
   is_imported: number;
   created_at: string;
