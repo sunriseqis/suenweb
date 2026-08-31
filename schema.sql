@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS steamgriddb_cache (
     PRIMARY KEY (game_id, image_url)
 );
 
+CREATE TABLE IF NOT EXISTS ext_repo (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ext_id     TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    version    TEXT DEFAULT '',
+    url        TEXT DEFAULT '',
+    browser    TEXT DEFAULT 'chrome',
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(ext_id, browser)
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_links_group_id ON links(group_id);
 CREATE INDEX IF NOT EXISTS idx_links_synced ON links(synced_to_browser);

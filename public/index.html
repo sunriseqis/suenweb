@@ -916,6 +916,50 @@ async function loadOperationLogs(){
   } catch(e){ box.textContent = '加载失败'; }
 }
 
+async function loadBackedUpExtensions() {
+  var box = document.getElementById('extListContainer');
+  var cntEl = document.getElementById('extBackupCount');
+  if (!box) return;
+  try {
+    var d = await api('GET', '/api/extensions');
+    var list = (d && d.extensions) || [];
+    if (cntEl) cntEl.textContent = list.length;
+    if (!list.length) {
+      box.innerHTML = '<div style="color:var(--text-muted);padding:6px 0">暂无已备份插件。请在已安装 SuenWeb 插件的浏览器中点击「插件备份」</div>';
+      return;
+    }
+    var html = '<div style="display:flex;flex-direction:column;gap:6px">';
+    list.forEach(function(item) {
+      var storeUrl = item.url || ('https://www.crxsoso.com/webstore/detail/' + item.ext_id);
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg-card);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)">' +
+        '<div style="min-width:0;flex:1;margin-right:8px">' +
+          '<div style="font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(item.name) + ' <span style="font-size:11px;color:var(--text-muted);font-weight:normal">v' + escHtml(item.version || '') + '</span></div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + escHtml(item.browser || 'chrome') + ' · ' + escHtml(item.updated_at || '') + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-shrink:0">' +
+          '<a href="' + safeHref(storeUrl) + '" target="_blank" rel="noopener" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;text-decoration:none">CRX 安装</a>' +
+          '<button type="button" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;color:var(--error)" onclick="deleteExtensionItem(' + item.id + ')">删除</button>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    box.innerHTML = html;
+  } catch(e) {
+    if (box) box.textContent = '加载失败: ' + e.message;
+  }
+}
+
+window.deleteExtensionItem = async function(id) {
+  if (!confirm('确定要删除该插件备份记录吗？')) return;
+  try {
+    await api('DELETE', '/api/extensions/' + id);
+    toast('已删除', 'success');
+    loadBackedUpExtensions();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+};
+
 // ====== SETTINGS MODAL ======
 var _currentSettingsTab = 'presets';
 
@@ -1393,12 +1437,18 @@ function _buildSettingsSection(tab) {
 
       '<div class="settings-section-title">浏览器插件</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">下载插件后，右键即可收藏到 SuenWeb</p>'+
+        '<p class="card-desc">下载插件后，右键即可收藏到 SuenWeb，并支持在插件端一键备份/还原浏览器插件</p>'+
         '<div style="display:flex;gap:8px">'+
-          '<a href="/extension/download/chrome" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Chrome / Edge</a>'+
-          '<a href="/extension/download/firefox" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Firefox</a>'+
+          '<a href="/extension/download/chrome" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Chrome / Edge 插件</a>'+
+          '<a href="/extension/download/firefox" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Firefox 插件</a>'+
         '</div>'+
-        '<p class="card-desc" style="margin-top:8px">下载后在扩展管理页加载已解压的文件夹</p>'+
+        '<p class="card-desc" style="margin-top:8px">下载后在扩展管理页加载已解压的文件夹即可使用</p>'+
+      '</div>'+
+
+      '<div class="settings-section-title">云端已备份插件 (<span id="extBackupCount">0</span>)</div>'+
+      '<div class="settings-card">'+
+        '<p class="card-desc">由浏览器插件自动采集并同步至数据库，点击可在 CRX 搜搜直接下载安装</p>'+
+        '<div id="extListContainer" style="max-height:220px;overflow-y:auto;font-size:12px;color:var(--text-secondary)">加载中...</div>'+
       '</div>'+
     '</div>';
   }
@@ -1773,6 +1823,7 @@ function _bindSettingsEvents() {
       if (box) box.innerHTML = '分组：'+sd.total_groups+' · 链接：'+sd.total_links+' · 待插件同步：'+sd.pending_sync+' · 上次通讯：'+(sd.last_sync_at||'—')+' · 来源：'+(sd.last_sync_from||'—');
     }).catch(function(){});
     loadOperationLogs();
+    loadBackedUpExtensions();
   }
 
   if (_currentSettingsTab === 'ai') {

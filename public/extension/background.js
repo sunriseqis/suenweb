@@ -38,6 +38,10 @@ const browser = globalThis.browser || (() => {
       getTree: p(c.bookmarks.getTree, c.bookmarks),
       create: p(c.bookmarks.create, c.bookmarks),
     },
+    management: c.management && {
+      getAll: p(c.management.getAll, c.management),
+      get: p(c.management.get, c.management),
+    },
     alarms: {
       onAlarm: c.alarms.onAlarm,
       clear: p(c.alarms.clear, c.alarms),
@@ -633,6 +637,95 @@ if (_menus && _menus.onClicked) {
   });
 }
 
+/* ── Extension backup / restore ─────────────────────────── */
+const CRXSOSO_BASE = 'https://www.crxsoso.com/webstore/detail/';
+const RESTORE_MAX_TABS = 10;
+
+function selfExtId() {
+  const rt = (globalThis.browser && globalThis.browser.runtime) || (globalThis.chrome && globalThis.chrome.runtime);
+  return rt ? rt.id : '';
+}
+
+function storeUrlFor(extId) {
+  return CRXSOSO_BASE + extId;
+}
+
+function currentBrowserType() {
+  return /Firefox/i.test(navigator.userAgent) ? 'firefox' : 'chrome';
+}
+
+async function collectInstalledExtensions() {
+  const management = (globalThis.browser && globalThis.browser.management) || globalThis.chrome.management;
+  const all = await management.getAll();
+  const selfId = selfExtId();
+  const isChromium = currentBrowserType() === 'chrome';
+  const list = [];
+  for (const e of all) {
+    if (e.type !== 'extension') continue;
+    if (e.id === selfId) continue;                                   // skip SuenWeb Sync itself
+    if (isChromium && e.installType !== 'normal' && e.installType !== 'admin') continue; // skip dev/builtin
+    list.push({
+      ext_id: e.id,
+      name: e.name || e.id,
+      version: e.version || '',
+      url: storeUrlFor(e.id),
+    });
+  }
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  return list;
+}
+
+async function backupExtensions() {
+  const c = await cfg();
+  if (!c.serverUrl || !c.authToken) throw new Error('未配置服务器或令牌');
+  const extensions = await collectInstalledExtensions();
+  const resp = await fetch(`${c.serverUrl}/api/extensions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${c.authToken}` },
+    body: JSON.stringify({ browser: currentBrowserType(), extensions }),
+  });
+  if (!resp.ok) {
+    const b = await resp.json().catch(() => ({}));
+    throw new Error(b.detail || `HTTP ${resp.status}`);
+  }
+  const now = new Date().toISOString();
+  await saveCfg({ lastExtBackupAt: now, lastExtBackupCount: extensions.length });
+  return { ok: true, count: extensions.length };
+}
+
+async function restoreExtensions() {
+  const c = await cfg();
+  if (!c.serverUrl || !c.authToken) throw new Error('未配置服务器或令牌');
+  const resp = await fetch(`${c.serverUrl}/api/extensions`, {
+    headers: { 'Authorization': `Bearer ${c.authToken}` }
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+  const entries = data.extensions || [];
+  if (!entries.length) return { ok: true, total: 0, installed: 0, opened: 0 };
+
+  const management = (globalThis.browser && globalThis.browser.management) || globalThis.chrome.management;
+  const all = await management.getAll();
+  const installedIds = new Set(all.filter(e => e.type === 'extension').map(e => e.id));
+
+  let installed = 0;
+  const missing = [];
+  for (const it of entries) {
+    if (installedIds.has(it.ext_id)) installed++;
+    else missing.push(it);
+  }
+
+  const tabsApi = (globalThis.browser && globalThis.browser.tabs) ? globalThis.browser.tabs : globalThis.chrome.tabs;
+  let opened = 0;
+  for (const it of missing.slice(0, RESTORE_MAX_TABS)) {
+    try {
+      await tabsApi.create({ url: it.url || storeUrlFor(it.ext_id) });
+      opened++;
+    } catch {}
+  }
+  return { ok: true, total: entries.length, installed, opened, skipped: missing.length - opened };
+}
+
 /* ── Messages from popup/options ────────────────────────── */
 browser.runtime.onMessage.addListener(async (msg) => {
   switch (msg.action) {
@@ -673,6 +766,10 @@ browser.runtime.onMessage.addListener(async (msg) => {
       return await restoreBackup(msg.index);
     case 'testWebDAV':
       return await testWebDAV();
+    case 'backupExtensions':
+      try { return await backupExtensions(); } catch(e) { return { ok: false, error: e.message }; }
+    case 'restoreExtensions':
+      try { return await restoreExtensions(); } catch(e) { return { ok: false, error: e.message }; }
     default:
       return null;
   }

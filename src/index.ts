@@ -94,6 +94,7 @@ async function ensureDatabaseTables(db: D1Database) {
   try {
     await db.prepare('CREATE TABLE IF NOT EXISTS auth_rate (ip TEXT PRIMARY KEY, fails INTEGER DEFAULT 0, first_fail_ms INTEGER DEFAULT 0, locked_until_ms INTEGER DEFAULT 0)').run();
     await db.prepare('CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT DEFAULT (datetime(\'now\',\'localtime\')), payload TEXT NOT NULL)').run();
+    await db.prepare('CREATE TABLE IF NOT EXISTS ext_repo (id INTEGER PRIMARY KEY AUTOINCREMENT, ext_id TEXT NOT NULL, name TEXT NOT NULL, version TEXT DEFAULT \'\', url TEXT DEFAULT \'\', browser TEXT DEFAULT \'chrome\', updated_at TEXT DEFAULT (datetime(\'now\',\'localtime\')), UNIQUE(ext_id, browser))').run();
   } catch (e) {
     console.warn('table migration warning:', e);
   }
@@ -136,6 +137,7 @@ async function ensureDatabaseTables(db: D1Database) {
     `CREATE TABLE IF NOT EXISTS auth_tokens (token_hash TEXT PRIMARY KEY, created_at TEXT DEFAULT (datetime('now','localtime')), expires_at INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS auth_rate (ip TEXT PRIMARY KEY, fails INTEGER DEFAULT 0, first_fail_ms INTEGER DEFAULT 0, locked_until_ms INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT DEFAULT (datetime('now','localtime')), payload TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS ext_repo (id INTEGER PRIMARY KEY AUTOINCREMENT, ext_id TEXT NOT NULL, name TEXT NOT NULL, version TEXT DEFAULT '', url TEXT DEFAULT '', browser TEXT DEFAULT 'chrome', updated_at TEXT DEFAULT (datetime('now','localtime')), UNIQUE(ext_id, browser))`,
     `CREATE TABLE IF NOT EXISTS event_log (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, payload TEXT DEFAULT '{}', created_ms INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS operation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, target TEXT DEFAULT '', detail TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now','localtime')))`,
     `CREATE TABLE IF NOT EXISTS wallpapers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL, category TEXT DEFAULT 'custom', enabled INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0, source_type TEXT DEFAULT 'url', created_at TEXT DEFAULT (datetime('now','localtime')))`,
@@ -1216,6 +1218,49 @@ app.get('/extension/download/firefox', c => {
       'Content-Disposition': 'attachment; filename=suenweb-extension-firefox.zip'
     }
   });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  ROUTES — Extension Backup (via SuenWeb Sync extension)
+// ═══════════════════════════════════════════════════════════
+app.get('/api/extensions', requireAuth, async c => {
+  const rows = (await c.env.DB
+    .prepare('SELECT id, ext_id, name, version, url, browser, updated_at FROM ext_repo ORDER BY browser ASC, name COLLATE NOCASE ASC')
+    .all<any>()).results || [];
+  return c.json({ extensions: rows });
+});
+
+app.post('/api/extensions', requireAuth, async c => {
+  const body = (await c.req.json().catch(() => ({}))) as any;
+  const browserType = (body.browser || 'chrome').trim() === 'firefox' ? 'firefox' : 'chrome';
+  const list = Array.isArray(body.extensions) ? body.extensions : [];
+
+  const stmts = [c.env.DB.prepare('DELETE FROM ext_repo WHERE browser = ?').bind(browserType)];
+  let count = 0;
+  for (const e of list.slice(0, 100)) {
+    const extId = String(e.ext_id || '').trim();
+    if (!extId) continue;
+    const url = String(e.url || '').trim() || `https://www.crxsoso.com/webstore/detail/${extId}`;
+    stmts.push(
+      c.env.DB
+        .prepare(`INSERT INTO ext_repo (ext_id, name, version, url, browser) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(ext_id, browser) DO UPDATE SET name = excluded.name, version = excluded.version, url = excluded.url, updated_at = datetime('now','localtime')`)
+        .bind(extId, String(e.name || extId).substring(0, 120), String(e.version || ''), url, browserType)
+    );
+    count++;
+  }
+  await c.env.DB.batch(stmts);
+
+  await logAction(c.env.DB, 'backup_extensions', 'extensions', { browser: browserType, count });
+  await notifyChange(c.env.DB, 'extensions_backed_up', { browser: browserType, count });
+  return c.json({ ok: true, count });
+});
+
+app.delete('/api/extensions/:eid', requireAuth, async c => {
+  const eid = parseInt(c.req.param('eid') || '0', 10);
+  if (!eid) return c.json({ detail: 'Not found' }, 404);
+  await c.env.DB.prepare('DELETE FROM ext_repo WHERE id = ?').bind(eid).run();
+  return c.json({ ok: true });
 });
 
 // ═══════════════════════════════════════════════════════════

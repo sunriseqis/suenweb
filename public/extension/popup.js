@@ -48,6 +48,10 @@ const els = {
   restorePicker: document.getElementById('restorePicker'),
   restoreList:   document.getElementById('restoreList'),
   newtabToggle:  document.getElementById('newtabToggle'),
+  extCount:      document.getElementById('extCount'),
+  lastExtBackup: document.getElementById('lastExtBackup'),
+  extBackupBtn:  document.getElementById('extBackupBtn'),
+  extRestoreBtn: document.getElementById('extRestoreBtn'),
 };
 
 function fmtTime(iso) {
@@ -88,7 +92,7 @@ els.newtabToggle.onchange = async () => {
 /* ── Refresh ── */
 async function refresh() {
   const d = await browser.storage.local.get([
-    'serverUrl','authToken','lastSync','webdavUrl','webdavUser','webdavPass','lastBackupAt','newtabEnabled'
+    'serverUrl','authToken','lastSync','webdavUrl','webdavUser','webdavPass','lastBackupAt','newtabEnabled','lastExtBackupAt','lastExtBackupCount'
   ]);
   const editing = document.activeElement && (
     document.activeElement === els.serverUrl || document.activeElement === els.authToken ||
@@ -124,6 +128,14 @@ async function refresh() {
   const ntEnabled = !!d.newtabEnabled;
   els.newtabToggle.checked = ntEnabled;
   els.newtabToggle.disabled = !srvOk;
+
+  // Extensions backup
+  els.extBackupBtn.disabled = !srvOk;
+  els.extRestoreBtn.disabled = !srvOk;
+  els.extCount.textContent = d.lastExtBackupCount ? d.lastExtBackupCount + ' 个' : '—';
+  els.extCount.className = 'v ' + (d.lastExtBackupCount ? 'g' : 'm');
+  els.lastExtBackup.textContent = d.lastExtBackupAt ? fmtTime(d.lastExtBackupAt) : '—';
+  els.lastExtBackup.className = 'v ' + (d.lastExtBackupAt ? 'g' : 'm');
 
   // Connection
   try {
@@ -195,6 +207,34 @@ els.restoreBtn.onclick = async () => {
   } catch(e) { showResult(e.message, 'b'); }
 };
 document.getElementById('cancelRestoreBtn').onclick = () => { els.restorePicker.style.display = 'none'; };
+
+/* ── Extensions backup / restore ── */
+els.extBackupBtn.onclick = async () => {
+  showResult('正在读取已安装插件...', 'i');
+  els.extBackupBtn.disabled = true;
+  try {
+    const r = await browser.runtime.sendMessage({ action: 'backupExtensions' });
+    if (r.ok) showResult('已备份 ' + r.count + ' 个插件', 'g');
+    else showResult(r.error || '备份失败', 'b');
+  } catch(e) { showResult(e.message, 'b'); }
+  els.extBackupBtn.disabled = false;
+  refresh();
+};
+
+els.extRestoreBtn.onclick = async () => {
+  showResult('检查插件安装状态...', 'i');
+  els.extRestoreBtn.disabled = true;
+  try {
+    const r = await browser.runtime.sendMessage({ action: 'restoreExtensions' });
+    if (r.ok) {
+      if (!r.total) showResult('云端暂无插件备份，请先在原设备备份', 'b');
+      else if (!r.opened && !r.skipped) showResult('全部已安装，无需还原', 'g');
+      else showResult('已装 ' + r.installed + ' · 打开 ' + r.opened + ' 个安装页' + (r.skipped ? ' · 未打开 ' + r.skipped : ''), 'g');
+    } else showResult(r.error || '还原失败', 'b');
+  } catch(e) { showResult(e.message, 'b'); }
+  els.extRestoreBtn.disabled = false;
+  refresh();
+};
 
 /* ── Save ── */
 document.getElementById('saveServerBtn').onclick = async () => {
