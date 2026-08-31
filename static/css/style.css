@@ -846,12 +846,12 @@ body[data-widget-style="stacked"] .fab-actions { right: 22px; bottom: 22px; }
   border-bottom: 1px dashed var(--border-color);
 }
 .pinned-card .section-icon {
-  width: 34px; height: 34px; font-size: 20px;
+  width: 28px; height: 28px; font-size: 20px;
 }
 .section-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; font-size: 18px;
-  background: var(--icon-bg); border-radius: var(--radius-sm);
+  background: transparent; border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 .group-icon-svg {

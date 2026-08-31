@@ -7,7 +7,7 @@
  *   Auto-backup:        compares server total_links with lastBackupCount → WebDAV snapshot
  *   Manual backup:      popup button → full browser bookmarks HTML → WebDAV PUT
  *   Restore:            PROPFIND list → download → parse → import to browser
- *   New Tab override:   tabs.onCreated listener → redirect chrome://newtab/ to server URL
+ *   New Tab override:   tabs.onCreated & onUpdated listeners → redirect new tab to server URL
  *   Watchdog:           alarm every 5min
  */
 
@@ -80,9 +80,12 @@ const SYNC_ALARM = 'suenweb-sync-watchdog';
 const WATCHDOG_MIN = 5;
 
 /* ── Config ──────────────────────────────────────────────── */
+let _cachedCfg = null;
+
 async function cfg() {
+  if (_cachedCfg) return _cachedCfg;
   const d = await browser.storage.local.get(['serverUrl', 'authToken', 'lastSync', 'lastError', 'webdavUrl', 'webdavUser', 'webdavPass', 'lastBackupCount', 'newtabEnabled']);
-  return {
+  _cachedCfg = {
     serverUrl: (d.serverUrl || '').replace(/\/+$/, ''),
     authToken: d.authToken || '',
     lastSync:  d.lastSync  || null,
@@ -93,10 +96,34 @@ async function cfg() {
     lastBackupCount: d.lastBackupCount || 0,
     newtabEnabled: !!d.newtabEnabled,
   };
+  return _cachedCfg;
 }
 
 async function saveCfg(patch) {
+  if (_cachedCfg) {
+    Object.assign(_cachedCfg, patch);
+    if (patch.serverUrl !== undefined) _cachedCfg.serverUrl = (patch.serverUrl || '').replace(/\/+$/, '');
+    if (patch.webdavUrl !== undefined) _cachedCfg.webdavUrl = (patch.webdavUrl || '').replace(/\/+$/, '');
+  }
   await browser.storage.local.set(patch);
+}
+
+// Preload config cache
+cfg().catch(() => {});
+
+// Listen for storage changes from popup or other contexts
+const _storageApi = (globalThis.chrome && globalThis.chrome.storage) || (globalThis.browser && globalThis.browser.storage);
+if (_storageApi && _storageApi.onChanged) {
+  _storageApi.onChanged.addListener((changes, area) => {
+    if (area === 'local') {
+      if (!_cachedCfg) _cachedCfg = {};
+      for (const key in changes) {
+        _cachedCfg[key] = changes[key].newValue;
+      }
+      if (_cachedCfg.serverUrl) _cachedCfg.serverUrl = _cachedCfg.serverUrl.replace(/\/+$/, '');
+      if (_cachedCfg.webdavUrl) _cachedCfg.webdavUrl = _cachedCfg.webdavUrl.replace(/\/+$/, '');
+    }
+  });
 }
 
 /* ── WebDAV backup ──────────────────────────────────────── */
@@ -814,20 +841,101 @@ async function testWebDAV() {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+ *  NEW TAB OVERRIDE
+ * ═══════════════════════════════════════════════════════════ */
+const _redirectingTabs = new Set();
+
+function isNewTabUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const u = url.toLowerCase().trim();
+  return (
+    u === 'chrome://newtab/' ||
+    u === 'chrome://newtab' ||
+    u === 'chrome://new-tab-page/' ||
+    u === 'chrome://new-tab-page' ||
+    u.startsWith('chrome-search://local-ntp') ||
+    u === 'edge://newtab/' ||
+    u === 'edge://newtab' ||
+    u === 'about:newtab' ||
+    u === 'about:home'
+  );
+}
+
+async function handleNewTabRedirect(tabId, tabUrl, pendingUrl) {
+  if (!tabId) return;
+  if (_redirectingTabs.has(tabId)) return;
+
+  const candidateUrl = pendingUrl || tabUrl || '';
+  if (candidateUrl && !isNewTabUrl(candidateUrl)) {
+    return;
+  }
+
+  const c = await cfg();
+  if (!c.newtabEnabled || !c.serverUrl) return;
+
+  let urlToCheck = candidateUrl;
+  const tabsApi = (globalThis.chrome && globalThis.chrome.tabs) || (globalThis.browser && globalThis.browser.tabs);
+  if (!tabsApi) return;
+
+  if (!urlToCheck) {
+    try {
+      const curTab = await new Promise(resolve => {
+        tabsApi.get(tabId, t => {
+          if (chrome.runtime?.lastError) resolve(null);
+          else resolve(t);
+        });
+      });
+      if (curTab) {
+        urlToCheck = curTab.pendingUrl || curTab.url || '';
+      }
+    } catch {}
+  }
+
+  if (isNewTabUrl(urlToCheck)) {
+    _redirectingTabs.add(tabId);
+    try {
+      await new Promise(resolve => {
+        tabsApi.update(tabId, { url: c.serverUrl }, () => {
+          if (chrome.runtime?.lastError) {}
+          resolve();
+        });
+      });
+    } catch (e) {
+      console.warn('[SuenWeb] newtab redirect failed:', e);
+    } finally {
+      setTimeout(() => _redirectingTabs.delete(tabId), 1500);
+    }
+  }
+}
+
+// Synchronous top-level listener registrations (critical for MV3 wake-up)
+const _tabs = (globalThis.chrome && globalThis.chrome.tabs) || (globalThis.browser && globalThis.browser.tabs);
+if (_tabs) {
+  if (_tabs.onCreated) {
+    _tabs.onCreated.addListener((tab) => {
+      handleNewTabRedirect(tab.id, tab.url, tab.pendingUrl);
+    });
+  }
+  if (_tabs.onUpdated) {
+    _tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      const url = changeInfo.url || tab?.pendingUrl || tab?.url || '';
+      if (url && isNewTabUrl(url)) {
+        handleNewTabRedirect(tabId, tab?.url, changeInfo.url || tab?.pendingUrl);
+      }
+    });
+  }
+  if (_tabs.onRemoved) {
+    _tabs.onRemoved.addListener((tabId) => {
+      _redirectingTabs.delete(tabId);
+    });
+  }
+}
+
 /* ── Init ────────────────────────────────────────────────── */
 async function init() {
   await setupAlarm();
   await setupContextMenu();
-
-  // New Tab override listener
-  chrome.tabs.onCreated.addListener(async (tab) => {
-    const c = await cfg();
-    if (!c.newtabEnabled || !c.serverUrl) return;
-    const url = tab.pendingUrl || tab.url || '';
-    if (url === 'chrome://newtab/' || url === 'about:newtab' || url === 'about:home') {
-      chrome.tabs.update(tab.id, { url: c.serverUrl });
-    }
-  });
 
   // Connect SSE and do initial status check
   setTimeout(async () => {
