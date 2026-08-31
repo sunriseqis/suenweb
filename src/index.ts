@@ -385,7 +385,7 @@ app.post('/api/links', requireAuth, async c => {
       const sortOrder = (maxOrderRow?.max_order ?? -1) + 1;
       const cur = await db
         .prepare('INSERT INTO groups_table (name, icon, type, sort_order) VALUES (?, ?, ?, ?)')
-        .bind(groupName, '📌', groupType, sortOrder)
+        .bind(groupName, '', groupType, sortOrder)
         .run();
       groupId = cur.meta.last_row_id;
       await logAction(db, 'create_group', 'group', { id: groupId, name: groupName });
@@ -861,7 +861,7 @@ app.post('/api/sync/ack', requireAuth, async c => {
   return c.json({ ok: true, acked: ids.length });
 });
 
-app.get('/api/events/stream', async c => {
+app.get('/api/events/stream', requireAuth, async c => {
   const db = c.env.DB;
   const row = await db.prepare('SELECT COALESCE(MAX(id), 0) AS max_id FROM event_log').first<{ max_id: number }>();
   let lastId = row?.max_id || 0;

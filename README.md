@@ -81,7 +81,7 @@ Chrome / Edge（Manifest V3）和 Firefox。装完后：
 - **WebDAV 备份** — 自动把应用书签备份到坚果云等 WebDAV 服务，最大备份数2.
 - **新标签页** — 可选，打开新标签直接跳转到 SuenWeb 主页
 
-插件在设置页面下载。Firefox 版已签名可直接安装，Chrome/Edge 需要开发者模式加载。
+插件在设置页面下载。Chrome/Edge 需要开发者模式加载；Firefox 因未上架商店签名，需在 `about:debugging` 临时加载，或使用开发者版关闭签名校验后安装。
 
 ## 技术栈
 

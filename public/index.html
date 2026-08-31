@@ -2205,6 +2205,10 @@ function loadWidgetCfg(s) {
   if(s.widget_style) _widgetCfg.widget_style = (s.widget_style === 'center-card') ? 'stacked' : s.widget_style;
   if(s.search_engines) _widgetCfg.search_engines = s.search_engines;
   if(s.search_default) _searchEngine = s.search_default;
+  // 过滤掉已下线的引擎，避免出现无效按钮
+  var _knownEngines = _widgetCfg.search_engines.split(',').filter(function(e){ return _ENGINE_MAP[e]; });
+  if (_knownEngines.length) _widgetCfg.search_engines = _knownEngines.join(','); else _widgetCfg.search_engines = 'google,bing,baidu,duckduckgo';
+  if (!_ENGINE_MAP[_searchEngine]) _searchEngine = _knownEngines[0] || 'google';
   if(s.llm_url) _widgetCfg.llm_url = s.llm_url;
   if(s.llm_key) _widgetCfg.llm_key = s.llm_key;
   if(s.llm_model) _widgetCfg.llm_model = s.llm_model;
@@ -2238,8 +2242,7 @@ var _ENGINE_MAP = {
   bing:      { name:'必应',      url:'https://www.bing.com/search?q={q}' },
   baidu:     { name:'百度',      url:'https://www.baidu.com/s?wd={q}' },
   duckduckgo:{ name:'DuckDuckGo', url:'https://duckduckgo.com/?q={q}' },
-  bilibili:  { name:'B站',       url:'https://search.bilibili.com/all?keyword={q}' },
-  github:    { name:'GitHub',   url:'https://github.com/search?q={q}' },
+  yandex:    { name:'Yandex',   url:'https://yandex.com/search/?text={q}' },
 };
 
 function renderSearchEngines(){
