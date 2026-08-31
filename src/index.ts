@@ -90,6 +90,14 @@ async function ensureDatabaseTables(db: D1Database) {
     }
   }
 
+  // Migrate: ensure late-added tables exist on pre-existing databases
+  try {
+    await db.prepare('CREATE TABLE IF NOT EXISTS auth_rate (ip TEXT PRIMARY KEY, fails INTEGER DEFAULT 0, first_fail_ms INTEGER DEFAULT 0, locked_until_ms INTEGER DEFAULT 0)').run();
+    await db.prepare('CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT DEFAULT (datetime(\'now\',\'localtime\')), payload TEXT NOT NULL)').run();
+  } catch (e) {
+    console.warn('table migration warning:', e);
+  }
+
   // Check if settings table exists
   const check = await db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")
@@ -126,6 +134,8 @@ async function ensureDatabaseTables(db: D1Database) {
     )`,
     `CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY DEFAULT 1, last_sync_at TEXT, last_sync_from TEXT)`,
     `CREATE TABLE IF NOT EXISTS auth_tokens (token_hash TEXT PRIMARY KEY, created_at TEXT DEFAULT (datetime('now','localtime')), expires_at INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS auth_rate (ip TEXT PRIMARY KEY, fails INTEGER DEFAULT 0, first_fail_ms INTEGER DEFAULT 0, locked_until_ms INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT DEFAULT (datetime('now','localtime')), payload TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS event_log (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, payload TEXT DEFAULT '{}', created_ms INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS operation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, target TEXT DEFAULT '', detail TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now','localtime')))`,
     `CREATE TABLE IF NOT EXISTS wallpapers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL, category TEXT DEFAULT 'custom', enabled INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0, source_type TEXT DEFAULT 'url', created_at TEXT DEFAULT (datetime('now','localtime')))`,
@@ -176,6 +186,51 @@ async function ensureDatabaseTables(db: D1Database) {
 app.get('/health', c => c.json({ status: 'ok', ts: Date.now() }));
 
 // ═══════════════════════════════════════════════════════════
+//  Auth Rate Limiting (D1-backed, per-IP)
+// ═══════════════════════════════════════════════════════════
+const RATE_MAX_FAILS = 5;
+const RATE_WINDOW_MS = 15 * 60 * 1000;   // 15 min counting window
+const RATE_LOCK_MS = 30 * 60 * 1000;     // lock duration after too many failures
+
+function clientIp(c: any): string {
+  return (c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown').split(',')[0].trim();
+}
+
+async function isLoginLocked(db: D1Database, ip: string): Promise<string | null> {
+  try {
+    const row = await db.prepare('SELECT locked_until_ms FROM auth_rate WHERE ip = ?').bind(ip).first<{ locked_until_ms: number }>();
+    if (row && row.locked_until_ms > Date.now()) {
+      const mins = Math.ceil((row.locked_until_ms - Date.now()) / 60000);
+      return `尝试次数过多，请 ${mins} 分钟后再试`;
+    }
+  } catch {}
+  return null;
+}
+
+async function recordLoginFailure(db: D1Database, ip: string): Promise<void> {
+  try {
+    const now = Date.now();
+    const row = await db.prepare('SELECT fails, first_fail_ms FROM auth_rate WHERE ip = ?').bind(ip).first<{ fails: number; first_fail_ms: number }>();
+    if (!row || now - (row.first_fail_ms || 0) > RATE_WINDOW_MS) {
+      await db.prepare('INSERT INTO auth_rate (ip, fails, first_fail_ms, locked_until_ms) VALUES (?, 1, ?, 0) ON CONFLICT(ip) DO UPDATE SET fails = 1, first_fail_ms = ?, locked_until_ms = 0').bind(ip, now, now).run();
+      return;
+    }
+    const fails = row.fails + 1;
+    if (fails >= RATE_MAX_FAILS) {
+      await db.prepare('UPDATE auth_rate SET fails = ?, locked_until_ms = ? WHERE ip = ?').bind(fails, now + RATE_LOCK_MS, ip).run();
+    } else {
+      await db.prepare('UPDATE auth_rate SET fails = ? WHERE ip = ?').bind(fails, ip).run();
+    }
+  } catch (e) {
+    console.warn('recordLoginFailure failed:', e);
+  }
+}
+
+async function clearLoginFailures(db: D1Database, ip: string): Promise<void> {
+  try { await db.prepare('DELETE FROM auth_rate WHERE ip = ?').bind(ip).run(); } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════
 //  ROUTES — Auth API
 // ═══════════════════════════════════════════════════════════
 app.get('/api/auth/status', async c => {
@@ -184,6 +239,9 @@ app.get('/api/auth/status', async c => {
 });
 
 app.post('/api/auth/setup', async c => {
+  const ip = clientIp(c);
+  const locked = await isLoginLocked(c.env.DB, ip);
+  if (locked) return c.json({ detail: locked }, 429);
   const hash = await getSetting(c.env.DB, 'auth_password_hash', '');
   if (hash) {
     return c.json({ detail: '密码已设置' }, 400);
@@ -195,11 +253,15 @@ app.post('/api/auth/setup', async c => {
   }
   const newHash = await hashPassword(password);
   await setSetting(c.env.DB, 'auth_password_hash', newHash);
+  await clearLoginFailures(c.env.DB, ip);
   const token = await issueAuthToken(c.env.DB);
   return c.json({ ok: true, token });
 });
 
 app.post('/api/auth/login', async c => {
+  const ip = clientIp(c);
+  const locked = await isLoginLocked(c.env.DB, ip);
+  if (locked) return c.json({ detail: locked }, 429);
   const hash = await getSetting(c.env.DB, 'auth_password_hash', '');
   if (!hash) {
     return c.json({ detail: '请先设置密码' }, 400);
@@ -208,8 +270,10 @@ app.post('/api/auth/login', async c => {
   const password = (body.password || '').trim();
   const valid = await verifyPassword(password, hash);
   if (!valid) {
+    await recordLoginFailure(c.env.DB, ip);
     return c.json({ detail: '密码错误' }, 401);
   }
+  await clearLoginFailures(c.env.DB, ip);
   const token = await issueAuthToken(c.env.DB);
   return c.json({ ok: true, token });
 });
@@ -550,8 +614,7 @@ app.put('/api/settings', requireAuth, async c => {
   return c.json({ ok: true });
 });
 
-app.get('/api/config/export', requireAuth, async c => {
-  const db = c.env.DB;
+async function buildExportPayload(db: D1Database) {
   const settingsRows = await db.prepare('SELECT key, value FROM settings').all<any>();
   const settings: Record<string, string> = {};
   for (const r of settingsRows.results || []) {
@@ -562,14 +625,18 @@ app.get('/api/config/export', requireAuth, async c => {
   const wallpapers = (await db.prepare("SELECT name, url, category, enabled, sort_order, source_type FROM wallpapers WHERE category != 'builtin' ORDER BY sort_order").all<any>()).results || [];
   const fonts = (await db.prepare("SELECT name, family, category, cdn_url, language, sort_order FROM fonts WHERE category != 'builtin' ORDER BY sort_order").all<any>()).results || [];
 
-  return c.json({
+  return {
     version: 1,
     exported_at: new Date().toISOString(),
     settings,
     groups,
     wallpapers,
     fonts
-  });
+  };
+}
+
+app.get('/api/config/export', requireAuth, async c => {
+  return c.json(await buildExportPayload(c.env.DB));
 });
 
 app.post('/api/config/import', requireAuth, async c => {
@@ -1290,4 +1357,39 @@ app.get('*', async c => {
   return c.text('Not Found', 404);
 });
 
-export default app;
+// ═══════════════════════════════════════════════════════════
+//  Daily Backup (Cron Trigger)
+//  Prefers R2 binding BACKUP_DB (off-site); falls back to a
+//  D1 table (protects against logical mistakes only).
+// ═══════════════════════════════════════════════════════════
+const BACKUP_KEEP = 30;
+
+async function runBackup(env: Env): Promise<{ where: string; key: string }> {
+  const payload = await buildExportPayload(env.DB);
+  const json = JSON.stringify(payload);
+  const key = 'backup-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '.json';
+
+  if (env.BACKUP_DB) {
+    await env.BACKUP_DB.put(key, json);
+    const list = await env.BACKUP_DB.list({ prefix: 'backup-' });
+    const sorted = list.objects.map(o => ({ key: o.key, t: o.uploaded.getTime() })).sort((a, b) => a.t - b.t);
+    for (const o of sorted.slice(0, Math.max(0, sorted.length - BACKUP_KEEP))) {
+      await env.BACKUP_DB.delete(o.key);
+    }
+    return { where: 'r2', key };
+  }
+
+  await env.DB.prepare('INSERT INTO backups (payload) VALUES (?)').bind(json).run();
+  await env.DB.prepare('DELETE FROM backups WHERE id NOT IN (SELECT id FROM backups ORDER BY id DESC LIMIT ?)').bind(BACKUP_KEEP).run();
+  return { where: 'd1', key };
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext) {
+    return runBackup(env).then(
+      r => console.log(`[backup] stored ${r.key} in ${r.where}`),
+      e => console.error('[backup] failed:', e)
+    );
+  }
+};

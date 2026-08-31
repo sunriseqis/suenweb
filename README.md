@@ -10,7 +10,7 @@
 
 ## 功能
 
-- **云端与本地双部署**：支持部署到 **Cloudflare Workers (D1 + 免费 Workers AI)**，也支持 Docker / Python 本地部署
+- **云端与本地双部署**：支持部署到 **Cloudflare Workers (D1 + 免费 Workers AI)**，也支持 Docker / Python 本地部署（已归档至 `legacy-python` 标签）
 - **内置免费 AI 补全**：**无需任何 API Key**，开箱即用一键为书签智能生成中文简短描述
 - 分组管理（固定组 + Tab 组），可拖拽排序，紧凑/详情/图标三种展示模式
 - 固定组支持单列/多列自由排列，多列自动智能填充
@@ -19,6 +19,8 @@
 - 字体系统：4 款内置中文字体，支持自定义 CDN
 - 主题：5 种预设、8 种配色、4 种视觉风格、毛玻璃/图案/渐变/纯色背景
 - 编辑锁模式，防误操作
+- 登录限速（失败过多自动锁定），防暴力破解
+- 每日自动备份（保留 30 份，支持 R2 异地容灾）
 - 书签导入导出（Netscape HTML），配置全量备份（JSON）
 - 重复链接、失效链接检测清理
 - 密码保护（PBKDF2-SHA256）
@@ -65,28 +67,11 @@
 - 打开 Worker 概览页的 **访问 (Visit)** 按钮，地址为 `https://<项目名>.<你的子域>.workers.dev`
 - 日常更新：`git push` 到 `main` 即自动重新构建发布，无需任何手动操作
 
-> 🌐 进阶操作（绑定自定义域名、免费 AI 说明）见 [DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md)。
-
-### 方式二：Docker 本地部署
-
-```bash
-git clone https://github.com/sunriseqis/suenweb.git
-cd suenweb
-docker compose up -d
-# 访问 http://localhost:5080
-```
-
-### 方式三：裸机 Python 部署
-需求：Python 3.10+
-
-```bash
-git clone https://github.com/sunriseqis/suenweb.git
-cd suenweb
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-python3 -m uvicorn app:app --host 0.0.0.0 --port 5000
-```
-
+> 🌐 进阶操作（绑定自定义域名、免费 AI 说明）见 [DEPLOY_CLOUDFLARE.md](DEPLOY_CLOUDFLARE.md)。国内直连建议绑定自定义域名（`workers.dev` 域名在大陆被阻断，自有域名可正常访问）。
+>
+> 🛟 **自动备份**：每天自动全量备份（设置、分组、链接、壁纸、字体）。默认存 30 份；如需异地容灾，在 Cloudflare 创建 R2 桶并在 Worker 绑定中添加 R2（变量名 `BACKUP_DB`），备份会自动改存 R2。
+>
+> 📦 旧版 Docker / Python 部署已归档：`git checkout legacy-python` 可获取完整旧版。
 
 ## 浏览器插件
 

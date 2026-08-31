@@ -2,6 +2,7 @@ export interface Env {
   DB: D1Database;
   AI?: any;
   ASSETS?: Fetcher;
+  BACKUP_DB?: R2Bucket;
 }
 
 export interface Group {
