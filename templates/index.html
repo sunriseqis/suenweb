@@ -63,9 +63,9 @@
           <h4>浏览器插件 (推荐)</h4>
           <p>自动双向同步 Chrome / Edge / Firefox</p>
           <div class="plugin-list">
-            <a href="/extension/download/crx" title="下载 .crx 安装包 (拖入 chrome://extensions 即可安装)">🟢 Chrome / Edge (.crx)</a>
+            <a href="/extension/download/zip" title="Chrome / Edge 推荐：下载后解压，在扩展页面「加载已解压的扩展程序」">🟢 Chrome / Edge (.zip 解压加载)</a>
+            <a href="/extension/download/crx" title="Edge / 360 / Brave 等支持：开启开发者模式拖入安装">📦 Edge / 其它浏览器 (.crx)</a>
             <a href="/extension/download/firefox">🦊 Firefox (.xpi)</a>
-            <a href="/extension/download/zip" style="opacity:0.75" title="源码 ZIP 压缩包 (解压后加载)">📦 源码 ZIP</a>
           </div>
         </div>
         <div class="onboard-opt">
@@ -1440,12 +1440,12 @@ function _buildSettingsSection(tab) {
       '<div class="settings-card">'+
         '<p class="card-desc">支持一键收藏到 SuenWeb、新标签页替换及浏览器扩展同步备份</p>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-          '<a href="/extension/download/crx" class="btn btn-primary" style="text-align:center;text-decoration:none">🟢 Chrome / Edge (.crx)</a>'+
+          '<a href="/extension/download/zip" class="btn btn-primary" style="text-align:center;text-decoration:none">🟢 Chrome / Edge (.zip)</a>'+
           '<a href="/extension/download/firefox" class="btn btn-secondary" style="text-align:center;text-decoration:none">🦊 Firefox (.xpi)</a>'+
         '</div>'+
         '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">'+
-          '<span class="card-desc" style="margin:0;font-size:11px;color:var(--text-secondary)">💡 Chrome 安装：打开 <code>chrome://extensions</code> 开启开发者模式，拖入 .crx 文件即可</span>'+
-          '<a href="/extension/download/zip" style="font-size:11px;color:var(--text-muted);text-decoration:none;white-space:nowrap;margin-left:8px">源码 ZIP</a>'+
+          '<span class="card-desc" style="margin:0;font-size:11px;color:var(--text-secondary)">💡 Chrome 安装：下载 zip 解压后，在 <code>chrome://extensions</code> 点击「加载已解压的扩展程序」</span>'+
+          '<a href="/extension/download/crx" style="font-size:11px;color:var(--text-muted);text-decoration:none;white-space:nowrap;margin-left:8px">Edge/其它 (.crx)</a>'+
         '</div>'+
       '</div>'+
 
