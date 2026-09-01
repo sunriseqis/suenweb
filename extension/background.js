@@ -129,13 +129,15 @@ if (_storageApi && _storageApi.onChanged) {
 /* ── WebDAV backup ──────────────────────────────────────── */
 let _backupDebounce = null;
 
-function _backupFileName(count) {
-  // Format: YYMMDD-COUNT-seq (260607-114-0, 260607-114-1)
+function _formatBackupDate() {
   const d = new Date();
   const yy = String(d.getFullYear()).slice(-2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
-  return `suenweb-${yy}${mm}${dd}-${count}-`;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return { dateStr: `${yy}${mm}${dd}`, timeStr: `${hh}${min}${ss}` };
 }
 
 async function _backupBookmarksHTML() {
@@ -165,45 +167,93 @@ async function backupToWebDAV() {
   _backupDebounce = setTimeout(() => _doBackup(c), 3000);
 }
 
-async function _doBackup(c, count) {
-  if (count == null) {
-    const tree = await browser.bookmarks.getTree();
-    count = _countBookmarks(tree);
+async function _doBackup(c, bookmarkCount) {
+  if (bookmarkCount == null) {
+    try {
+      const tree = await browser.bookmarks.getTree();
+      bookmarkCount = _countBookmarks(tree);
+    } catch {
+      bookmarkCount = 0;
+    }
   }
-  const blob = await _backupBookmarksHTML();
+
   const auth = btoa(`${c.webdavUser}:${c.webdavPass}`);
   const headers = { 'Authorization': `Basic ${auth}` };
-
-  // 坚果云 etc. need a subdirectory — use base + /SuenWeb/
   const dir = c.webdavUrl.replace(/\/$/, '') + '/SuenWeb';
-  const prefix = _backupFileName(count);
-  const filename = prefix + '0.html';
-  const url = `${dir}/${filename}`;
 
-  // Ensure directory exists
+  // Ensure backup directory exists on WebDAV
   try { await fetch(dir, { method: 'MKCOL', headers }); } catch {}
 
-  // Upload
-  const resp = await fetch(url, {
-    method: 'PUT',
-    headers: { ...headers, 'Content-Type': 'text/html' },
-    body: blob
-  });
-  if (!resp.ok) throw new Error(`WebDAV ${resp.status}`);
+  const { dateStr, timeStr } = _formatBackupDate();
+  const results = { app: null, bookmarks: null, extensions: null };
+
+  // 1. Synchronize & Backup SuenWeb App Data (Full JSON snapshot: groups, links, settings, wallpapers, fonts, ext_repo)
+  if (c.serverUrl && c.authToken) {
+    try {
+      const appData = await apiFetch('/api/config/export');
+      const appBlob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+      const appFileName = `suenweb-app-${dateStr}-${timeStr}.json`;
+      const respApp = await fetch(`${dir}/${appFileName}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: appBlob
+      });
+      if (respApp.ok) {
+        results.app = appFileName;
+        console.log(`[SuenWeb] app data backup: ${appFileName}`);
+      }
+    } catch (e) {
+      console.warn('[SuenWeb] app data backup failed:', e);
+    }
+  }
+
+  // 2. Backup Browser Bookmarks (HTML)
+  try {
+    const bookmarkBlob = await _backupBookmarksHTML();
+    const bmFileName = `suenweb-bookmarks-${dateStr}-${bookmarkCount}.html`;
+    const respBm = await fetch(`${dir}/${bmFileName}`, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'text/html' },
+      body: bookmarkBlob
+    });
+    if (respBm.ok) {
+      results.bookmarks = bmFileName;
+      console.log(`[SuenWeb] bookmarks backup: ${bmFileName}`);
+    }
+  } catch (e) {
+    console.warn('[SuenWeb] bookmarks backup failed:', e);
+  }
+
+  // 3. Backup Installed Browser Extensions
+  try {
+    const exts = await collectInstalledExtensions();
+    if (exts && exts.length) {
+      const extBlob = new Blob([JSON.stringify({ browser: currentBrowserType(), exported_at: new Date().toISOString(), extensions: exts }, null, 2)], { type: 'application/json' });
+      const extFileName = `suenweb-extensions-${dateStr}.json`;
+      await fetch(`${dir}/${extFileName}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: extBlob
+      });
+      results.extensions = extFileName;
+    }
+  } catch (e) {
+    console.warn('[SuenWeb] extensions WebDAV backup failed:', e);
+  }
 
   const now = new Date().toISOString();
   await saveCfg({ lastBackupAt: now });
-  console.log(`[SuenWeb] backup: ${filename} (${count} bookmarks)`);
+  return results;
 }
 
 /* ── Manual backup ───────────────────────────────────────── */
 async function manualBackup() {
   const c = await cfg();
   if (!c.webdavUrl || !c.webdavUser) throw new Error('WebDAV 未配置');
-  await _doBackup(c);
+  const r = await _doBackup(c);
   const tree = await browser.bookmarks.getTree();
   const count = _countBookmarks(tree);
-  return { ok: true, name: _backupFileName(count) + '0.html', count };
+  return { ok: true, name: r.app || r.bookmarks || '备份完成', appName: r.app, bmName: r.bookmarks, count };
 }
 
 /* ── List backups from WebDAV ────────────────────────────── */
@@ -213,7 +263,7 @@ async function listBackups() {
   const base = c.webdavUrl.replace(/\/$/, '') + '/SuenWeb';
   const auth = btoa(`${c.webdavUser}:${c.webdavPass}`);
 
-  // PROPFIND to list .html files
+  // PROPFIND to list .json and .html files
   const body = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:">
   <d:prop>
@@ -230,7 +280,6 @@ async function listBackups() {
   if (!resp.ok) return { ok: false, error: `WebDAV ${resp.status}` };
 
   const xml = await resp.text();
-  // Parse href, getlastmodified, getcontentlength
   const entries = [];
   const re = /<d:response>([\s\S]*?)<\/d:response>/g;
   let m;
@@ -238,13 +287,26 @@ async function listBackups() {
     const block = m[1];
     const href = (block.match(/<d:href>(.*?)<\/d:href>/) || [])[1] || '';
     const name = href.split('/').pop().split('?')[0];
-    if (!name || !name.endsWith('.html') || !name.startsWith('suenweb-')) continue;
+    if (!name || (!name.endsWith('.html') && !name.endsWith('.json')) || !name.startsWith('suenweb-')) continue;
+    
+    let category = 'bookmarks';
+    let label = '📑 浏览器书签';
+    if (name.startsWith('suenweb-app-') || (name.endsWith('.json') && !name.startsWith('suenweb-extensions-'))) {
+      category = 'app';
+      label = '🌐 SuenWeb 应用全量数据';
+    } else if (name.startsWith('suenweb-extensions-')) {
+      category = 'extensions';
+      label = '🧩 浏览器扩展备份';
+    }
+
     const mod = (block.match(/<d:getlastmodified>(.*?)<\/d:getlastmodified>/) || [])[1] || '';
     const sizeRaw = (block.match(/<d:getcontentlength>(.*?)<\/d:getcontentlength>/) || [])[1] || '0';
     const size = parseInt(sizeRaw);
     entries.push({
       name,
       href,
+      category,
+      label,
       date: mod ? new Date(mod).toLocaleString('zh-CN') : '—',
       size: size > 1024 ? (size / 1024).toFixed(1) + ' KB' : size + ' B',
       _date: mod ? new Date(mod).getTime() : 0,
@@ -264,7 +326,7 @@ async function restoreBackup(index) {
   if (index < 0 || index >= backups.length) return { ok: false, error: '无效的备份索引' };
 
   const entry = backups[index];
-  const base = c.webdavUrl;
+  const base = c.webdavUrl.replace(/\/$/, '') + '/SuenWeb';
   const auth = btoa(`${c.webdavUser}:${c.webdavPass}`);
 
   // Download the backup file
@@ -273,11 +335,48 @@ async function restoreBackup(index) {
   });
   if (!resp.ok) return { ok: false, error: `下载失败: ${resp.status}` };
 
-  const html = await resp.text();
+  const content = await resp.text();
 
-  // Parse and import
-  const imported = await _importBookmarksHTML(html);
-  return { ok: true, count: imported, name: entry.name };
+  // 1. If App Data Backup (JSON)
+  if (entry.category === 'app' || (entry.name.endsWith('.json') && !entry.name.startsWith('suenweb-extensions-'))) {
+    if (!c.serverUrl || !c.authToken) {
+      return { ok: false, error: '请先配置 SuenWeb 服务器地址与令牌' };
+    }
+    const jsonData = JSON.parse(content);
+    const r = await apiFetch('/api/config/import', {
+      method: 'POST',
+      body: JSON.stringify(jsonData)
+    });
+    return {
+      ok: true,
+      type: 'app',
+      count: r.imported?.groups || 0,
+      links: r.imported?.links || 0,
+      name: entry.name
+    };
+  }
+
+  // 2. If Extensions Backup (JSON)
+  if (entry.category === 'extensions' || entry.name.startsWith('suenweb-extensions-')) {
+    if (!c.serverUrl || !c.authToken) {
+      return { ok: false, error: '请先配置 SuenWeb 服务器地址与令牌' };
+    }
+    const extData = JSON.parse(content);
+    await apiFetch('/api/extensions', {
+      method: 'POST',
+      body: JSON.stringify(extData)
+    });
+    return {
+      ok: true,
+      type: 'extensions',
+      count: extData.extensions?.length || 0,
+      name: entry.name
+    };
+  }
+
+  // 3. If Bookmarks Backup (HTML)
+  const imported = await _importBookmarksHTML(content);
+  return { ok: true, type: 'bookmarks', count: imported, name: entry.name };
 }
 
 async function _importBookmarksHTML(html) {

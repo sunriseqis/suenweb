@@ -1913,6 +1913,7 @@ function _bindSettingsEvents() {
             }
             if (data.wallpapers) previewHtml += '<span>壁纸源：' + data.wallpapers.length + ' 个</span>';
             if (data.fonts) previewHtml += '<span>字体：' + data.fonts.length + ' 个</span>';
+            if (data.extensions) previewHtml += '<span>已备份插件：' + data.extensions.length + ' 个</span>';
             previewHtml += '</div>';
             previewHtml += '<div style="color:var(--warning);margin-top:8px;font-size:12px">⚠️ 导入将覆盖现有的分组和链接数据</div>';
             importPreviewContent.innerHTML = previewHtml;

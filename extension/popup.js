@@ -150,12 +150,18 @@ async function refresh() {
 
 /* ── Backup ── */
 els.backupBtn.onclick = async () => {
-  showResult('备份中...', 'i');
+  showResult('正在同步并备份至 WebDAV...', 'i');
   els.backupBtn.disabled = true;
   try {
     const r = await browser.runtime.sendMessage({ action: 'manualBackup' });
-    if (r.ok) showResult('备份完成：' + r.name, 'g');
-    else showResult(r.error || '备份失败', 'b');
+    if (r.ok) {
+      const parts = [];
+      if (r.appName) parts.push('应用全量数据');
+      if (r.bmName) parts.push('书签 (' + r.count + ')');
+      showResult('备份成功：' + (parts.join(' + ') || r.name), 'g');
+    } else {
+      showResult(r.error || '备份失败', 'b');
+    }
   } catch(e) { showResult(e.message, 'b'); }
   els.backupBtn.disabled = false;
   refresh();
@@ -176,7 +182,7 @@ els.restoreBtn.onclick = async () => {
       div.dataset.idx = i;
       const nameSpan = document.createElement('span');
       nameSpan.className = 'rn';
-      nameSpan.textContent = b.name;
+      nameSpan.textContent = (b.label ? b.label + ' · ' : '') + b.name;
       const sizeSpan = document.createElement('span');
       sizeSpan.className = 'rs';
       sizeSpan.textContent = b.size + ' · ' + b.date;
@@ -198,8 +204,17 @@ els.restoreBtn.onclick = async () => {
       showResult('还原中...', 'i');
       try {
         const rr = await browser.runtime.sendMessage({ action: 'restoreBackup', index: sel });
-        if (rr.ok) showResult('还原完成：' + rr.count + ' 个书签', 'g');
-        else showResult(rr.error || '还原失败', 'b');
+        if (rr.ok) {
+          if (rr.type === 'app') {
+            showResult('应用全量还原成功：' + rr.count + ' 组，' + rr.links + ' 链接', 'g');
+          } else if (rr.type === 'extensions') {
+            showResult('扩展列表还原成功：' + rr.count + ' 个插件', 'g');
+          } else {
+            showResult('浏览器书签还原成功：' + rr.count + ' 个书签', 'g');
+          }
+        } else {
+          showResult(rr.error || '还原失败', 'b');
+        }
       } catch(e) { showResult(e.message, 'b'); }
       els.restorePicker.style.display = 'none';
       refresh();

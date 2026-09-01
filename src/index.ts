@@ -620,12 +620,14 @@ async function buildExportPayload(db: D1Database) {
   const settingsRows = await db.prepare('SELECT key, value FROM settings').all<any>();
   const settings: Record<string, string> = {};
   for (const r of settingsRows.results || []) {
+    if (r.key === 'auth_password_hash') continue;
     settings[r.key] = r.value;
   }
 
   const groups = await getAllData(db);
   const wallpapers = (await db.prepare("SELECT name, url, category, enabled, sort_order, source_type FROM wallpapers WHERE category != 'builtin' ORDER BY sort_order").all<any>()).results || [];
   const fonts = (await db.prepare("SELECT name, family, category, cdn_url, language, sort_order FROM fonts WHERE category != 'builtin' ORDER BY sort_order").all<any>()).results || [];
+  const extensions = (await db.prepare("SELECT ext_id, name, version, url, browser FROM ext_repo ORDER BY browser ASC, name COLLATE NOCASE ASC").all<any>()).results || [];
 
   return {
     version: 1,
@@ -633,7 +635,8 @@ async function buildExportPayload(db: D1Database) {
     settings,
     groups,
     wallpapers,
-    fonts
+    fonts,
+    extensions
   };
 }
 
@@ -648,10 +651,11 @@ app.post('/api/config/import', requireAuth, async c => {
   }
 
   const db = c.env.DB;
-  const imported = { settings: 0, groups: 0, links: 0, wallpapers: 0, fonts: 0 };
+  const imported = { settings: 0, groups: 0, links: 0, wallpapers: 0, fonts: 0, extensions: 0 };
 
   if (body.settings && typeof body.settings === 'object') {
     for (const [k, v] of Object.entries(body.settings)) {
+      if (k === 'auth_password_hash') continue;
       await setSetting(db, k, String(v));
       imported.settings++;
     }
@@ -663,8 +667,16 @@ app.post('/api/config/import', requireAuth, async c => {
 
     for (const g of body.groups) {
       const cur = await db
-        .prepare('INSERT INTO groups_table (name, icon, display_mode, sort_order) VALUES (?, ?, ?, ?)')
-        .bind(g.name || '', g.icon || '📁', g.display_mode || 'compact', g.sort_order || 0)
+        .prepare('INSERT INTO groups_table (name, icon, type, display_mode, layout_mode, sort_order, is_imported) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(
+          g.name || '',
+          g.icon || '📁',
+          g.type || 'tab',
+          g.display_mode || 'compact',
+          g.layout_mode || 'single',
+          g.sort_order || 0,
+          g.is_imported || 0
+        )
         .run();
       const gid = cur.meta.last_row_id;
       imported.groups++;
@@ -672,8 +684,18 @@ app.post('/api/config/import', requireAuth, async c => {
       if (Array.isArray(g.links)) {
         for (const l of g.links) {
           await db
-            .prepare('INSERT INTO links (group_id, title, url, description, icon, icon_type, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .bind(gid, l.title || '', l.url || '', l.description || '', l.icon || '', l.icon_type || 'auto', l.sort_order || 0)
+            .prepare('INSERT INTO links (group_id, title, url, description, icon, icon_type, sort_order, is_imported, synced_to_browser) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(
+              gid,
+              l.title || '',
+              l.url || '',
+              l.description || '',
+              l.icon || '',
+              l.icon_type || 'auto',
+              l.sort_order || 0,
+              l.is_imported || 0,
+              l.synced_to_browser !== undefined ? (l.synced_to_browser ? 1 : 0) : 1
+            )
             .run();
           imported.links++;
         }
@@ -704,6 +726,22 @@ app.post('/api/config/import', requireAuth, async c => {
       } catch {}
     }
   }
+
+  if (Array.isArray(body.extensions)) {
+    for (const e of body.extensions) {
+      if (!e.ext_id) continue;
+      try {
+        await db
+          .prepare('INSERT INTO ext_repo (ext_id, name, version, url, browser) VALUES (?, ?, ?, ?, ?) ON CONFLICT(ext_id, browser) DO UPDATE SET name=excluded.name, version=excluded.version, url=excluded.url, updated_at=datetime(\'now\',\'localtime\')')
+          .bind(e.ext_id, e.name || e.ext_id, e.version || '', e.url || '', e.browser || 'chrome')
+          .run();
+        imported.extensions++;
+      } catch {}
+    }
+  }
+
+  await notifyChange(db, 'sync_imported', imported);
+  await logAction(db, 'import_config', 'config', imported);
 
   return c.json({ ok: true, imported });
 });
