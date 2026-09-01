@@ -28,6 +28,7 @@ import {
 } from './ai';
 import { fetchWallpaperUrl } from './wallpaper';
 import { fetchFontCss, fetchFontWoff2 } from './fonts';
+import { proxyFavicon, BUILTIN_ICONS, DEFAULT_ICON_SVG } from './icons';
 import { createExtensionZip, getExtensionCrx, getExtensionXpi, EXTENSION_ID } from './extensions';
 
 const app = new Hono<{ Bindings: Env }>();
