@@ -16,8 +16,9 @@ venv/
 .venv/
 *.sqlite3
 *.sqlite
-*.xpi
 *.xpi.bak
+!extension/*.xpi
+!public/extension/*.xpi
 lint-result.txt
 node_modules/
 .wrangler/

@@ -11,6 +11,8 @@
     "deploy": "wrangler deploy",
     "db:setup:local": "wrangler d1 execute suenweb-db --local --file=./schema.sql",
     "db:setup:remote": "wrangler d1 execute suenweb-db --remote --file=./schema.sql",
+    "pack:ext": "node scripts/pack-extension.mjs",
+    "sync:ext": "node scripts/pack-extension.mjs",
     "build": "tsc --noEmit"
   },
   "keywords": ["navigation", "cloudflare-workers", "d1", "workers-ai"],

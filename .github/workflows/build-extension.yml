@@ -1,0 +1,51 @@
+name: Build and Pack Extension CRX
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'extension/**'
+      - 'scripts/**'
+      - 'templates/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-pack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Pack CRX, XPI and sync extensions
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        run: |
+          node scripts/pack-extension.mjs
+
+      - name: Commit and push compiled extension artifacts
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add extension/suenweb.crx extension/suenweb-firefox.xpi \
+                  public/extension/suenweb.crx public/extension/suenweb-firefox.xpi \
+                  public/extension/suenweb-extension-chrome.zip public/extension/suenweb-extension-firefox.zip \
+                  src/extensions.ts public/index.html
+          if git diff --staged --quiet; then
+            echo "No changes in extension builds to commit."
+          else
+            git commit -m "chore(ext): auto-pack latest suenweb.crx and xpi [skip ci]"
+            git push
+          fi

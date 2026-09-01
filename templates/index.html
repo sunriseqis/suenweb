@@ -63,8 +63,9 @@
           <h4>浏览器插件 (推荐)</h4>
           <p>自动双向同步 Chrome / Edge / Firefox</p>
           <div class="plugin-list">
-            <a href="/extension/download/chrome">🟢 Chrome / Edge</a>
-            <a href="/extension/download/firefox">🦊 Firefox</a>
+            <a href="/extension/download/crx" title="下载 .crx 安装包 (拖入 chrome://extensions 即可安装)">🟢 Chrome / Edge (.crx)</a>
+            <a href="/extension/download/firefox">🦊 Firefox (.xpi)</a>
+            <a href="/extension/download/zip" style="opacity:0.75" title="源码 ZIP 压缩包 (解压后加载)">📦 源码 ZIP</a>
           </div>
         </div>
         <div class="onboard-opt">
@@ -1437,12 +1438,15 @@ function _buildSettingsSection(tab) {
 
       '<div class="settings-section-title">浏览器插件</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">下载插件后，右键即可收藏到 SuenWeb，并支持在插件端一键备份/还原浏览器插件</p>'+
-        '<div style="display:flex;gap:8px">'+
-          '<a href="/extension/download/chrome" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Chrome / Edge 插件</a>'+
-          '<a href="/extension/download/firefox" class="btn btn-secondary" style="flex:1;text-align:center;text-decoration:none">Firefox 插件</a>'+
+        '<p class="card-desc">支持一键收藏到 SuenWeb、新标签页替换及浏览器扩展同步备份</p>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+          '<a href="/extension/download/crx" class="btn btn-primary" style="text-align:center;text-decoration:none">🟢 Chrome / Edge (.crx)</a>'+
+          '<a href="/extension/download/firefox" class="btn btn-secondary" style="text-align:center;text-decoration:none">🦊 Firefox (.xpi)</a>'+
         '</div>'+
-        '<p class="card-desc" style="margin-top:8px">下载后在扩展管理页加载已解压的文件夹即可使用</p>'+
+        '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">'+
+          '<span class="card-desc" style="margin:0;font-size:11px;color:var(--text-secondary)">💡 Chrome 安装：打开 <code>chrome://extensions</code> 开启开发者模式，拖入 .crx 文件即可</span>'+
+          '<a href="/extension/download/zip" style="font-size:11px;color:var(--text-muted);text-decoration:none;white-space:nowrap;margin-left:8px">源码 ZIP</a>'+
+        '</div>'+
       '</div>'+
 
       '<div class="settings-section-title">云端已备份插件 (<span id="extBackupCount">0</span>)</div>'+

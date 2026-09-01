@@ -28,8 +28,7 @@ import {
 } from './ai';
 import { fetchWallpaperUrl } from './wallpaper';
 import { fetchFontCss, fetchFontWoff2 } from './fonts';
-import { proxyFavicon, BUILTIN_ICONS, DEFAULT_ICON_SVG } from './icons';
-import { createExtensionZip } from './extensions';
+import { createExtensionZip, getExtensionCrx, getExtensionXpi, EXTENSION_ID } from './extensions';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -1200,7 +1199,29 @@ app.get('/api/builtin-icons', c => {
 // ═══════════════════════════════════════════════════════════
 //  ROUTES — Extension Downloads
 // ═══════════════════════════════════════════════════════════
+// Chrome / Edge CRX3
+app.get('/extension/download/crx', c => {
+  const crx = getExtensionCrx();
+  return new Response(crx, {
+    headers: {
+      'Content-Type': 'application/x-chrome-extension',
+      'Content-Disposition': 'attachment; filename=suenweb.crx'
+    }
+  });
+});
+
 app.get('/extension/download/chrome', c => {
+  const crx = getExtensionCrx();
+  return new Response(crx, {
+    headers: {
+      'Content-Type': 'application/x-chrome-extension',
+      'Content-Disposition': 'attachment; filename=suenweb.crx'
+    }
+  });
+});
+
+// Chrome source ZIP (unpacked loading)
+app.get('/extension/download/zip', c => {
   const zip = createExtensionZip('chrome');
   return new Response(zip, {
     headers: {
@@ -1210,12 +1231,23 @@ app.get('/extension/download/chrome', c => {
   });
 });
 
+// Firefox XPI / ZIP
 app.get('/extension/download/firefox', c => {
-  const zip = createExtensionZip('firefox');
-  return new Response(zip, {
+  const xpi = getExtensionXpi();
+  return new Response(xpi, {
     headers: {
-      'Content-Type': 'application/zip',
-      'Content-Disposition': 'attachment; filename=suenweb-extension-firefox.zip'
+      'Content-Type': 'application/x-xpinstall',
+      'Content-Disposition': 'attachment; filename=suenweb-firefox.xpi'
+    }
+  });
+});
+
+app.get('/extension/download/xpi', c => {
+  const xpi = getExtensionXpi();
+  return new Response(xpi, {
+    headers: {
+      'Content-Type': 'application/x-xpinstall',
+      'Content-Disposition': 'attachment; filename=suenweb-firefox.xpi'
     }
   });
 });
