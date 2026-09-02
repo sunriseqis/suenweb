@@ -154,13 +154,16 @@ els.backupBtn.onclick = async () => {
   els.backupBtn.disabled = true;
   try {
     const r = await browser.runtime.sendMessage({ action: 'manualBackup' });
-    if (r.ok) {
-      const parts = [];
-      if (r.appName) parts.push('应用全量数据');
-      if (r.bmName) parts.push('书签 (' + r.count + ')');
-      showResult('备份成功：' + (parts.join(' + ') || r.name), 'g');
+    const parts = [];
+    if (r.appName) parts.push('应用全量数据');
+    if (r.bmName) parts.push('书签 (' + r.count + ')');
+    if (r.extName) parts.push('扩展列表');
+    if (r.ok && !(r.errors && r.errors.length)) {
+      showResult('备份成功：' + parts.join(' + '), 'g');
+    } else if (r.ok) {
+      showResult('部分失败：已上传 ' + (parts.join(' + ') || '无') + '；' + r.errors.join('；'), 'b');
     } else {
-      showResult(r.error || '备份失败', 'b');
+      showResult('备份失败：' + ((r.errors && r.errors.join('；')) || r.error || '未知错误'), 'b');
     }
   } catch(e) { showResult(e.message, 'b'); }
   els.backupBtn.disabled = false;
@@ -301,8 +304,9 @@ els.testWebdavBtn.onclick = async () => {
   showResult('测试中...', 'i'); els.testWebdavBtn.disabled = true;
   try {
     const r = await browser.runtime.sendMessage({ action: 'testWebDAV' });
-    if (r.ok) showResult(r.writable === false ? '只读 (HTTP ' + r.status + ')' : 'WebDAV 连接成功', r.writable === false ? 'b' : 'g');
-    else showResult(r.error || '连接失败', 'b');
+    if (r.ok) {
+      showResult(r.writable === false ? ('连接正常但无法写入: ' + (r.error || 'HTTP ' + r.status)) : 'WebDAV 连接成功', r.writable === false ? 'b' : 'g');
+    } else showResult(r.error || '连接失败', 'b');
   } catch(e) { showResult(e.message, 'b'); }
   els.testWebdavBtn.disabled = false;
 };

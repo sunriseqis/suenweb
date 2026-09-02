@@ -127,6 +127,7 @@ if (_storageApi && _storageApi.onChanged) {
 }
 
 /* ── WebDAV backup ──────────────────────────────────────── */
+/* ── WebDAV backup ──────────────────────────────────────── */
 let _backupDebounce = null;
 
 function _formatBackupDate() {
@@ -140,13 +141,12 @@ function _formatBackupDate() {
   return { dateStr: `${yy}${mm}${dd}`, timeStr: `${hh}${min}${ss}` };
 }
 
-async function _backupBookmarksHTML() {
-  const tree = await browser.bookmarks.getTree();
-  const html = _bookmarksToHTML(tree);
-  return new Blob(['<!DOCTYPE NETSCAPE-Bookmark-file-1>\n' +
+function _bookmarksToNetscapeHTML(nodes) {
+  const html = _bookmarksToHTML(nodes);
+  return '<!DOCTYPE NETSCAPE-Bookmark-file-1>\n' +
     '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n' +
     '<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n' +
-    html + '</DL><p>\n'], { type: 'text/html' });
+    html + '</DL><p>\n';
 }
 
 function _countBookmarks(nodes) {
@@ -158,13 +158,63 @@ function _countBookmarks(nodes) {
   return n;
 }
 
+function _davAuth(c) {
+  const user = String(c.webdavUser || '');
+  const pass = String(c.webdavPass || '');
+  try {
+    return 'Basic ' + btoa(unescape(encodeURIComponent(`${user}:${pass}`)));
+  } catch {
+    return 'Basic ' + btoa(`${user}:${pass}`);
+  }
+}
+
+function _davFailReason(resp) {
+  if (resp.redirected) return `请求被重定向到 ${resp.url}（请检查 WebDAV 地址是否精确到目录）`;
+  if (resp.status === 401 || resp.status === 403) return `认证失败 (HTTP ${resp.status})`;
+  if (resp.status === 404) return '目录或路径不存在 (HTTP 404)';
+  if (resp.status === 409) return '冲突或父目录不存在 (HTTP 409)';
+  if (resp.status === 507) return '存储空间不足 (HTTP 507)';
+  return `HTTP ${resp.status} ${resp.statusText || ''}`.trim();
+}
+
+async function _davPut(primaryUrl, fallbackUrl, contentType, content, headers) {
+  let resp;
+  try {
+    resp = await fetch(primaryUrl, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': contentType },
+      body: content
+    });
+    if (resp.ok && !resp.redirected) return { ok: true, url: primaryUrl };
+  } catch (e) {
+    if (!fallbackUrl) throw e;
+  }
+
+  // If primary url failed (404/409/etc.) and fallback url is available, try fallback
+  if (fallbackUrl && (!resp || resp.status === 404 || resp.status === 409 || !resp.ok)) {
+    const resp2 = await fetch(fallbackUrl, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': contentType },
+      body: content
+    });
+    if (resp2.ok && !resp2.redirected) return { ok: true, url: fallbackUrl };
+    throw new Error(_davFailReason(resp2));
+  }
+
+  if (!resp) throw new Error('网络请求失败');
+  throw new Error(_davFailReason(resp));
+}
+
 async function backupToWebDAV() {
   const c = await cfg();
   if (!c.webdavUrl || !c.webdavUser) return;
 
-  // Debounce for auto-triggers
   if (_backupDebounce) clearTimeout(_backupDebounce);
-  _backupDebounce = setTimeout(() => _doBackup(c), 3000);
+  _backupDebounce = setTimeout(() => {
+    _doBackup(c).then(r => {
+      if (r.errors && r.errors.length) console.warn('[SuenWeb] auto-backup partial errors:', r.errors);
+    }).catch(e => console.warn('[SuenWeb] auto-backup failed:', e));
+  }, 3000);
 }
 
 async function _doBackup(c, bookmarkCount) {
@@ -177,50 +227,59 @@ async function _doBackup(c, bookmarkCount) {
     }
   }
 
-  const auth = btoa(`${c.webdavUser}:${c.webdavPass}`);
-  const headers = { 'Authorization': `Basic ${auth}` };
-  const dir = c.webdavUrl.replace(/\/$/, '') + '/SuenWeb';
+  const rawBase = String(c.webdavUrl || '').trim().replace(/\/+$/, '');
+  if (!rawBase) throw new Error('WebDAV 地址未配置');
 
-  // Ensure backup directory exists on WebDAV
-  try { await fetch(dir, { method: 'MKCOL', headers }); } catch {}
+  const auth = _davAuth(c);
+  const headers = { 'Authorization': auth };
+
+  // Resolve directory: if URL already points to SuenWeb, use it; otherwise prefer subfolder SuenWeb
+  const isAlreadySuenWeb = rawBase.toLowerCase().endsWith('/suenweb');
+  const targetDir = isAlreadySuenWeb ? rawBase : `${rawBase}/SuenWeb`;
+
+  if (!isAlreadySuenWeb) {
+    try {
+      await fetch(targetDir, { method: 'MKCOL', headers });
+    } catch {}
+  }
 
   const { dateStr, timeStr } = _formatBackupDate();
-  const results = { app: null, bookmarks: null, extensions: null };
+  const results = { app: null, bookmarks: null, extensions: null, errors: [], uploaded: 0 };
 
   // 1. Synchronize & Backup SuenWeb App Data (Full JSON snapshot: groups, links, settings, wallpapers, fonts, ext_repo)
   if (c.serverUrl && c.authToken) {
     try {
-      const appData = await apiFetch('/api/config/export');
-      const appBlob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+      const resp = await apiFetch('/api/config/export');
+      const appData = await resp.json();
       const appFileName = `suenweb-app-${dateStr}-${timeStr}.json`;
-      const respApp = await fetch(`${dir}/${appFileName}`, {
-        method: 'PUT',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: appBlob
-      });
-      if (respApp.ok) {
-        results.app = appFileName;
-        console.log(`[SuenWeb] app data backup: ${appFileName}`);
-      }
+      const jsonStr = JSON.stringify(appData, null, 2);
+      const primUrl = `${targetDir}/${appFileName}`;
+      const fbUrl = isAlreadySuenWeb ? null : `${rawBase}/${appFileName}`;
+
+      await _davPut(primUrl, fbUrl, 'application/json; charset=utf-8', jsonStr, headers);
+      results.app = appFileName;
+      results.uploaded++;
+      console.log(`[SuenWeb] app data backup OK: ${appFileName}`);
     } catch (e) {
+      results.errors.push(`应用数据: ${e.message}`);
       console.warn('[SuenWeb] app data backup failed:', e);
     }
   }
 
   // 2. Backup Browser Bookmarks (HTML)
   try {
-    const bookmarkBlob = await _backupBookmarksHTML();
+    const tree = await browser.bookmarks.getTree();
+    const htmlContent = _bookmarksToNetscapeHTML(tree);
     const bmFileName = `suenweb-bookmarks-${dateStr}-${bookmarkCount}.html`;
-    const respBm = await fetch(`${dir}/${bmFileName}`, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'text/html' },
-      body: bookmarkBlob
-    });
-    if (respBm.ok) {
-      results.bookmarks = bmFileName;
-      console.log(`[SuenWeb] bookmarks backup: ${bmFileName}`);
-    }
+    const primUrl = `${targetDir}/${bmFileName}`;
+    const fbUrl = isAlreadySuenWeb ? null : `${rawBase}/${bmFileName}`;
+
+    await _davPut(primUrl, fbUrl, 'text/html; charset=utf-8', htmlContent, headers);
+    results.bookmarks = bmFileName;
+    results.uploaded++;
+    console.log(`[SuenWeb] bookmarks backup OK: ${bmFileName}`);
   } catch (e) {
+    results.errors.push(`书签: ${e.message}`);
     console.warn('[SuenWeb] bookmarks backup failed:', e);
   }
 
@@ -228,21 +287,29 @@ async function _doBackup(c, bookmarkCount) {
   try {
     const exts = await collectInstalledExtensions();
     if (exts && exts.length) {
-      const extBlob = new Blob([JSON.stringify({ browser: currentBrowserType(), exported_at: new Date().toISOString(), extensions: exts }, null, 2)], { type: 'application/json' });
       const extFileName = `suenweb-extensions-${dateStr}.json`;
-      await fetch(`${dir}/${extFileName}`, {
-        method: 'PUT',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: extBlob
-      });
+      const extJson = JSON.stringify({ browser: currentBrowserType(), exported_at: new Date().toISOString(), extensions: exts }, null, 2);
+      const primUrl = `${targetDir}/${extFileName}`;
+      const fbUrl = isAlreadySuenWeb ? null : `${rawBase}/${extFileName}`;
+
+      await _davPut(primUrl, fbUrl, 'application/json; charset=utf-8', extJson, headers);
       results.extensions = extFileName;
+      results.uploaded++;
+      console.log(`[SuenWeb] extensions backup OK: ${extFileName}`);
     }
   } catch (e) {
+    results.errors.push(`扩展列表: ${e.message}`);
     console.warn('[SuenWeb] extensions WebDAV backup failed:', e);
   }
 
-  const now = new Date().toISOString();
-  await saveCfg({ lastBackupAt: now });
+  if (results.uploaded > 0) {
+    const now = new Date().toISOString();
+    await saveCfg({ lastBackupAt: now });
+  } else {
+    const errDetail = results.errors.join('；') || '远端无法写入';
+    throw new Error(`WebDAV 上传失败: ${errDetail}`);
+  }
+
   return results;
 }
 
@@ -253,17 +320,26 @@ async function manualBackup() {
   const r = await _doBackup(c);
   const tree = await browser.bookmarks.getTree();
   const count = _countBookmarks(tree);
-  return { ok: true, name: r.app || r.bookmarks || '备份完成', appName: r.app, bmName: r.bookmarks, count };
+  return {
+    ok: r.uploaded > 0,
+    partial: r.uploaded > 0 && r.errors.length > 0,
+    appName: r.app,
+    bmName: r.bookmarks,
+    extName: r.extensions,
+    errors: r.errors,
+    count
+  };
 }
 
 /* ── List backups from WebDAV ────────────────────────────── */
 async function listBackups() {
   const c = await cfg();
   if (!c.webdavUrl || !c.webdavUser) return { ok: false, error: 'WebDAV 未配置' };
-  const base = c.webdavUrl.replace(/\/$/, '') + '/SuenWeb';
-  const auth = btoa(`${c.webdavUser}:${c.webdavPass}`);
+  const rawBase = String(c.webdavUrl || '').trim().replace(/\/+$/, '');
+  const isAlreadySuenWeb = rawBase.toLowerCase().endsWith('/suenweb');
+  const targetDir = isAlreadySuenWeb ? rawBase : `${rawBase}/SuenWeb`;
+  const auth = _davAuth(c);
 
-  // PROPFIND to list .json and .html files
   const body = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:">
   <d:prop>
@@ -272,23 +348,40 @@ async function listBackups() {
   </d:prop>
 </d:propfind>`;
 
-  const resp = await fetch(base, {
+  // Try querying targetDir first; if 404, fallback to rawBase
+  let resp = await fetch(targetDir, {
     method: 'PROPFIND',
-    headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/xml', 'Depth': '1' },
+    headers: { 'Authorization': auth, 'Content-Type': 'application/xml', 'Depth': '1' },
     body
   });
-  if (!resp.ok) return { ok: false, error: `WebDAV ${resp.status}` };
+  let activeDir = targetDir;
+  if (!resp.ok && !isAlreadySuenWeb) {
+    const resp2 = await fetch(rawBase, {
+      method: 'PROPFIND',
+      headers: { 'Authorization': auth, 'Content-Type': 'application/xml', 'Depth': '1' },
+      body
+    });
+    if (resp2.ok) {
+      resp = resp2;
+      activeDir = rawBase;
+    }
+  }
+
+  if (!resp.ok) return { ok: false, error: `WebDAV ${resp.status} (${resp.statusText || '无法读取目录'})` };
 
   const xml = await resp.text();
   const entries = [];
-  const re = /<d:response>([\s\S]*?)<\/d:response>/g;
+  const tag = (name) => new RegExp(`<(?:[\\w.-]+:)?${name}[^>]*>([\\s\\S]*?)</(?:[\\w.-]+:)?${name}>`, 'i');
+  const re = /<(?:[\w.-]+:)?response[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?response>/gi;
   let m;
   while ((m = re.exec(xml))) {
     const block = m[1];
-    const href = (block.match(/<d:href>(.*?)<\/d:href>/) || [])[1] || '';
-    const name = href.split('/').pop().split('?')[0];
+    const rawHref = (block.match(tag('href')) || [])[1] || '';
+    const rawName = rawHref.split('/').pop().split('?')[0];
+    let name = rawName;
+    try { name = decodeURIComponent(rawName); } catch {}
     if (!name || (!name.endsWith('.html') && !name.endsWith('.json')) || !name.startsWith('suenweb-')) continue;
-    
+
     let category = 'bookmarks';
     let label = '📑 浏览器书签';
     if (name.startsWith('suenweb-app-') || (name.endsWith('.json') && !name.startsWith('suenweb-extensions-'))) {
@@ -299,12 +392,12 @@ async function listBackups() {
       label = '🧩 浏览器扩展备份';
     }
 
-    const mod = (block.match(/<d:getlastmodified>(.*?)<\/d:getlastmodified>/) || [])[1] || '';
-    const sizeRaw = (block.match(/<d:getcontentlength>(.*?)<\/d:getcontentlength>/) || [])[1] || '0';
-    const size = parseInt(sizeRaw);
+    const mod = (block.match(tag('getlastmodified')) || [])[1] || '';
+    const sizeRaw = (block.match(tag('getcontentlength')) || [])[1] || '0';
+    const size = parseInt(sizeRaw) || 0;
     entries.push({
       name,
-      href,
+      href: rawHref,
       category,
       label,
       date: mod ? new Date(mod).toLocaleString('zh-CN') : '—',
@@ -313,7 +406,7 @@ async function listBackups() {
     });
   }
   entries.sort((a, b) => b._date - a._date);
-  return { ok: true, backups: entries };
+  return { ok: true, backups: entries, activeDir };
 }
 
 /* ── Restore backup from WebDAV ──────────────────────────── */
@@ -326,14 +419,24 @@ async function restoreBackup(index) {
   if (index < 0 || index >= backups.length) return { ok: false, error: '无效的备份索引' };
 
   const entry = backups[index];
-  const base = c.webdavUrl.replace(/\/$/, '') + '/SuenWeb';
-  const auth = btoa(`${c.webdavUser}:${c.webdavPass}`);
+  const auth = _davAuth(c);
 
-  // Download the backup file
-  const resp = await fetch(entry.href || `${base}/${entry.name}`, {
-    headers: { 'Authorization': `Basic ${auth}` }
+  // Safely resolve download URL
+  let downloadUrl;
+  if (entry.href && entry.href.startsWith('http')) {
+    downloadUrl = entry.href;
+  } else if (entry.href && entry.href.startsWith('/')) {
+    const origin = new URL(c.webdavUrl).origin;
+    downloadUrl = origin + entry.href;
+  } else {
+    const dir = listResult.activeDir || c.webdavUrl.replace(/\/+$/, '');
+    downloadUrl = `${dir}/${entry.name}`;
+  }
+
+  const resp = await fetch(downloadUrl, {
+    headers: { 'Authorization': auth }
   });
-  if (!resp.ok) return { ok: false, error: `下载失败: ${resp.status}` };
+  if (!resp.ok) return { ok: false, error: `下载失败: ${resp.status} (${resp.statusText || ''})` };
 
   const content = await resp.text();
 
@@ -347,11 +450,12 @@ async function restoreBackup(index) {
       method: 'POST',
       body: JSON.stringify(jsonData)
     });
+    const rData = await r.json().catch(() => ({}));
     return {
       ok: true,
       type: 'app',
-      count: r.imported?.groups || 0,
-      links: r.imported?.links || 0,
+      count: rData.imported?.groups || 0,
+      links: rData.imported?.links || 0,
       name: entry.name
     };
   }
@@ -493,8 +597,10 @@ async function runSync({ source = 'manual' } = {}) {
             }).catch(() => {});
             if (serverCount !== c.lastBackupCount) {
               console.log(`[SuenWeb] auto-backup: server ${serverCount} vs last ${c.lastBackupCount}`);
-              _doBackup(c, serverCount).catch(() => {});
-              await saveCfg({ lastBackupCount: serverCount });
+              const br = await _doBackup(c, serverCount);
+              // Only mark as backed up after a successful upload, otherwise retry on next round
+              if (br.uploaded > 0) await saveCfg({ lastBackupCount: serverCount });
+              if (br.errors.length) console.warn('[SuenWeb] auto-backup errors:', br.errors);
             }
           }
         } catch {}
@@ -905,36 +1011,57 @@ browser.runtime.onMessage.addListener(async (msg) => {
 async function testWebDAV() {
   const c = await cfg();
   if (!c.webdavUrl || !c.webdavUser) return { ok: false, error: 'WebDAV 未配置' };
-  const base = c.webdavUrl.replace(/\/$/, '') + '/SuenWeb';
-  const auth = btoa(`${c.webdavUser}:${c.webdavPass}`);
+  const rawBase = String(c.webdavUrl || '').trim().replace(/\/+$/, '');
+  const isAlreadySuenWeb = rawBase.toLowerCase().endsWith('/suenweb');
+  const targetDir = isAlreadySuenWeb ? rawBase : `${rawBase}/SuenWeb`;
+  const auth = _davAuth(c);
+
   try {
-    // Test 1: PROPFIND on root (check connectivity)
+    // Test 1: PROPFIND on root (check connectivity & auth)
     const resp = await fetch(c.webdavUrl, {
       method: 'PROPFIND',
-      headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/xml', 'Depth': '0' },
+      headers: { 'Authorization': auth, 'Content-Type': 'application/xml', 'Depth': '0' },
       body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/></d:prop></d:propfind>'
     });
-    if (resp.status === 401 || resp.status === 403) return { ok: false, error: '认证失败，检查用户名密码' };
-    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
+    if (resp.status === 401 || resp.status === 403) return { ok: false, error: '认证失败，请检查用户名和密码 (HTTP 401/403)' };
+    if (!resp.ok && resp.status !== 405) return { ok: false, error: `连接异常: HTTP ${resp.status}` };
 
-    // Test 2: Ensure backup directory and verify write access
+    // Test 2: Verify write access (create directory & write test file)
+    let writable = false;
+    let writeError = '';
     try {
-      // Create backup directory
-      try { await fetch(base, { method: 'MKCOL', headers: { 'Authorization': `Basic ${auth}` } }); } catch {}
-      const testUrl = `${base}/.suenweb-test`;
+      if (!isAlreadySuenWeb) {
+        try { await fetch(targetDir, { method: 'MKCOL', headers: { 'Authorization': auth } }); } catch {}
+      }
+      const testUrl = `${targetDir}/.suenweb-test`;
       const tr = await fetch(testUrl, {
         method: 'PUT',
-        headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'text/plain' },
+        headers: { 'Authorization': auth, 'Content-Type': 'text/plain' },
         body: 'ok'
       });
-      if (tr.ok) {
-        await fetch(testUrl, { method: 'DELETE', headers: { 'Authorization': `Basic ${auth}` } });
-        return { ok: true, writable: true };
+      if (tr.ok && !tr.redirected) {
+        writable = true;
+        await fetch(testUrl, { method: 'DELETE', headers: { 'Authorization': auth } }).catch(() => {});
+      } else {
+        // Try testing write to rawBase if targetDir failed
+        const testUrl2 = `${rawBase}/.suenweb-test`;
+        const tr2 = await fetch(testUrl2, {
+          method: 'PUT',
+          headers: { 'Authorization': auth, 'Content-Type': 'text/plain' },
+          body: 'ok'
+        });
+        if (tr2.ok && !tr2.redirected) {
+          writable = true;
+          await fetch(testUrl2, { method: 'DELETE', headers: { 'Authorization': auth } }).catch(() => {});
+        } else {
+          writeError = _davFailReason(tr);
+        }
       }
-      return { ok: true, writable: false, status: tr.status };
-    } catch {
-      return { ok: true, writable: false };
+    } catch (we) {
+      writeError = we.message;
     }
+
+    return { ok: true, writable, error: writable ? null : writeError };
   } catch (e) {
     return { ok: false, error: '无法连接: ' + e.message };
   }
