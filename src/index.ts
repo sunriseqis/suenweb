@@ -1311,12 +1311,19 @@ app.post('/api/extensions', requireAuth, async c => {
   for (const e of list.slice(0, 100)) {
     const extId = String(e.ext_id || '').trim();
     if (!extId) continue;
-    const url = String(e.url || '').trim() || `https://www.crxsoso.com/webstore/detail/${extId}`;
+    const name = String(e.name || extId);
+    const q = encodeURIComponent(name);
+    const url = String(e.url || '').trim()
+      // Firefox AMO ids are GUIDs with no Chrome-store page → search AMO by name
+      || (browserType === 'firefox' ? `https://addons.mozilla.org/firefox/search/?q=${q}`
+      // Chrome: crxsoso mirror only for real Web Store ids (32 chars a-p)
+      : /^[a-p]{32}$/i.test(extId) ? `https://www.crxsoso.com/webstore/detail/${extId}`
+      : `https://chromewebstore.google.com/search/${q}`);
     stmts.push(
       c.env.DB
         .prepare(`INSERT INTO ext_repo (ext_id, name, version, url, browser) VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(ext_id, browser) DO UPDATE SET name = excluded.name, version = excluded.version, url = excluded.url, updated_at = datetime('now','localtime')`)
-        .bind(extId, String(e.name || extId).substring(0, 120), String(e.version || ''), url, browserType)
+        .bind(extId, name.substring(0, 120), String(e.version || ''), url, browserType)
     );
     count++;
   }

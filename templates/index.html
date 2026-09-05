@@ -917,6 +917,16 @@ async function loadOperationLogs(){
   } catch(e){ box.textContent = '加载失败'; }
 }
 
+function extStoreUrl(item) {
+  var name = item.name && item.name !== item.ext_id ? item.name : '';
+  var q = encodeURIComponent(name || item.ext_id || '');
+  // Firefox AMO ids are GUIDs with no Chrome-store page → search AMO by name
+  if ((item.browser || 'chrome') === 'firefox') return 'https://addons.mozilla.org/firefox/search/?q=' + q;
+  // Chrome: trust stored crxsoso links only for real Web Store ids (32 chars a-p)
+  if (/^[a-p]{32}$/i.test(item.ext_id || '')) return item.url || ('https://www.crxsoso.com/webstore/detail/' + item.ext_id);
+  return 'https://chromewebstore.google.com/search/' + q;
+}
+
 async function loadBackedUpExtensions() {
   var box = document.getElementById('extListContainer');
   var cntEl = document.getElementById('extBackupCount');
@@ -931,7 +941,7 @@ async function loadBackedUpExtensions() {
     }
     var html = '<div style="display:flex;flex-direction:column;gap:6px">';
     list.forEach(function(item) {
-      var storeUrl = item.url || ('https://www.crxsoso.com/webstore/detail/' + item.ext_id);
+      var storeUrl = extStoreUrl(item);
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg-card);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)">' +
         '<div style="min-width:0;flex:1;margin-right:8px">' +
           '<div style="font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(item.name) + ' <span style="font-size:11px;color:var(--text-muted);font-weight:normal">v' + escHtml(item.version || '') + '</span></div>' +
