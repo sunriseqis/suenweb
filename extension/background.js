@@ -871,6 +871,8 @@ if (_menus && _menus.onClicked) {
 
 /* ── Extension backup / restore ─────────────────────────── */
 const CRXSOSO_BASE = 'https://www.crxsoso.com/webstore/detail/';
+const AMO_SEARCH_BASE = 'https://addons.mozilla.org/firefox/search/?q=';
+const CWS_SEARCH_BASE = 'https://chromewebstore.google.com/search/';
 const RESTORE_MAX_TABS = 10;
 
 function selfExtId() {
@@ -878,8 +880,16 @@ function selfExtId() {
   return rt ? rt.id : '';
 }
 
-function storeUrlFor(extId) {
-  return CRXSOSO_BASE + extId;
+// Firefox AMO IDs are GUIDs without a Chrome-store page → search AMO by name;
+// Chrome: use the crxsoso mirror only for real Web Store IDs (32 chars a-p),
+// otherwise fall back to a Web Store search by name (e.g. cross-browser restore).
+function storeUrlFor(ext, browserType = currentBrowserType()) {
+  const name = (ext.name && ext.name !== ext.ext_id) ? ext.name : '';
+  if (browserType === 'firefox') {
+    return AMO_SEARCH_BASE + encodeURIComponent(name || ext.ext_id);
+  }
+  if (/^[a-p]{32}$/i.test(ext.ext_id || '')) return CRXSOSO_BASE + ext.ext_id;
+  return CWS_SEARCH_BASE + encodeURIComponent(name || ext.ext_id);
 }
 
 function currentBrowserType() {
@@ -900,7 +910,7 @@ async function collectInstalledExtensions() {
       ext_id: e.id,
       name: e.name || e.id,
       version: e.version || '',
-      url: storeUrlFor(e.id),
+      url: storeUrlFor({ ext_id: e.id, name: e.name || e.id }),
     });
   }
   list.sort((a, b) => a.name.localeCompare(b.name));
@@ -948,10 +958,21 @@ async function restoreExtensions() {
   }
 
   const tabsApi = (globalThis.browser && globalThis.browser.tabs) ? globalThis.browser.tabs : globalThis.chrome.tabs;
+  const browserType = currentBrowserType();
   let opened = 0;
   for (const it of missing.slice(0, RESTORE_MAX_TABS)) {
+    // Stored URLs are Chrome-store links from the backing browser; in Firefox
+    // (or for cross-browser restores) regenerate the link for this browser.
+    let url;
+    if (browserType === 'firefox') {
+      url = storeUrlFor(it, 'firefox');
+    } else {
+      url = (it.url && /^https:\/\/www\.crxsoso\.com\/webstore\/detail\/[a-p]{32}\/?$/i.test(it.url))
+        ? it.url
+        : storeUrlFor(it, 'chrome');
+    }
     try {
-      await tabsApi.create({ url: it.url || storeUrlFor(it.ext_id) });
+      await tabsApi.create({ url });
       opened++;
     } catch {}
   }
