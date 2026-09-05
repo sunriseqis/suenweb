@@ -948,7 +948,7 @@ async function loadBackedUpExtensions() {
           '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + escHtml(item.browser || 'chrome') + ' · ' + escHtml(item.updated_at || '') + '</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;flex-shrink:0">' +
-          '<a href="' + safeHref(storeUrl) + '" target="_blank" rel="noopener" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;text-decoration:none">CRX 安装</a>' +
+          '<a href="' + safeHref(storeUrl) + '" target="_blank" rel="noopener" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;text-decoration:none">' + ((item.browser||'chrome')==='firefox' ? 'AMO 搜索' : 'CRX 安装') + '</a>' +
           '<button type="button" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;color:var(--error)" onclick="deleteExtensionItem(' + item.id + ')">删除</button>' +
         '</div>' +
       '</div>';
@@ -1461,7 +1461,7 @@ function _buildSettingsSection(tab) {
 
       '<div class="settings-section-title">云端已备份插件 (<span id="extBackupCount">0</span>)</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">由浏览器插件自动采集并同步至数据库，点击可在 CRX 搜搜直接下载安装</p>'+
+        '<p class="card-desc">由浏览器插件自动采集并同步至数据库，Chrome 条目可在 CRX 搜搜安装，Firefox 条目在 Firefox Add-ons 搜索</p>'+
         '<div id="extListContainer" style="max-height:220px;overflow-y:auto;font-size:12px;color:var(--text-secondary)">加载中...</div>'+
       '</div>'+
     '</div>';
