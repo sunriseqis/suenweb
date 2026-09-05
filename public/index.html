@@ -933,23 +933,46 @@ async function loadBackedUpExtensions() {
   if (!box) return;
   try {
     var d = await api('GET', '/api/extensions');
-    var list = (d && d.extensions) || [];
-    if (cntEl) cntEl.textContent = list.length;
-    if (!list.length) {
+    var rows = (d && d.extensions) || [];
+    // 按插件名分组：同一插件在 Chrome / Firefox 的记录合并为一行，双平台各显示一个跳转图标
+    var groups = {}, order = [];
+    rows.forEach(function(r) {
+      var key = String(r.name || r.ext_id || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!key) return;
+      if (!groups[key]) {
+        groups[key] = { name: r.name || r.ext_id, version: '', updated_at: '', chrome: null, firefox: null };
+        order.push(key);
+      }
+      var g = groups[key];
+      var b = (r.browser || 'chrome') === 'firefox' ? 'firefox' : 'chrome';
+      g[b] = r;
+      if (r.version && (!g.version || r.version > g.version)) g.version = r.version;
+      if (r.updated_at && r.updated_at > g.updated_at) g.updated_at = r.updated_at;
+    });
+    if (cntEl) cntEl.textContent = order.length;
+    if (!order.length) {
       box.innerHTML = '<div style="color:var(--text-muted);padding:6px 0">暂无已备份插件。请在已安装 SuenWeb 插件的浏览器中点击「插件备份」</div>';
       return;
     }
+    var storeIcon = function(b, row) {
+      var emoji = b === 'firefox' ? '🦊' : '🟢';
+      var title = b === 'firefox' ? 'Firefox Add-ons 搜索' : 'Chrome Web Store 安装';
+      if (!row) return '<span title="' + b + ' 端暂无备份" style="opacity:.25;filter:grayscale(1);font-size:14px;width:22px;text-align:center;display:inline-block;cursor:not-allowed">' + emoji + '</span>';
+      return '<a href="' + safeHref(extStoreUrl(row)) + '" target="_blank" rel="noopener" title="' + title + '" style="font-size:14px;width:22px;text-align:center;display:inline-block;text-decoration:none">' + emoji + '</a>';
+    };
     var html = '<div style="display:flex;flex-direction:column;gap:6px">';
-    list.forEach(function(item) {
-      var storeUrl = extStoreUrl(item);
+    order.forEach(function(key) {
+      var g = groups[key];
+      var delId = g.chrome ? g.chrome.id : (g.firefox ? g.firefox.id : 0);
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg-card);border-radius:var(--radius-sm);border:1px solid var(--border-subtle)">' +
         '<div style="min-width:0;flex:1;margin-right:8px">' +
-          '<div style="font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(item.name) + ' <span style="font-size:11px;color:var(--text-muted);font-weight:normal">v' + escHtml(item.version || '') + '</span></div>' +
-          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + escHtml(item.browser || 'chrome') + ' · ' + escHtml(item.updated_at || '') + '</div>' +
+          '<div style="font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(g.name) + (g.version ? ' <span style="font-size:11px;color:var(--text-muted);font-weight:normal">v' + escHtml(g.version) + '</span>' : '') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + escHtml(g.updated_at || '') + '</div>' +
         '</div>' +
-        '<div style="display:flex;gap:6px;flex-shrink:0">' +
-          '<a href="' + safeHref(storeUrl) + '" target="_blank" rel="noopener" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;text-decoration:none">' + ((item.browser||'chrome')==='firefox' ? 'AMO 搜索' : 'CRX 安装') + '</a>' +
-          '<button type="button" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;color:var(--error)" onclick="deleteExtensionItem(' + item.id + ')">删除</button>' +
+        '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center">' +
+          storeIcon('chrome', g.chrome) +
+          storeIcon('firefox', g.firefox) +
+          '<button type="button" class="btn btn-secondary" style="padding:3px 8px;font-size:11px;color:var(--error)" onclick="deleteExtensionItem(' + delId + ')">删除</button>' +
         '</div>' +
       '</div>';
     });
@@ -1461,7 +1484,7 @@ function _buildSettingsSection(tab) {
 
       '<div class="settings-section-title">云端已备份插件 (<span id="extBackupCount">0</span>)</div>'+
       '<div class="settings-card">'+
-        '<p class="card-desc">由浏览器插件自动采集并同步至数据库，Chrome 条目可在 CRX 搜搜安装，Firefox 条目在 Firefox Add-ons 搜索</p>'+
+        '<p class="card-desc">由浏览器插件自动采集并同步至数据库，点击 🟢 / 🦊 图标跳转对应商店下载安装</p>'+
         '<div id="extListContainer" style="max-height:220px;overflow-y:auto;font-size:12px;color:var(--text-secondary)">加载中...</div>'+
       '</div>'+
     '</div>';

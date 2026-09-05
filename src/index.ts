@@ -1295,6 +1295,14 @@ app.get('/extension/download/xpi', c => {
 //  ROUTES — Extension Backup (via SuenWeb Sync extension)
 // ═══════════════════════════════════════════════════════════
 app.get('/api/extensions', requireAuth, async c => {
+  // 历史脏数据清理：同一 (ext_id, browser) 只保留最新一行（早期 schema 无唯一约束时反复导入会累积重复行）
+  await c.env.DB
+    .prepare('DELETE FROM ext_repo WHERE id NOT IN (SELECT MAX(id) FROM ext_repo GROUP BY ext_id, browser)')
+    .run();
+  // 旧表可能缺少唯一约束（CREATE TABLE IF NOT EXISTS 不会补建），去重后补上，保证后续 upsert 生效
+  await c.env.DB
+    .prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_repo_uniq ON ext_repo(ext_id, browser)')
+    .run();
   const rows = (await c.env.DB
     .prepare('SELECT id, ext_id, name, version, url, browser, updated_at FROM ext_repo ORDER BY browser ASC, name COLLATE NOCASE ASC')
     .all<any>()).results || [];
