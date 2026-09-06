@@ -624,6 +624,11 @@ async function runSync({ source = 'manual' } = {}) {
     const c = await cfg();
     if (!c.serverUrl || !c.authToken) return { ok: false };
     try {
+      // Heartbeat on every sync run (not WebDAV-gated) so the dashboard shows liveness
+      fetch(`${c.serverUrl}/api/sync/heartbeat`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${c.authToken}` }
+      }).catch(() => {});
       // Check server link count, trigger backup if changed
       if (c.webdavUrl) {
         try {
@@ -633,10 +638,6 @@ async function runSync({ source = 'manual' } = {}) {
           if (sr.ok) {
             const sd = await sr.json();
             const serverCount = sd.total_links || 0;
-            fetch(`${c.serverUrl}/api/sync/heartbeat`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${c.authToken}` }
-            }).catch(() => {});
             if (serverCount !== c.lastBackupCount) {
               console.log(`[SuenWeb] auto-backup: server ${serverCount} vs last ${c.lastBackupCount}`);
               const br = await _doBackup(c, serverCount);
