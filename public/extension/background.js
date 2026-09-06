@@ -574,6 +574,48 @@ async function loginServer(serverUrl, password) {
   return data.token || password;
 }
 
+/* ── Pull server → browser pending links ─────────────────── */
+async function pullPendingLinks() {
+  const c = await cfg();
+  if (!c.serverUrl || !c.authToken) return;
+  try {
+    const resp = await apiFetch('/api/sync/pending');
+    const data = await resp.json();
+    const links = data.links || [];
+    if (!links.length) return;
+
+    const tree = await browser.bookmarks.getTree();
+    const existing = new Set();
+    (function walk(nodes) {
+      for (const n of nodes || []) {
+        if (n.url) existing.add(n.url);
+        if (n.children) walk(n.children);
+      }
+    })(tree[0]?.children || []);
+
+    const toAdd = links.filter(l => l.url && !existing.has(l.url));
+    if (toAdd.length) {
+      const roots = tree[0]?.children || [];
+      const other = roots.find(r => r.title === '其他书签' || r.title === 'Other bookmarks') || roots[roots.length - 1];
+      if (other) {
+        let folder = (other.children || []).find(x => !x.url && x.title === 'SuenWeb 同步');
+        if (!folder) folder = await browser.bookmarks.create({ parentId: other.id, title: 'SuenWeb 同步' });
+        for (const l of toAdd) {
+          try { await browser.bookmarks.create({ parentId: folder.id, title: l.title || l.url, url: l.url }); } catch {}
+        }
+      }
+    }
+    // Ack everything pending (added or already present as duplicates)
+    await apiFetch('/api/sync/ack', {
+      method: 'POST',
+      body: JSON.stringify({ ids: links.map(l => l.id) })
+    });
+    console.log(`[SuenWeb] pending links: added ${toAdd.length}, acked ${links.length}`);
+  } catch (e) {
+    console.warn('[SuenWeb] pull pending failed:', e);
+  }
+}
+
 /* ── Sync check + auto-backup ────────────────────────────── */
 let _syncInFlight = null;
 async function runSync({ source = 'manual' } = {}) {
@@ -605,6 +647,8 @@ async function runSync({ source = 'manual' } = {}) {
           }
         } catch {}
       }
+      // Pull links waiting for plugin sync (server → browser bookmarks), then ack
+      await pullPendingLinks();
       const now = new Date().toISOString();
       await saveCfg({ lastSync: now, lastError: null });
       refreshContextMenu();
