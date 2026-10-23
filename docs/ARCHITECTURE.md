@@ -10,7 +10,7 @@
 |---|---|---|
 | 运行时 | **Node.js 22 LTS（ESM）** | 长驻进程、无 CPU 时长与子请求上限、可跑常驻定时任务、本地文件系统可用 |
 | HTTP | **Fastify 5** | 全链路 async、schema 校验、流式响应、低内存开销、内置静态文件与限流钩子 |
-| 数据库 | **SQLite（WAL）+ 异步驱动（默认 @libsql/client）** | 单文件零运维；驱动异步原生，主线程不做阻塞调用 |
+| 数据库 | **SQLite（WAL）+ Node 内置 node:sqlite，运行在 worker_threads 内** | **零原生依赖**（无需 node-gyp/预编译二进制）；同步 API 只出现在 worker 线程，主线程仍不阻塞 |
 | 迁移 | 轻量自研 migrator（SQL 文件 + schema_migrations 表） | 单一 DDL 来源，替代旧版「schema.sql + 运行时建表」双份 |
 | 缓存 | 进程内 LRU（图标/设置）+ 磁盘缓存目录 | 避免重复外呼第三方 favicon |
 | 实时 | **SSE**（Node 原生流），预留 WebSocket 升级位 | 插件只需单向事件，SSE 更简单且可自动重连 |
@@ -19,7 +19,7 @@
 | 加密 | node:crypto（PBKDF2 + AES-256-GCM，异步 API） | 备份口令 = 管理密码，见功能基线第九章 |
 | 前端 | **Vite + TypeScript，原生 DOM 模块化（不引框架）** | 保留零框架体积，同时拿到类型、模块与构建产物 |
 | 测试 | node:test + Fastify inject；前端 vitest | 零额外框架依赖，CI 秒级 |
-| 打包分发 | Docker 镜像 + fnOS .fpk（fnpack） | 本地部署两形态，开发期只用 npm |
+| 打包分发 | Docker 镜像 + **fnOS 原生应用包**（非 Docker 转包） | 本地部署两形态，开发期只用 npm |
 
 ---
 
@@ -42,7 +42,7 @@
 |---|---|---|
 | **开发/测试** | 日常开发与全部测试环境 | **npm run dev**（tsx watch），数据落在 ./data |
 | **Docker** | 通用自托管（NAS/服务器/云主机） | docker compose up -d（镜像含构建产物，/data 卷持久化） |
-| **fnOS 应用包** | 飞牛 NAS 应用中心安装 | .fpk 包（同一镜像 + manifest 声明端口/卷/图标） |
+| **fnOS 原生应用包** | 飞牛 NAS 应用中心安装 | **原生应用**（非 Docker 转包）：包内自带运行时/启动脚本 + manifest 声明端口与数据目录 |
 
 > 开发阶段不纠结 Docker：以 npm 为唯一验收路径；Docker 与 .fpk 在 M7 收尾期一次性打通。
 
@@ -50,8 +50,8 @@
 
 ## 四、低阻塞并发设计（本次「架构升级」的核心，8 条铁律）
 
-1. **主线程禁止同步 I/O**：禁用 fs.*Sync、禁用同步 DB 驱动（better-sqlite3 默认同步 API 不直接用），用 ESLint（no-sync / no-restricted-syntax）把关。
-2. **SQLite 读写分离**：WAL + busy_timeout；所有写操作走**单写者队列（concurrency=1）**，读操作并发不限，避免 SQLITE_BUSY 重试风暴。
+1. **主线程禁止同步 I/O**：禁用 fs.*Sync 与任何同步 DB 调用；node:sqlite 的同步 API **只允许出现在数据 worker 内**，主线程只能通过消息通道访问，用 ESLint（no-sync / no-restricted-syntax + 目录级禁用）把关。
+2. **SQLite 读写分离**：数据 worker 内 WAL + busy_timeout，写操作走**单写者队列（concurrency=1）**，读操作可在 worker 内并发处理，避免 SQLITE_BUSY 重试风暴；worker 崩溃由主线程自动重启并回放未完成任务。
 3. **外部 HTTP 统一封装**：统一 fetch 包装器，默认超时 6s、并发上限 8（可配）、失败退避重试 1 次、结果进缓存。图标抓取/失效检测/WebDAV 全走它。
 4. **CPU 重活下沉 worker_threads**：ZIP 打包、大对象加密、图片转码、超阈值批量解析进线程池，HTTP 线程只做 I/O 编排。
 5. **流式优先**：导入用 multipart 流式解析边读边写；导出/下载/备份上传用 stream，不把整库塞进内存。
@@ -71,7 +71,8 @@
         app.ts               Fastify 实例装配
         config/              环境变量与默认值（zod 校验）
         data/
-          client.ts          SQLite 连接与单写队列
+          worker.ts          SQLite 数据 worker（唯一持有 node:sqlite 句柄）
+          proxy.ts           主线程访问 worker 的异步代理（查询/事务/批量）
           migrations/        0001_init.sql ...
           repositories/      groups / links / settings / extensions / backups / sessions
         domain/              纯业务逻辑（无 IO，易单测）
@@ -137,12 +138,14 @@
 - 唯一持久化点：**卷 /data**（SQLite 文件 + 图标缓存 + 临时备份）。
 - compose 提供：端口映射、卷、环境变量、restart: unless-stopped、healthcheck（GET /health）。
 
-### 8.2 fnOS 应用包（.fpk）
+### 8.2 fnOS 原生应用包（非 Docker 转包）
 
-- **格式与工具（已核实）**：.fpk 由官方工具 **fnpack** 打包（fnpack build）；本质是**双层压缩包**，外层为 manifest 等元数据，内层为应用包内容；应用主体以 **Docker 镜像**交付，因此 fnOS 形态与 Docker 形态共用同一镜像。
-- **发布流程**：构建镜像（amd64/arm64）→ 导出/推送 → manifest 版本号递增 → fnpack build 产出 .fpk。
-- **M7 前需以官方文档核对**：manifest 字段名与必填项、端口/卷/图标声明写法、多架构支持方式、应用中心提交流程（可参考社区实现 fn-fpk-builder-skill、live-complie 的打包脚本）。
-- **目录约定**：packaging/fpk 放 manifest 模板与 repack.sh，版本号取自 package.json。
+- **定位**：fnOS 形态是**原生应用**，由系统直接拉起 Node 服务进程，**不是把 Docker 镜像转成 .fpk**。因此两种形态各自独立构建，但共享同一份源码与同一套启动约定。
+- **运行时交付**：包内自带按架构匹配的 Node 运行时（amd64 / arm64 各一份），或使用 Node SEA 打成单文件可执行；启动脚本负责指定数据目录、端口与日志位置。不依赖 NAS 上预装 Node。
+- **与 Docker 形态的差异**：Docker 用镜像层隔离、卷挂载 /data；原生应用用系统路径（应用私有数据目录）持久化，SQLite 文件与图标缓存放该目录，升级时保留。
+- **打包工具**：仍以官方 fnpack 产出安装包（fnpack build），但包内容为原生应用而非镜像。
+- **M7 前必须以官方「原生应用」文档核对**：manifest 中应用类型/启动命令/端口与反代的声明写法、应用私有数据目录的规范路径、运行用户与权限、日志目录约定、多架构分发方式、应用中心提交流程。核对项逐条落到 packaging/fpk 的 README，未确认前不写死字段名。
+- **目录约定**：packaging/fpk 放 manifest 模板、启动/停止脚本、repack.sh（版本号取自 package.json）。
 
 ---
 
@@ -162,7 +165,12 @@
 
 ## 十、待定事项（不影响 M1 开工）
 
-1. 数据库驱动：默认 @libsql/client（异步原生）；若希望零原生依赖，可改 better-sqlite3 + worker 线程封装。
-2. 前端构建：默认 Vite + TS + 原生 DOM；若接受轻量框架，可换 Svelte/Preact 进一步压缩状态管理代码量。
-3. 实时通道：默认 SSE；若将来要做多端协同编辑再换 WebSocket。
-4. 是否需要 PostgreSQL 兼容：当前单文件 SQLite 已足够，需要多实例共享再上 PG。
+已定：
+- **数据库：零原生依赖** → node:sqlite（Node 内置）+ worker_threads 承载，npm 安装不需要编译工具链。
+- **前端：Vite + TypeScript + 原生 DOM**（不引框架）。
+- **实时：SSE**（预留 WebSocket 升级位）。
+
+仍待核对：
+1. fnOS **原生应用**的官方打包规范（manifest 字段、启动方式、数据目录、端口/反代、权限、多架构）。
+2. 原生应用包内 Node 运行时的分发方式：随包携带（体积大、离线可用）还是 SEA 单文件（体积小、构建复杂）。建议先随包携带，稳定后再评估 SEA。
+3. 是否需要 PostgreSQL 兼容：当前单文件 SQLite 已足够，需要多实例共享再上 PG。

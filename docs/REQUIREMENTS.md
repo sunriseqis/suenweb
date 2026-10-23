@@ -1,7 +1,7 @@
-# SuenWeb 2.0 · 功能清单（重构基线 v1.4）
+# SuenWeb 2.0 · 功能清单（重构基线 v1.5）
 
 > 用途：本项目重建后的**唯一功能参照**。开发任务、提交、PR、验收一律引用本文的功能 ID。
-> 版本：v1.4（全部决策已裁定，见第零章「裁决记录」；本轮改**本地部署**并升级技术架构，详见 [ARCHITECTURE.md](./ARCHITECTURE.md)）
+> 版本：v1.5（全部决策已裁定，见第零章「裁决记录」；本地部署 + 低阻塞架构，详见 [ARCHITECTURE.md](./ARCHITECTURE.md)）
 > 变更摘要：访客只读、分组名唯一且重名自动合并、Firefox 为主力、外观个性化后置、AI 能力移除、备份口令复用管理密码且仅在有 WebDAV 时启用；**放弃 Cloudflare Workers，改本地部署（Docker + fnOS .fpk），开发期一律 npm 启动**。
 
 ---
@@ -23,6 +23,8 @@
 | 12 | 部署形态 | **终止 Cloudflare Workers 自动部署**，改本地部署：Docker 与 fnOS 应用包（.fpk）两种形式 |
 | 13 | 开发与测试环境 | **一律用 npm 启动服务**；开发阶段不投入 Docker，Docker 与 .fpk 在收尾期一次性打通 |
 | 14 | 技术架构 | 升级为**并发阻塞更小**的路径：全异步 I/O、单写队列 + 并发读、重活下沉线程、后台任务与请求解耦（详见 ARCHITECTURE.md） |
+| 15 | fnOS 打包形态 | **原生 fn 应用**，不是「Docker 转 .fpk」；包内交付运行时与启动脚本，由系统直接拉起进程 |
+| 16 | 原生依赖 | **零原生依赖**：不引入需 node-gyp/预编译二进制的模块；数据库改用 Node 内置 node:sqlite，跑在 worker 线程内 |
 
 连带影响：OPS 域整体改写为本地部署口径（不再有 Workers/D1/R2 绑定与 Workers AI）；TOOL 域移除 AI 项；IMP/BAK 加解密口径为「管理密码派生」（见 IMP-06、BAK-07）。
 
@@ -48,7 +50,7 @@
 |---|---|
 | 开发与全部测试环境 | **npm run dev**（唯一验收路径，开发期不投入 Docker） |
 | 生产 · 通用自托管 | Docker 镜像 + docker compose，数据卷 /data |
-| 生产 · 飞牛 NAS | fnOS 应用包 .fpk（fnpack 打包，与 Docker 共用同一镜像） |
+| 生产 · 飞牛 NAS | **fnOS 原生应用包**（原生进程直接运行，非 Docker 转包） |
 
 **技术架构**：以「并发阻塞更小」为准绳重构（Node.js 22 + Fastify + SQLite/WAL 异步驱动 + worker_threads + 进程内调度），完整选型与 8 条低阻塞铁律见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
@@ -166,7 +168,7 @@
 
 | ID | 功能 | 定义与要点 | 验收标准 |
 |---|---|---|---|
-| OPS-01 | 部署方式 | **本地部署两种形态**：Docker 镜像（docker compose up -d）与 fnOS 应用包（.fpk，用 fnpack 打包，与 Docker 共用同一镜像）；均以 /data 卷持久化 | 两种形态都能在 10 分钟内装好并访问导航页；升级只换镜像/包，数据卷不动 |
+| OPS-01 | 部署方式 | **本地部署两种形态**：① Docker 镜像（docker compose up -d，/data 卷持久化）；② **fnOS 原生应用包**（原生进程 + 包内运行时，非 Docker 转包），两形态各自构建、共享同一源码与启动约定 | 两种形态都能在 10 分钟内装好并访问导航页；升级只换镜像/包，数据目录不动；fnOS 包不依赖 NAS 预装 Node |
 | OPS-06 | 本地开发与脚本约定 | 开发与全部测试环境统一用 **npm run dev**；提供 migrate/build/start/test/lint/pack 脚本 | 新机器 npm ci && npm run dev 即可跑通；开发不依赖 Docker |
 | OPS-02 | 插件分发 | Firefox(.xpi) 与 Chrome(.zip/.crx) 下载，**产物由构建生成、不入库** | 下载的包可直接安装或明确说明加载方式；产物与源码同源可验证 |
 | OPS-03 | 健康检查与错误可读 | 健康检查接口；绑定缺失时返回中文可操作指引 | 关键故障不出现纯英文堆栈或静默 500 |
@@ -240,7 +242,7 @@
 | 并发与阻塞 | 主线程零同步 I/O；SQLite 单写队列 + 并发读；出网并发受限且带超时；CPU 重活下沉线程；后台任务与请求解耦（详见 ARCHITECTURE 第四章） |
 | 可靠性 | 导入/还原/备份幂等可回滚；同步失败不得丢书签；定时任务失败可观测 |
 | 兼容 | **Firefox 为首要目标**（MV3 事件页），Chrome/Edge 同步支持；导出文件双浏览器实测 |
-| 可维护 | 单一 schema 来源；前端模块化；插件产物构建生成、单一真源 |
+| 可维护 | 单一 schema 来源；前端模块化；插件产物构建生成、单一真源；**零原生依赖**（npm ci 无需编译工具链，原生应用包与 Docker 构建可复现） |
 
 ---
 
@@ -277,7 +279,7 @@
 | M4 导入导出与加密备份 | IMP-01~06 + BAK-01~08 | 换机演练：导出→新机输入同一管理密码导入成功；未配置 WebDAV 时无备份任务；密码错误被拒 |
 | M5 扩展清单 | EXT-01~04 | Firefox 采集、Firefox/Chrome 还原引导可跑通 |
 | M6 治理工具 | TOOL-02~04 + UI-05/06 | 移动端可用、无重复绑定副作用 |
-| M7 发布打磨 | OPS-01~06、Docker 镜像、fnOS .fpk、文档、CI | Docker 与 .fpk 均安装成功；CI 绿灯；AMO 签名流程可用 |
+| M7 发布打磨 | OPS-01~06、Docker 镜像、fnOS 原生应用包、文档、CI | Docker 与 fnOS 原生包均安装成功；CI 绿灯；AMO 签名流程可用 |
 
 ---
 
