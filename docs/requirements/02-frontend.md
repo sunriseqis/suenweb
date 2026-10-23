@@ -63,7 +63,7 @@
 |---|---|---|---|---|---|
 | C-01 | 新建固定组 / 标签组 | 弹窗填写组名（必填）+ 选择图标（默认书签图标，可清空）；创建后整页刷新并提示 | index.html:732-751（addGroup）、540（+ 添加固定组）、560（+ 新增标签）、82（空状态入口） | POST /api/groups {name,icon,type}（src/index.ts:319-339） | 前端做同名去重校验（742），但后端无唯一约束；两条入口共用同一函数，仅 type 不同 |
 | C-02 | 编辑分组 | 弹窗可改组名、图标、显示模式（紧凑/详情/仅图标）；固定组额外可改「排列方式（单列/多列）」 | index.html:752-771；520/577（编辑按钮） | PUT /api/groups/:gid {name,icon,display_mode,layout_mode}（src/index.ts:341-358，字段逐个 UPDATE） | 无颜色/备注/描述等扩展字段 |
-| C-03 | 删除分组 | 卡片/标签上的删除按钮 → confirm 确认 → 乐观从本地移除并重绘 → 调接口，失败则回滚重拉 | index.html:782-791、520（删除）、559（tab 上 ✕）、759（编辑弹窗内删除） | DELETE /api/groups/:gid（src/index.ts:360-370） | 三处入口，行为一致；标签上 ✕ 与标签点击共用一个元素，靠 e.target.dataset.action 判断不切标签（581） |
+| C-03 | 删除分组 | 卡片/标签上的删除按钮 → confirm 确认 → 乐观从本地移除并重绘 → 调接口，失败则回滚重拉 | index.html:782-791、520（删除）、559（tab 上 [否]）、759（编辑弹窗内删除） | DELETE /api/groups/:gid（src/index.ts:360-370） | 三处入口，行为一致；标签上 [否] 与标签点击共用一个元素，靠 e.target.dataset.action 判断不切标签（581） |
 | C-04 | 固定 ↔ 标签互转 | 固定组上「解固」、标签组上「固定」按钮，一键切换 type，乐观更新 + 失败回滚 | index.html:772-781、520/577 | PUT /api/groups/:gid {type} | 转换不改变 sort_order，位置可能在另一区里错位 |
 | C-05 | 固定组区渲染 | 固定组按 layout_mode 分两类：single 组各自独占一行；multi 组按 packMultiRows 规则并排（1/2/3/4→[2,2]/≥3 每行 3 个） | index.html:522-542、543-554；style.css:805-827 | groups[].layout_mode | 行内列数由 JS 算出行数组后生成 cols-N 类（537），CSS 仅有 cols-1/2/3（821-823）；n=5 时生成 [3,2] |
 | C-06 | 标签栏渲染与切换 | 标签按顺序渲染，永远第一个标签默认高亮，点击切换 .active（显示/隐藏 .tab-content） | index.html:555-589、579-588 | groups[].type==='tab' | 每次重渲染都回到第 1 个标签（i===0?'active':''），用户当前标签丢失；且 renderTabs 在 tab-content 里再画一遍组标题+编辑/固定按钮（577），与标签栏/卡片头重复 |
@@ -151,7 +151,7 @@
 |---|---|---|---|---|---|
 | K-01 | 全局字体选择 | 布局页一个下拉：系统默认 / 内置字体列表 / 「+ 自定义字体」（选它才展开新增面板） | index.html:1380-1406、2160-2181、1637-1654 | GET /api/fonts → fonts[]+font_*（src/index.ts:1082-1092） | 只保留一个全局项（原 font_title/font_body_en/font_code 三分工被合并，见 2310-2312 兜底读取） |
 | K-02 | 添加自定义字体 | 填显示名称 + CSS font-family + CDN URL（woff2 或 Google Fonts css），保存后自动选中并应用 | index.html:1396-1405、1655-1672 | POST /api/fonts {name,family,cdn_url,language}（src/index.ts:1095） | 无 URL 可用性校验；保存即持久化，无一键撤销 |
-| K-03 | 自定义字体删除 | 面板内列出已添加的自定义字体标签，✕ 删除 | index.html:1404、2175-2179、2183-2186 | DELETE /api/fonts/:fid（src/index.ts:1118） | 删掉正在用的字体后 _widgetCfg.font_body 仍指向不存在的字体（无回退） |
+| K-03 | 自定义字体删除 | 面板内列出已添加的自定义字体标签，[否] 删除 | index.html:1404、2175-2179、2183-2186 | DELETE /api/fonts/:fid（src/index.ts:1118） | 删掉正在用的字体后 _widgetCfg.font_body 仍指向不存在的字体（无回退） |
 | K-04 | 字号滑块（12–18px） | 拖动即时预览，松手保存；整页按 --text-base 等比缩放 | index.html:1387-1395、1685-1695；style.css:32-41 | settings.font_size；:root --text-base | 只影响字号 scale，不影响间距 |
 | K-05 | 字体应用实现 | 写入 --font-body/title/code 三变量 + body inline fontFamily/fontSize，并注入一段带 !important 的 style 覆盖 input/button 等；字体经服务端代理 /api/font-css/{id}.css 引入 | index.html:2188-2223 | GET /api/font-css/:fid.css、/api/font-woff（src/index.ts:1129-1173） | 每次重建 style 节点（旧的会 remove），但 link#font-link-{id} 从不清理，换字体后旧字体 css 仍挂载；!important 选择器清单硬编码（2204），新增组件易漏 |
 
@@ -161,7 +161,7 @@
 |---|---|---|---|---|---|
 | L-01 | 居中弹窗 + 左侧 8 项导航 | 居中大弹窗（880×620），左侧导航：预设/配色/背景/布局/小组件/书签/智能/安全；右侧标题 + 内容滚动区 + 关闭按钮 | index.html:97-119；style.css:1128-1260 | — | ≤900px 导航转顶部横向换行（style.css:1701-1708） |
 | L-02 | 面板切换与重渲染 | 切 tab 时整块重建 settingsBody 的 HTML 再重新绑定事件；进入背景页延时 100ms 加载壁纸源 | index.html:1019-1029、1163-1170、1172-1575、1577-1995 | — | 切 tab 即重建 DOM → 未保存输入（SGDB Key、密码）切走即丢；事件用 onclick 覆盖式绑定 |
-| L-03 | 关闭方式 | 右上 ✕、点遮罩空白、Esc 三种关闭 | index.html:114、2454-2455、422-428 | — | Esc 优先级：图标选择器 > 通用弹窗 > 设置面板 |
+| L-03 | 关闭方式 | 右上 [否]、点遮罩空白、Esc 三种关闭 | index.html:114、2454-2455、422-428 | — | Esc 优先级：图标选择器 > 通用弹窗 > 设置面板 |
 | L-04 | 设置读写通道 | 两条并行写法：saveSetting(单键) 与 saveWidgetCfg(批量多键)，都是 fire-and-forget（失败静默） | index.html:2011-2015 | PUT /api/settings（后端白名单 23 键，src/index.ts:598-617） | 关键 bug：saveWidgetCfg 每次都把 font_title/font_body_en/font_code 以空串提交（2013），改任一小组件设置就会清空这三项历史值；失败无提示 |
 
 ### M. 书签导入 / 导出
@@ -183,7 +183,7 @@
 
 | 编号 | 功能名 | 现状行为 | 实现位置证据 | 依赖 | 备注 |
 |---|---|---|---|---|---|
-| O-01 | 批量检测失效链接 | 智能页勾选分组 →「检测」→ 显示"✅正常 / ❌失效 / 共N"，逐条列出失效链接（标题/所属组/访问/错误原因），可勾选后一键批量删除 | index.html:1526-1536、1869-1870、2264-2290 | POST /api/ai/check {group_ids} → {total,working,broken,results:[{id,title,url,group,ok,status,error}]}（src/index.ts:1457-1478；src/ai.ts:379-430） | 放在「智能」页却完全不用 AI，仅 HTTP HEAD/GET 探活（6s 超时）；删除是逐条 DELETE /api/links/:id 循环（2285），非原子；每条删除都会触发后端"组空即删组"副作用 |
+| O-01 | 批量检测失效链接 | 智能页勾选分组 →「检测」→ 显示"[保留]正常 / [删]失效 / 共N"，逐条列出失效链接（标题/所属组/访问/错误原因），可勾选后一键批量删除 | index.html:1526-1536、1869-1870、2264-2290 | POST /api/ai/check {group_ids} → {total,working,broken,results:[{id,title,url,group,ok,status,error}]}（src/index.ts:1457-1478；src/ai.ts:379-430） | 放在「智能」页却完全不用 AI，仅 HTTP HEAD/GET 探活（6s 超时）；删除是逐条 DELETE /api/links/:id 循环（2285），非原子；每条删除都会触发后端"组空即删组"副作用 |
 | O-02 | 分组多选辅助 | 「全选 / 反选」按钮 + 已选数量回显到按钮文案 | index.html:1517-1534、1996-2010 | — | 智能页两块（补全、检测）共用同一套多选助手，靠前缀区分 |
 
 ### P. 配置备份与恢复
@@ -207,7 +207,7 @@
 | 编号 | 功能名 | 现状行为 | 实现位置证据 | 依赖 | 备注 |
 |---|---|---|---|---|---|
 | R-01 | 插件下载入口（两处） | ① 空状态引导卡：Chrome/Edge (.zip 解压加载)、Edge/其它 (.crx)、Firefox (.xpi)；② 书签页「浏览器插件」块：Chrome/Edge zip + Firefox xpi 两个大按钮 + crx 小链接 + Chrome 安装说明 | index.html:65-69、1472-1483；style.css:1533-1542 | GET /extension/download/zip、/crx、/firefox（src/index.ts:1242-1296，后端动态打包） | 无独立"扩展下载页"，全部内嵌在设置/空状态；两处文案与按钮数量不一致 |
-| R-02 | 云端已备份插件列表 | 列出插件备份：名称 + 版本 + 更新时间；同名插件按 Chrome/Firefox 合并一行，右侧 🟢/🦊 分别跳对应商店（未备份一侧灰显不可点），并有删除按钮 | index.html:1485-1489、930-984、957-962、920-928 | GET /api/extensions → extensions[]（src/index.ts:1297-1310）；DELETE /api/extensions/:id（1345） | 合并行删除只删一侧：delId 取 chrome.id 优先（966），Firefox 行残留（bug）；条目数徽标按合并后行数计（952） |
+| R-02 | 云端已备份插件列表 | 列出插件备份：名称 + 版本 + 更新时间；同名插件按 Chrome/Firefox 合并一行，右侧 Chrome/Firefox 分别跳对应商店（未备份一侧灰显不可点），并有删除按钮 | index.html:1485-1489、930-984、957-962、920-928 | GET /api/extensions → extensions[]（src/index.ts:1297-1310）；DELETE /api/extensions/:id（1345） | 合并行删除只删一侧：delId 取 chrome.id 优先（966），Firefox 行残留（bug）；条目数徽标按合并后行数计（952） |
 | R-03 | 商店跳转规则 | 有 Web Store ID（32 位 a-p）→ 用库里 url 或 crxsoso 详情页；Firefox → AMO 按名搜索；其它 → Chrome 商店按名搜索 | index.html:920-928 | — | 与服务端写库时生成逻辑重复（src/index.ts:1324-1329），双份实现 |
 | R-04 | 插件在线状态 | 显示「插件在线（N）/ 离线」与「上次通讯」 | index.html:1445-1449、1850-1861 | GET /api/sync/status → {last_sync_at,last_sync_from,total_links,total_groups,pending_sync,listeners}（src/index.ts:862-877） | 后端 listeners 硬编码 0（875），前端按 listeners>0 判在线（1855）→ 永远显示「离线」，功能实际不可用 |
 | R-05 | 备份/同步状态摘要 | 显示「分组：N · 链接：N · 待插件同步：N · 上次通讯 · 来源」 | index.html:1462-1465、1859-1860 | 同上 | 无手动触发同步按钮；pending_sync 无解释入口 |
@@ -219,8 +219,8 @@
 | S-01 | 内置图标选择器 | 弹窗 8 列网格展示全部内置 SVG，顶部按名称搜索过滤，点击选中，确定后回填输入框并就地显示预览 | index.html:143-156、352-419；style.css:864-927 | GET /api/builtin-icons → icons[{name,path}]（src/index.ts:1230-1238） | 首次拉取后缓存到 window._builtinIcons（360-370）；内置图标共 104 个 SVG（static/icons/）；有「加载中/加载失败/无图标」三态 |
 | S-02 | 在线图标选择器 | 另一套弹窗：选图标 API（vemetric / favicon.im / 自定义前缀）+ 填目标域名 → 实时预览并显示生成的图标 URL → 确定回填 | index.html:128-140、207-345 | 生成的是第三方 favicon 服务地址，实际取图由 /api/icon/proxy 代理（D-04） | 与 S-01 完全独立两套实现（DOM、样式、开关机制都不同），可合并为一个选择器两个 tab |
 | S-03 | 图标预览联动 | 组/链接图标输入框旁预览小方块随选择即时更新 | index.html:326-330、380-383、445-450 | — | 预览写死 filter:invert(1)，只适配深色主题 |
-| S-04 | 清空图标 | 编辑组弹窗 ✕ 把图标置空并回显默认书签图标 | index.html:445-450、735/758 | — | 仅组有；链接无「清空图标」（只能手删输入框） |
-| S-05 | 组图标渲染兜底 | 组图标支持 emoji 或 /static/icons 路径；空或旧值 📁 统一显示默认书签 SVG；加载失败自动替换默认图标 | index.html:443-444、451-457 | — | — |
+| S-04 | 清空图标 | 编辑组弹窗 [否] 把图标置空并回显默认书签图标 | index.html:445-450、735/758 | — | 仅组有；链接无「清空图标」（只能手删输入框） |
+| S-05 | 组图标渲染兜底 | 组图标支持 emoji 或 /static/icons 路径；空或旧值 [默认图标] 统一显示默认书签 SVG；加载失败自动替换默认图标 | index.html:443-444、451-457 | — | — |
 
 ### T. 操作日志与统计
 
@@ -269,7 +269,7 @@
 |---|---|---|
 | id | int | 一切操作的标识（data-id / data-group-id，520/559 等） |
 | name | text | 展示、同名去重校验（742、500-501） |
-| icon | text（emoji 或 /static/icons/*.svg） | 组图标（451-457）；新建默认空串（740），后端默认 📁（src/index.ts:323） |
+| icon | text（emoji 或 /static/icons/*.svg） | 组图标（451-457）；新建默认空串（740），后端默认 [默认图标]（src/index.ts:323） |
 | type | 'pinned' / 'tab'（默认 tab） | 分固定区/标签区（500-502）、互转（772-781） |
 | display_mode | 'compact' / 'grid' / 'icon'（默认 compact） | 三态展示（505-519、562-576）、编辑项（758） |
 | layout_mode | 'single' / 'multi'（默认 single） | 固定组单列/多列（524-539、758） |

@@ -3,13 +3,18 @@
   "version": "2.0.0-m1",
   "private": true,
   "description": "自托管书签服务（后端 /server，前端 /web，飞牛 /fn，容器 /docker，插件 /addons，文档 /docs）",
-  "engines": { "node": ">=22.5.0" },
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "npm --prefix server run dev",
     "start": "npm --prefix server run start",
     "test": "npm --prefix server run test",
     "typecheck": "npm --prefix server run typecheck",
     "db:migrate": "npm --prefix server run db:migrate",
-    "bench": "npm --prefix server run bench"
+    "bench": "npm --prefix server run bench",
+    "web": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:check": "npm --prefix web run typecheck"
   }
 }

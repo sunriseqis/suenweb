@@ -16,11 +16,20 @@
 ## 快速开始（开发期统一 npm，不折腾容器）
 
     npm --prefix server install
-    npm run dev          # 默认 http://127.0.0.1:8080
-    npm test             # node:test + fastify inject
-    npm run bench        # 低阻塞基线：p50/p95/p99 + event loop 延迟
+    npm --prefix web install
 
-首次启动后调用 POST /api/auth/setup 设置管理密码（该密码同时是备份口令）。
+    npm run dev          # 后端 http://127.0.0.1:8080
+    npm run web          # 前端 http://localhost:5173（/api 已代理到 8080）
+
+    npm test             # 后端 node:test + fastify inject
+    npm run bench        # 低阻塞基线：p50/p95/p99 + event loop 延迟
+    npm run web:build    # 前端构建到 public/（生成物不入库）
+
+首次打开前端会引导设置管理密码（该密码同时是备份口令，最短 6 位）。
+
+## 视觉与交互
+
+界面采用 Maximalism / Dopamine 设计系统（见 docs/design/DESIGN-SYSTEM.md）：五色轮转、撞色边框、多层阴影、图案叠层，深浅两套主题；动效分满功率（登录 / 设置）与半功率（书签主界面）两档，并提供降噪开关。界面禁止 emoji，装饰一律用内联 SVG。
 
 ## 文档入口
 

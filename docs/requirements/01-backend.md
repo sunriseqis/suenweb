@@ -48,7 +48,7 @@
 | 编号 | 功能名 | 现状行为（用户可感知） | 实现位置证据 | 数据结构/接口依赖 | 备注 |
 |---|---|---|---|---|---|
 | B-01 | 读取全部导航数据 | 首页一次拿到全部分组与全部链接并渲染（标签组/固定组、紧凑/详情/仅图标、单列/多列） | `GET /api/data` `src/index.ts:314-317`；聚合 `getAllData` `src/db.ts:41-63` | `groups_table`、`links`；返回 groups[ ] 内嵌 links[ ] | **公开接口（无鉴权）**：未设密码时全站书签对外可读；即便设了密码该接口仍匿名可读 → 需裁决 |
-| B-02 | 新建分组 | 新建标签式/固定式分组，自动排到末尾，默认图标 📁 | `POST /api/groups` `src/index.ts:319-339` | `groups_table(name,icon,type,sort_order)`；sort_order=MAX+1（327-328） | 无分组名唯一约束；同名分组会引发按名匹配的歧义（见 B-07/E-01） |
+| B-02 | 新建分组 | 新建标签式/固定式分组，自动排到末尾，默认图标 [默认图标] | `POST /api/groups` `src/index.ts:319-339` | `groups_table(name,icon,type,sort_order)`；sort_order=MAX+1（327-328） | 无分组名唯一约束；同名分组会引发按名匹配的歧义（见 B-07/E-01） |
 | B-03 | 编辑分组 | 可改组名、图标（内置 SVG/emoji）、显示模式（compact/grid/icon）、固定组单列或多列、排序号 | `PUT /api/groups/:gid` `src/index.ts:341-358` | 白名单字段（346）：name,icon,type,display_mode,layout_mode,sort_order | 逐字段单独 UPDATE（N 次往返）；返回更新后整行 |
 | B-04 | 删除分组 | 删除分组，其下链接一并删除 | `DELETE /api/groups/:gid` `src/index.ts:360-370` | links.group_id 外键 ON DELETE CASCADE（`schema.sql:32`） | 依赖 D1 外键实际生效（代码未显式保障）；若不生效会留孤儿链接 → 待确认 |
 | B-05 | 新建链接 | 新增书签：可给 group_id，或只给 group_name（不存在则自动建组，含 group_type）；新链接排到组末尾 | `POST /api/links` `src/index.ts:372-421`（按名建组 381-396） | `links(...)`、`groups_table`；新链接固定 synced_to_browser=0（413） | 插件右键收藏正走此接口（`extension/background.js` 中 POST /api/links） |
@@ -147,7 +147,7 @@
 
 | 编号 | 功能名 | 现状行为 | 证据 | 依赖 | 备注 |
 |---|---|---|---|---|---|
-| L-01 | AI 补全分组图标 | 对图标为空或 📁 的分组调用大模型，从 104 个内置图标中挑一个写回分组 | `POST /api/ai/suggest-icons` `src/index.ts:1355-1395`；实现 `suggestGroupIcons` `src/ai.ts:294-374` | groups_table.icon、settings.llm_*、env.AI | 请求体的 llm_* 优先于库内设置（1362-1366）；非法图标名被过滤（364）；全无效返回 502 与中文提示；成功写日志（1393） |
+| L-01 | AI 补全分组图标 | 对图标为空或 [默认图标] 的分组调用大模型，从 104 个内置图标中挑一个写回分组 | `POST /api/ai/suggest-icons` `src/index.ts:1355-1395`；实现 `suggestGroupIcons` `src/ai.ts:294-374` | groups_table.icon、settings.llm_*、env.AI | 请求体的 llm_* 优先于库内设置（1362-1366）；非法图标名被过滤（364）；全无效返回 502 与中文提示；成功写日志（1393） |
 | L-02 | AI 生成链接描述（单条/批量） | 单条：给某条书签生成 ≤15 字中文描述并写回；批量：给所有描述为空的链接（可按分组筛选）成批生成，每批 10 条 | `POST /api/ai/describe` `src/index.ts:1397-1455`（单条 1416-1427、批量 1430-1454）；实现 `src/ai.ts:32-103,108-196` | links.description、settings.llm_*、env.AI | 逐条 UPDATE（1447-1452）N 次往返；**不重置 synced_to_browser**（描述不同步到浏览器）；批量按批内序号回填 id，依赖模型遵守约定，失败回退正则逐行 + 域名启发式 |
 | L-03 | 链接可用性巡检 | 一键体检全部或选定分组链接，返回 total/working/broken 与逐条状态码与错误原因（超时/协议不支持/HTTP xxx） | `POST /api/ai/check` `src/index.ts:1457-1478`；实现 `checkLinksHealth` `src/ai.ts:379-458` | links JOIN groups_table | 名义在 /api/ai/* 下但**与 AI 无关**（命名误导）；先 HEAD 再 GET 兜底、6s 超时、8 并发分批；结果**不落库**，每次全量重跑；链接多时可能触 Workers 子请求上限（待确认） |
 | L-04 | AI 供应商降级链 | 用户可感知的自动化：优先自定义 OpenAI 兼容端点 → 免费 Workers AI（llama-3.1-8b）→ 失败再试中文 Qwen1.5-7b → 都不行用内置域名启发式（GitHub/B站/知乎/V2EX/掘金/Google/Bing/百度/YouTube/X/Notion/Cloudflare 等 12 条固定文案，否则截断标题） | `src/ai.ts:43-102`（自定义 44-47、主模型 50-78、Qwen 兜底 82-98、启发式 102）、`src/ai.ts:201-224`（/chat/completions）、269-289（启发式表） | env.AI、外部自定义 LLM、settings.llm_* | 有超时保护（runWithTimeout 17-27，6s/8s/20s）；ai_provider/ai_model 设置项**完全不参与决策**；描述后处理上限 30 字（237）与提示词 15 字不一致 |
@@ -191,7 +191,7 @@
 | auth_rate | **仅** `src/index.ts:95,138` | 登录失败计数与锁定 | ip |
 | backups | **仅** `src/index.ts:96,139` | D1 版每日备份快照 | id |
 
-> ⚠️ auth_rate、backups **不在 schema.sql**，只由运行时 ensureDatabaseTables 创建。手工执行 schema.sql 的新库在首次请求前缺这两张表。
+> [注意] auth_rate、backups **不在 schema.sql**，只由运行时 ensureDatabaseTables 创建。手工执行 schema.sql 的新库在首次请求前缺这两张表。
 
 ### 2.1 关键字段与关系
 

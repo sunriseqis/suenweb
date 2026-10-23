@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark" data-tier="full" data-calm="false">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>SuenWeb 书签</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230D0D1A'/%3E%3Cpath d='M16 4l3.4 8.2 8.6.7-6.5 5.6 1.9 8.5L16 22.2 8.6 27l1.9-8.5L4 12.9l8.6-.7z' fill='%23FF3AF2'/%3E%3C/svg%3E" />
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem('sw.theme') || 'system';
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = theme === 'dark' || (theme === 'system' && prefersDark);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          document.documentElement.dataset.tier = localStorage.getItem('sw.tier') || 'full';
+          document.documentElement.dataset.calm = localStorage.getItem('sw.calm') || 'false';
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="overlay-root"></div>
+    <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

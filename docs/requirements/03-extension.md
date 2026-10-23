@@ -59,7 +59,7 @@
 
 | 编号 | 功能名 | 现状行为描述 | 实现位置证据 | 数据结构/接口依赖 | 备注 |
 |---|---|---|---|---|---|
-| RS-01 | 列出云端备份 | 点「还原」弹内嵌选择器，列出 WebDAV 上所有 `suenweb-` 开头 html/json，带分类标签（🌐 应用全量数据 / 📑 浏览器书签 / 🧩 扩展备份）、大小、修改时间，按时间倒序 | popup.js:174-204；background.js:335-410（PROPFIND Depth:1 + 正则解析 href/getlastmodified/getcontentlength） | WebDAV `PROPFIND Depth:1`（body :343-349）；返回 `{backups:[{name,href,category,label,date,size,_date}], activeDir}` | 手写正则解析 DAV XML（:374-375）；主目录 404 回退根目录（:358-369） |
+| RS-01 | 列出云端备份 | 点「还原」弹内嵌选择器，列出 WebDAV 上所有 `suenweb-` 开头 html/json，带分类标签（[全量] 应用全量数据 / [书签] 浏览器书签 / [扩展] 扩展备份）、大小、修改时间，按时间倒序 | popup.js:174-204；background.js:335-410（PROPFIND Depth:1 + 正则解析 href/getlastmodified/getcontentlength） | WebDAV `PROPFIND Depth:1`（body :343-349）；返回 `{backups:[{name,href,category,label,date,size,_date}], activeDir}` | 手写正则解析 DAV XML（:374-375）；主目录 404 回退根目录（:358-369） |
 | RS-02 | 还原「应用全量数据」 | 选中应用备份 → 下载 → 直接 POST 服务端导入，提示「应用全量还原成功：N 组，M 链接」 | background.js:413-461、444-461；popup.js:209-217 | POST `/api/config/import`（body 必须 `version:1`，src/index.ts:647；返回 `imported:{groups,links,...}`） | **全量覆盖式导入**（后端先 `DELETE FROM links`），**无二次确认弹窗** |
 | RS-03 | 还原「扩展清单」 | 选中扩展备份 → 下载 JSON → POST 覆盖服务端扩展库，提示「扩展列表还原成功：N 个插件」 | background.js:463-479 | POST `/api/extensions {browser, extensions}`（src/index.ts:1312 覆盖该 browser 全行） | 只回写服务端表，**不会在浏览器安装扩展**，提示语易误解 |
 | RS-04 | 还原「浏览器书签」 | 选中书签 HTML → 解析所有 `<A HREF>` → 在「其他书签」下新建「SuenWeb 恢复」文件夹逐条创建，提示条数 | background.js:481-483、486-503、514-524 | 正则解析 Netscape HTML；`browser.bookmarks.create` | 无去重/无增量/无嵌套还原（全平铺）；每次还原都新建同名文件夹；单条失败 `catch {}` 静默 |
