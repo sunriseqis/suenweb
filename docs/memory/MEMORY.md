@@ -29,7 +29,7 @@
 | 链接去重 | url_normalized：协议主机小写、去默认端口、去尾斜杠、去跟踪参数（utm_*、fbclid 等）、丢 hash、query 排序；**同组重复静默合并**；**跨组重复返回 409，由前端弹窗让用户放行**（on_duplicate=allow/ignore/skip）；用户选 ignore 写入 dedupe_ignores，同一 (URL, 分组) 不再提示，可撤销 |
 | 浏览器 | Firefox 为主（MV3 事件页），Chrome/Edge 同步支持；不做 MV2 |
 | 外观个性化 | 背景/壁纸/字体的个性化选项仍推迟 P3；但**视觉风格本身**按上面第 3 行采用 Maximalism/Dopamine，深浅两套主题随 M2 一起交付 |
-| 前端设计系统 | **Maximalism / Dopamine**（见 docs/design/DESIGN-SYSTEM.md）：五色轮转、撞色边框、多层阴影、图案叠层；深浅两套主题，浅色用同一套五色加深版，不降级 |
+| 前端设计系统 | **Metro / 磁贴**（docs/design/DESIGN-SYSTEM.md v2）：0 圆角 + 1px 线 + 无阴影渐变，**全站单一强调色**，磁贴三尺寸；强调色只表达可交互/选中/当前。v1 的 Maximalism 已存档为 DESIGN-SYSTEM-dopamine.md，不再执行 |
 | 前端技术 | Vite + TS + Tailwind v4 + 原生 DOM 渲染函数 + 类名变体表；不引 React/shadcn |
 | 主题与动效 | 主题三态（跟随系统/浅/深）+ 动效两级（满功率：登录/引导/设置；半功率：书签主界面）+ 降噪模式开关；均存本地，尊重 prefers-reduced-motion |
 | 字体 | Outfit + DM Sans + Bungee 自托管 woff2（仅拉丁子集，@fontsource）；中文回退系统黑体，中文标题禁用三层文字阴影 |

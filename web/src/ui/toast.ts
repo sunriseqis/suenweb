@@ -4,35 +4,31 @@ import { icon } from './icons.ts';
 
 export type ToastKind = 'info' | 'success' | 'error';
 
-const KINDS: Record<ToastKind, { border: string; iconName: 'sparkle' | 'check' | 'bolt' }> = {
-  info: { border: 'border-secondary', iconName: 'sparkle' },
-  success: { border: 'border-tertiary', iconName: 'check' },
-  error: { border: 'border-quaternary', iconName: 'bolt' },
+const ICONS: Record<ToastKind, 'sparkle' | 'check' | 'bolt'> = {
+  info: 'sparkle',
+  success: 'check',
+  error: 'bolt',
 };
 
 export function toast(message: string, kind: ToastKind = 'info'): void {
   const root = document.getElementById('toast-root');
   if (!root) return;
-  const style = KINDS[kind];
   const node = el('div', {
-    class: cn(
-      'pointer-events-auto flex items-center gap-3 rounded-full border-4 bg-[var(--c-surface)] px-6 py-3 shadow-multi',
-      style.border,
-      'text-sm font-bold text-fg',
-    ),
+    class: cn('pointer-events-auto flex items-center gap-2 border border-[var(--c-line)] bg-[var(--c-surface)] px-3 py-2 text-[12px] text-fg'),
   });
-  append(node, [icon(style.iconName, { size: 18 }), el('span', { text: message })]);
-  node.style.transition = 'transform 300ms ease-out, opacity 300ms ease-out';
-  node.style.transform = 'translateY(16px)';
+  append(node, [
+    el('span', { class: kind === 'error' ? 'h-3 w-0.5 bg-[var(--c-accent)]' : 'h-3 w-0.5 bg-accent', 'aria-hidden': 'true' }),
+    icon(ICONS[kind], { size: 14, stroke: 1.8 }),
+    el('span', { text: message }),
+  ]);
+  node.style.transition = 'opacity 160ms linear, transform 160ms ease-out';
   node.style.opacity = '0';
   root.appendChild(node);
   requestAnimationFrame(() => {
-    node.style.transform = 'translateY(0)';
     node.style.opacity = '1';
   });
   setTimeout(() => {
     node.style.opacity = '0';
-    node.style.transform = 'translateY(12px)';
-    setTimeout(() => node.remove(), 300);
-  }, 3200);
+    setTimeout(() => node.remove(), 200);
+  }, 2800);
 }

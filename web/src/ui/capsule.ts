@@ -11,9 +11,9 @@ export type CapsuleItem = {
   showLabel?: boolean;
 };
 
-const HIDE_DELAY = 2400;
-const CORNER_X = 340;
-const CORNER_Y = 220;
+const HIDE_DELAY = 2600;
+const CORNER_X = 320;
+const CORNER_Y = 200;
 
 let hideTimer: number | undefined;
 let cleanup: (() => void) | null = null;
@@ -26,7 +26,6 @@ function inCorner(x: number, y: number): boolean {
   return y > window.innerHeight - CORNER_Y && x > window.innerWidth - CORNER_X;
 }
 
-/** 右下角自动隐藏胶囊：只有这里放页面级操作，顶栏不再堆图标 */
 export function mountCapsule(items: CapsuleItem[]): void {
   const root = host();
   if (!root) return;
@@ -35,8 +34,7 @@ export function mountCapsule(items: CapsuleItem[]): void {
   clear(root);
 
   const bar = el('div', {
-    class: 'capsule pointer-events-auto mx-auto flex w-fit items-center gap-2 rounded-full border-4 border-tertiary bg-[var(--c-panel)] p-2 backdrop-blur-md',
-    style: '--sh-1:var(--c-secondary);--sh-2:var(--c-accent);box-shadow:5px 5px 0 var(--sh-1),10px 10px 0 var(--sh-2);',
+    class: 'capsule pointer-events-auto flex items-center gap-0.5 border border-[var(--c-line)] bg-[var(--c-surface)] p-0.5',
     role: 'toolbar',
     'aria-label': '页面操作',
     dataset: { hidden: 'false' },
@@ -46,17 +44,18 @@ export function mountCapsule(items: CapsuleItem[]): void {
     const node = el('button', {
       type: 'button',
       class: cn(
-        'pressable flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border-4 px-3 font-heading text-[10px] font-black uppercase tracking-widest transition-all duration-300',
-        item.active ? 'border-tertiary bg-riot text-ink' : 'border-quaternary bg-[var(--c-surface)] text-fg hover:scale-105 hover:border-accent',
+        'pressable flex h-8 items-center justify-center gap-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.06em]',
+        item.active
+          ? 'bg-accent text-[color:var(--c-accent-ink)]'
+          : 'text-[var(--c-fg-soft)] hover:bg-[var(--c-surface-2)] hover:text-fg',
+        item.showLabel ? '' : 'w-8',
       ),
       title: item.label,
       'aria-label': item.label,
       'aria-pressed': item.active ? 'true' : 'false',
-      onClick: () => {
-        item.onClick();
-      },
+      onClick: () => item.onClick(),
     });
-    node.append(icon(item.iconName, { size: 17 }));
+    node.append(icon(item.iconName, { size: 16, stroke: 1.8 }));
     if (item.showLabel) node.append(el('span', { text: item.label }));
     bar.appendChild(node);
   }

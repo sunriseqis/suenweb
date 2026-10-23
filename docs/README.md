@@ -14,7 +14,8 @@
 | ARCHITECTURE.md | 技术架构 v1：选型、低阻塞八铁律、目录与脚本约定、部署形态、待核对项 | 生效中 |
 | memory/MEMORY.md | 项目铁律、已锁定决策、已知坑与规避 | 每次决策后更新 |
 | plan/PLAN.md | 里程碑 M1–M7、当前进度、下一步 | 每次开工/收工更新 |
-| design/DESIGN-SYSTEM.md | **前端设计系统（Maximalism / Dopamine）落地版**：色彩令牌（深/浅）、排版、边框圆角阴影、图案、两级动效、禁止事项、技术映射 | 生效中，前端唯一视觉真源 |
+| design/DESIGN-SYSTEM.md | **前端设计系统 Metro / 磁贴（v2）**：色彩令牌（深/浅）、排版、边框圆角阴影、图案、两级动效、禁止事项、技术映射 | 生效中，前端唯一视觉真源 |
+| design/DESIGN-SYSTEM-dopamine.md | v1 花哨版设计系统存档（已废弃，勿执行） | 历史参考 |
 | design/README.md | 原型 / 图标 / 视觉稿的落盘规则与清单 | 生效中 |
 | requirements/ | v1.3.0 旧版三维度现状分析（后端 71 / 前端 111 / 插件 48 项） | 历史参考，不再维护 |
 

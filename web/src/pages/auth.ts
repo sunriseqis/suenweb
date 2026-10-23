@@ -1,20 +1,7 @@
-import { cn } from '../lib/cn.ts';
 import { append, el } from '../lib/dom.ts';
 import { button } from '../ui/button.ts';
 import { field } from '../ui/field.ts';
-import { icon, type IconName } from '../ui/icons.ts';
 import { brandLogo } from '../ui/logo.ts';
-
-type Floater = { name: IconName; top: string; left: string; size: number; color: string; anim: string };
-
-const FLOATERS: Floater[] = [
-  { name: 'star', top: '8%', left: '6%', size: 64, color: 'text-tertiary', anim: 'anim-float' },
-  { name: 'sparkle', top: '18%', left: '84%', size: 48, color: 'text-secondary', anim: 'anim-float-rev' },
-  { name: 'triangle', top: '62%', left: '10%', size: 56, color: 'text-quaternary', anim: 'anim-bounce' },
-  { name: 'circle', top: '74%', left: '78%', size: 72, color: 'text-accent', anim: 'anim-float' },
-  { name: 'bolt', top: '38%', left: '92%', size: 40, color: 'text-quinary', anim: 'anim-wiggle' },
-  { name: 'square', top: '88%', left: '40%', size: 44, color: 'text-secondary', anim: 'anim-float-rev' },
-];
 
 export type AuthProps = {
   mode: 'setup' | 'login';
@@ -26,62 +13,37 @@ export type AuthProps = {
 
 export function renderAuth(props: AuthProps): HTMLElement {
   const { mode, busy, error } = props;
-  const root = el('div', { class: 'relative z-10 flex min-h-screen items-center justify-center overflow-hidden px-4 py-16' });
+  const root = el('div', { class: 'relative z-10 flex min-h-screen items-center justify-center bg-[var(--c-bg)] px-4 py-16' });
+  const panel = el('div', { class: 'w-full max-w-sm border border-[var(--c-line)] bg-[var(--c-surface)]' });
+  panel.appendChild(el('div', { class: 'h-0.5 w-full bg-accent', 'aria-hidden': 'true' }));
 
-  root.appendChild(el('div', { class: 'pattern-mesh pointer-events-none absolute inset-0', 'aria-hidden': 'true' }));
-  root.appendChild(el('div', { class: 'pattern-stripes pointer-events-none absolute inset-0', 'aria-hidden': 'true' }));
-  root.appendChild(
-    el('span', {
-      class: 'pointer-events-none absolute -bottom-24 left-1/2 -translate-x-1/2 select-none font-heading text-[18rem] font-black leading-none text-fg/[0.06]',
-      'aria-hidden': 'true',
-      text: mode === 'setup' ? 'HELLO' : 'AGAIN',
+  const body = el('div', { class: 'p-7' });
+  append(body, [
+    el('div', { class: 'flex items-center gap-2 text-accent' }, brandLogo(20)),
+    el('h1', { class: 'mt-4 text-[26px] font-light leading-tight text-fg', text: mode === 'setup' ? '设置管理密码' : '登录' }),
+    el('p', {
+      class: 'mt-2 text-[12px] leading-relaxed text-[var(--c-fg-soft)]',
+      text:
+        mode === 'setup'
+          ? '这个密码同时是备份加密口令，最短 6 位。丢失只能靠备份文件恢复。'
+          : '密码最短 6 位。游客可以只读书签，登录后才能编辑。',
     }),
-  );
-
-  for (const floater of FLOATERS) {
-    root.appendChild(
-      el('span', {
-        class: cn('pointer-events-none absolute opacity-80', floater.color, floater.anim),
-        style: 'top:' + floater.top + ';left:' + floater.left,
-        'aria-hidden': 'true',
-        'data-decor': 'true',
-      },
-        icon(floater.name, { size: floater.size, stroke: 2.2 }),
-      ),
-    );
-  }
-
-  const cardEl = el('div', {
-    class: 'pattern-dots relative w-full max-w-lg rounded-[32px] border-8 border-accent bg-[var(--c-surface)] p-8 shadow-multi-lg sm:p-10',
-    style: '--sh-1:var(--c-tertiary);--sh-2:var(--c-quinary);--sh-3:var(--c-secondary);',
-  });
-
-  append(cardEl, [
-    el('div', { class: 'flex items-center gap-2 text-accent' }, brandLogo(26), el('span', { class: 'font-display text-[11px] uppercase tracking-[0.4em] text-secondary', text: 'SuenWeb' })),
-    el('h1', { class: 'mt-3 text-5xl text-fg sm:text-6xl' },
-      el('span', { class: 'text-gradient anim-gradient', text: mode === 'setup' ? 'FIRST' : 'WELCOME' }),
-      el('span', { class: 'ts-cn block text-2xl sm:text-3xl', text: mode === 'setup' ? '先设一个管理密码' : '回到你的书签' }),
-    ),
-    el('p', { class: 'mt-4 text-sm text-fg/70', text: mode === 'setup' ? '这个密码同时是备份加密口令，最短 6 位。丢了只能靠备份文件恢复。' : '密码最短 6 位；忘了只能从备份还原。' }),
   ]);
 
   const pw = field({
-    label: mode === 'setup' ? '设置管理密码' : '管理密码',
+    label: '管理密码',
     type: 'password',
     placeholder: '至少 6 位',
     autocomplete: mode === 'setup' ? 'new-password' : 'current-password',
     required: true,
-    index: 1,
     autofocus: true,
   });
 
   const submit = button({
-    label: busy ? '处理中…' : mode === 'setup' ? '开始使用' : '进入书签库',
-    iconName: 'login',
+    label: busy ? '处理中' : mode === 'setup' ? '开始使用' : '进入',
     variant: 'primary',
-    size: 'lg',
     disabled: busy,
-    class: 'mt-6 w-full',
+    class: 'mt-4 w-full justify-center',
     onClick: () => props.onSubmit((pw.input as HTMLInputElement).value),
   });
 
@@ -89,16 +51,19 @@ export function renderAuth(props: AuthProps): HTMLElement {
     if ((event as KeyboardEvent).key === 'Enter') submit.click();
   });
 
-  append(cardEl, [
-    el('div', { class: 'mt-6' }, pw.wrapper),
-    error ? el('p', { class: 'mt-3 rounded-2xl border-4 border-quaternary px-4 py-2 text-sm font-bold text-fg', text: error }) : null,
+  append(body, [
+    el('div', { class: 'mt-5' }, pw.wrapper),
+    error
+      ? el('p', { class: 'mt-3 border-l-2 border-accent bg-[var(--c-accent-soft)] px-2 py-1 text-[11px] text-fg', text: error })
+      : null,
     submit,
-    el('div', { class: 'mt-6 flex items-center justify-between gap-3' },
-      button({ label: '直接逛逛', variant: 'ghost', size: 'sm', onClick: props.onHome }),
-      el('span', { class: 'font-display text-[10px] uppercase tracking-[0.3em] text-fg/40', text: mode === 'setup' ? 'step 1 / 1' : 'session 30d' }),
+    el('div', { class: 'mt-4 flex items-center justify-between' },
+      button({ label: '先逛逛', variant: 'ghost', size: 'xs', onClick: props.onHome }),
+      el('span', { class: 'text-[9px] uppercase tracking-[0.18em] text-[var(--c-fg-soft)]', text: 'session 30d' }),
     ),
   ]);
 
-  root.appendChild(cardEl);
+  panel.appendChild(body);
+  root.appendChild(panel);
   return root;
 }

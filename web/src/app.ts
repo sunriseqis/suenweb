@@ -96,14 +96,13 @@ async function loadIgnores(): Promise<void> {
 
 function renderHeader(): HTMLElement {
   const header = el('header', {
-    class: 'sticky top-0 z-30 border-b-8 border-accent',
-    style: 'background:color-mix(in srgb, var(--c-bg) 86%, transparent);backdrop-filter:blur(10px);',
+    class: 'sticky top-0 z-30 border-b border-[var(--c-line)] bg-[var(--c-bg)]',
   });
-  const inner = el('div', { class: 'mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-2 sm:px-6' });
-  const brand = el('a', { href: '#/', class: 'flex items-center gap-2 font-display text-sm tracking-[0.2em] text-fg' });
+  const inner = el('div', { class: 'mx-auto flex w-full max-w-[1500px] items-center gap-2 px-4 py-2 sm:px-6' });
+  const brand = el('a', { href: '#/', class: 'flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.22em] text-fg' });
   brand.append(
-    el('span', { class: 'flex h-8 w-8 items-center justify-center rounded-lg border-4 border-tertiary bg-riot text-ink' }, brandLogo(17)),
-    el('span', { class: 'text-gradient anim-gradient', text: 'SUENWEB' }),
+    el('span', { class: 'flex h-6 w-6 items-center justify-center bg-accent text-[color:var(--c-accent-ink)]' }, brandLogo(14)),
+    el('span', { text: 'SuenWeb' }),
   );
   inner.appendChild(brand);
   header.appendChild(inner);

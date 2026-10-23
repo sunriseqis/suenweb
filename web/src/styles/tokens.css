@@ -1,61 +1,60 @@
 @import 'tailwindcss';
 
-/* 设计令牌：颜色字面值只允许出现在本文件 */
+/* 设计令牌：Metro / 磁贴风格（颜色字面值只允许出现在本文件） */
 
 @theme {
   --font-heading: 'Outfit', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   --font-body: 'DM Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
-  --font-display: 'Bungee', 'Outfit', 'PingFang SC', sans-serif;
+  --font-display: 'Outfit', 'PingFang SC', sans-serif;
 
   --color-bg: var(--c-bg);
   --color-fg: var(--c-fg);
   --color-surface: var(--c-surface);
-  --color-muted: var(--c-muted);
-  --color-line: var(--c-border);
+  --color-surface2: var(--c-surface-2);
+  --color-muted: var(--c-surface-2);
+  --color-line: var(--c-line);
   --color-accent: var(--c-accent);
-  --color-secondary: var(--c-secondary);
-  --color-tertiary: var(--c-tertiary);
-  --color-quaternary: var(--c-quaternary);
-  --color-quinary: var(--c-quinary);
-  --color-ink: var(--c-ink);
+  --color-secondary: var(--c-accent);
+  --color-tertiary: var(--c-accent);
+  --color-quaternary: var(--c-accent);
+  --color-quinary: var(--c-accent);
+  --color-ink: var(--c-accent-ink);
 
-  --radius-card: 24px;
-  --radius-box: 16px;
+  --radius-card: 0px;
+  --radius-box: 0px;
 }
 
-/* 深色：设计原稿值 */
+/* 深色：炭黑底 + 单一强调蓝 */
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --c-bg: #0d0d1a;
-  --c-fg: #ffffff;
-  --c-surface: #1a1030;
-  --c-muted: #2d1b4e;
-  --c-border: #ff3af2;
-  --c-accent: #ff3af2;
-  --c-secondary: #00f5d4;
-  --c-tertiary: #ffe600;
-  --c-quaternary: #ff6b35;
-  --c-quinary: #7b2fff;
-  --c-ink: #0d0d1a;
-  --c-fg-soft: rgba(255, 255, 255, 0.78);
-  --c-panel: rgba(45, 27, 78, 0.82);
+  --c-bg: #141414;
+  --c-surface: #1f1f1f;
+  --c-surface-2: #262626;
+  --c-fg: #f2f2f2;
+  --c-fg-soft: rgba(242, 242, 242, 0.6);
+  --c-line: rgba(255, 255, 255, 0.14);
+  --c-line-strong: rgba(255, 255, 255, 0.3);
+  --c-accent: #1ba1e2;
+  --c-accent-ink: #ffffff;
+  --c-accent-soft: rgba(27, 161, 226, 0.16);
+  --c-accent-active: rgba(27, 161, 226, 0.3);
+  --c-panel: #1f1f1f;
 }
 
-/* 浅色：同一套五色加深，奶油白底，不降级 */
+/* 浅色：浅灰底 + 同色系深蓝 */
 :root[data-theme='light'] {
   color-scheme: light;
-  --c-bg: #fff7ee;
-  --c-fg: #170f2b;
+  --c-bg: #f3f3f3;
   --c-surface: #ffffff;
-  --c-muted: #f4e6ff;
-  --c-border: #c4179e;
-  --c-accent: #c4179e;
-  --c-secondary: #00907c;
-  --c-tertiary: #a87900;
-  --c-quaternary: #c64a16;
-  --c-quinary: #6320d0;
-  --c-ink: #fff7ee;
-  --c-fg-soft: rgba(23, 15, 43, 0.76);
-  --c-panel: rgba(255, 255, 255, 0.86);
+  --c-surface-2: #ececec;
+  --c-fg: #1b1b1b;
+  --c-fg-soft: rgba(27, 27, 27, 0.6);
+  --c-line: rgba(0, 0, 0, 0.12);
+  --c-line-strong: rgba(0, 0, 0, 0.3);
+  --c-accent: #0b6fa4;
+  --c-accent-ink: #ffffff;
+  --c-accent-soft: rgba(11, 111, 164, 0.1);
+  --c-accent-active: rgba(11, 111, 164, 0.2);
+  --c-panel: #ffffff;
 }
