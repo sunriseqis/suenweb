@@ -6,6 +6,8 @@ import { field } from '../ui/field.ts';
 import { icon } from '../ui/icons.ts';
 import { accentAt, card, shadowVars } from '../ui/surfaces.ts';
 
+export type DisplayMode = 'grid' | 'list' | 'icon';
+
 export type BookmarksProps = {
   groups: GroupWithLinks[];
   authed: boolean;
@@ -23,6 +25,8 @@ export type BookmarksProps = {
   onAddGroup: () => void;
   onEditGroup: (group: GroupWithLinks) => void;
   onDeleteGroup: (group: GroupWithLinks) => void;
+  onTogglePin: (group: GroupWithLinks) => void;
+  onDisplayMode: (group: GroupWithLinks, mode: DisplayMode) => void;
   onLogin: () => void;
 };
 
@@ -44,64 +48,50 @@ function matches(link: Link, query: string): boolean {
   );
 }
 
+function modeOf(group: GroupWithLinks): DisplayMode {
+  const mode = group.display_mode;
+  if (mode === 'grid' || mode === 'list' || mode === 'icon') return mode;
+  return group.type === 'fixed' ? 'grid' : 'icon';
+}
+
 export function renderBookmarks(props: BookmarksProps): HTMLElement {
   const editable = props.authed && props.editing;
-  const root = el('div', { class: 'relative z-10 mx-auto w-full max-w-[1600px] px-4 pb-28 pt-5 sm:px-6' });
+  const root = el('div', { class: 'relative z-10 mx-auto w-full max-w-[1600px] px-3 pb-28 pt-3 sm:px-5' });
 
-  if (!props.authed) {
-    const banner = el('div', {
-      class: 'pattern-stripes mb-5 flex flex-wrap items-center justify-between gap-2 rounded-full border-4 border-dashed border-tertiary px-4 py-1.5',
-    });
-    banner.append(
-      el('p', { class: 'flex items-center gap-2 text-xs font-bold text-fg' },
-        icon('lock', { size: 15 }),
-        el('span', { text: '只读浏览：想编辑请登录' }),
-      ),
-      button({ label: '登录', iconName: 'login', variant: 'primary', size: 'xs', onClick: props.onLogin }),
-    );
-    root.appendChild(banner);
-  }
-
-  if (editable) {
-    const hint = el('div', {
-      class: 'mb-5 flex flex-wrap items-center gap-2 rounded-full border-4 border-dashed border-secondary px-4 py-1.5',
-    });
-    hint.append(
-      icon('lock-open', { size: 15 }),
-      el('span', { class: 'text-xs font-bold text-fg', text: '编辑模式：可拖动排序、增删改；按右下角锁头回到只读' }),
-    );
-    root.appendChild(hint);
-  }
-
+  const pinned = props.groups.filter((group) => group.type === 'fixed');
+  const normal = props.groups.filter((group) => group.type !== 'fixed');
   const totalLinks = props.groups.reduce((sum, group) => sum + group.links.length, 0);
-  const hero = el('header', { class: 'pattern-mesh relative mb-6 overflow-hidden rounded-[24px] border-4 border-accent px-5 py-4' });
-  hero.append(
-    el('span', {
-      class: 'pointer-events-none absolute -right-4 -top-10 select-none font-heading text-[7rem] font-black leading-none text-fg/10 sm:text-[10rem]',
-      'aria-hidden': 'true',
-      text: 'WOW',
-    }),
-    el('div', { class: 'relative flex flex-wrap items-end justify-between gap-3' },
-      el('div', {},
-        el('p', { class: 'font-display text-[10px] uppercase tracking-[0.4em] text-secondary', text: 'SuenWeb 书签库' }),
-        el('h1', { class: 'mt-1 text-3xl text-fg sm:text-4xl' },
-          el('span', { class: 'ts-cn', text: '我的' }),
-          el('span', { class: 'text-gradient anim-gradient', text: ' BOOKMARKS ' }),
-          el('span', { class: 'ts-cn', text: '都在这儿' }),
-        ),
-      ),
-      el('div', { class: 'flex flex-wrap items-center gap-2' },
-        el('span', { class: 'rounded-full border-4 border-secondary px-3 py-0.5 text-xs font-black text-fg', text: props.groups.length + ' 组' }),
-        el('span', { class: 'rounded-full border-4 border-quaternary px-3 py-0.5 text-xs font-black text-fg', text: totalLinks + ' 条' }),
-        editable
-          ? button({ label: '收藏一条', iconName: 'plus', variant: 'primary', size: 'xs', onClick: () => props.onAddLink(props.activeGroupId ?? undefined) })
-          : null,
-      ),
-    ),
-  );
-  root.appendChild(hero);
 
-  const nav = el('nav', { class: 'mb-4 flex flex-wrap items-center gap-1.5', 'aria-label': '分组导航' });
+  const bar = el('div', { class: 'mb-3 flex flex-wrap items-center gap-2' });
+  append(bar, [
+    el('span', { class: 'rounded-full border-2 border-secondary px-2.5 py-0.5 text-[11px] font-black text-fg', text: props.groups.length + ' 组' }),
+    el('span', { class: 'rounded-full border-2 border-quaternary px-2.5 py-0.5 text-[11px] font-black text-fg', text: totalLinks + ' 条' }),
+    editable
+      ? button({ label: '收藏一条', iconName: 'plus', variant: 'primary', size: 'xs', onClick: () => props.onAddLink(props.activeGroupId ?? undefined) })
+      : null,
+    editable
+      ? button({ label: '新建分组', iconName: 'folder', variant: 'secondary', size: 'xs', onClick: props.onAddGroup })
+      : null,
+  ]);
+
+  const search = field({
+    label: '搜索',
+    type: 'search',
+    value: props.query,
+    placeholder: '标题 / 网址 / 备注',
+    index: 2,
+    compact: true,
+  });
+  search.input.addEventListener('input', (event) => {
+    props.onQuery((event.target as HTMLInputElement).value);
+  });
+  bar.appendChild(el('div', { class: 'ml-auto w-full max-w-[16rem]' }, search.wrapper));
+  root.appendChild(bar);
+
+  const nav = el('nav', {
+    class: 'mb-4 flex items-center gap-1.5 overflow-x-auto pb-1',
+    'aria-label': '分组导航',
+  });
   nav.appendChild(navPill('全部', totalLinks, props.activeGroupId === null, 0, () => props.onActiveGroup(null)));
   props.groups.forEach((group, index) => {
     nav.appendChild(
@@ -110,44 +100,43 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
       ),
     );
   });
-  if (editable) {
-    nav.appendChild(button({ label: '新建分组', iconName: 'plus', variant: 'secondary', size: 'xs', onClick: props.onAddGroup }));
-  }
   root.appendChild(nav);
 
-  const search = field({
-    label: '搜索书签',
-    type: 'search',
-    value: props.query,
-    placeholder: '按标题、网址或备注搜索',
-    index: 2,
-    compact: true,
-  });
-  search.input.addEventListener('input', (event) => {
-    props.onQuery((event.target as HTMLInputElement).value);
-  });
-  root.appendChild(el('div', { class: 'mb-6 max-w-xl' }, search.wrapper));
+  if (editable) {
+    const hint = el('div', { class: 'mb-3 flex flex-wrap items-center gap-2 rounded-full border-2 border-dashed border-secondary px-3 py-1' });
+    hint.append(
+      icon('lock-open', { size: 14 }),
+      el('span', { class: 'text-[11px] font-bold text-fg', text: '编辑模式：可拖动、可改。组标题右侧能切「置顶 / 显示密度」；点右下角锁头回只读。' }),
+    );
+    root.appendChild(hint);
+  }
 
-  const visibleGroups = props.groups
-    .map((group) => ({ group, links: group.links.filter((link) => matches(link, props.query)) }))
-    .filter((entry) => props.activeGroupId === null || entry.group.id === props.activeGroupId)
-    .filter((entry) => entry.links.length > 0 || !props.query);
+  const showPinned = pinned.filter((group) => props.activeGroupId === null || group.id === props.activeGroupId);
+  if (showPinned.length > 0) {
+    const area = el('div', { class: 'mb-5 grid gap-3 xl:grid-cols-2', 'aria-label': '置顶组' });
+    showPinned.forEach((group, index) => {
+      area.appendChild(renderSection(group, index, props, true));
+    });
+    root.appendChild(area);
+  }
 
-  if (visibleGroups.length === 0) {
-    const empty = el('div', { class: 'pattern-dots relative overflow-hidden rounded-[24px] border-8 border-dashed border-secondary p-10 text-center' });
+  const showNormal = normal.filter((group) => props.activeGroupId === null || group.id === props.activeGroupId);
+  if (showNormal.length > 0) {
+    const area = el('div', { class: 'space-y-2.5', 'aria-label': '普通组' });
+    showNormal.forEach((group, index) => {
+      area.appendChild(renderSection(group, index + pinned.length, props, false));
+    });
+    root.appendChild(area);
+  }
+
+  if (props.groups.length === 0) {
+    const empty = el('div', { class: 'pattern-dots relative overflow-hidden rounded-[20px] border-4 border-dashed border-secondary p-8 text-center' });
     empty.append(
-      el('div', { class: 'mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full border-4 border-accent bg-accent/20 text-accent' },
-        icon(props.query ? 'search' : 'bookmark', { size: 30 }),
-      ),
-      el('h2', { class: 'text-2xl text-fg ts-cn', text: props.query ? '没搜到，换个词试试' : '这里很空，正好开始收藏' }),
-      el('p', { class: 'mx-auto mt-2 max-w-md text-sm text-fg/70', text: props.query ? '搜索只匹配标题、网址与备注。' : '装个浏览器插件一键收藏，或手动添加第一条。' }),
+      el('h2', { class: 'text-xl text-fg ts-cn', text: props.query ? '没搜到' : '还没有书签' }),
+      el('p', { class: 'mx-auto mt-1 max-w-md text-xs text-fg/70', text: props.query ? '换个词试试。' : '登录后点右下角胶囊的锁头进入编辑模式即可添加。' }),
     );
     root.appendChild(empty);
   }
-
-  visibleGroups.forEach((entry, groupIndex) => {
-    root.appendChild(renderGroupSection(entry.group, entry.links, groupIndex, props, editable));
-  });
 
   return root;
 }
@@ -156,10 +145,10 @@ function navPill(label: string, count: number, active: boolean, index: number, o
   const accent = accentAt(index);
   const node = el('button', {
     class: cn(
-      'pressable inline-flex items-center gap-1.5 rounded-full border-4 px-3 py-1 font-heading text-[11px] font-black uppercase tracking-widest transition-all duration-300',
+      'pressable inline-flex shrink-0 items-center gap-1 rounded-full border-2 px-2.5 py-0.5 font-heading text-[11px] font-black tracking-wide transition-all duration-200',
       active
         ? 'border-tertiary bg-riot text-ink shadow-multi-sm'
-        : cn(accent.border, 'panel text-fg hover:-rotate-1 hover:scale-105'),
+        : cn(accent.border, 'panel text-fg hover:scale-105'),
     ),
     style: shadowVars(index),
     'aria-pressed': active ? 'true' : 'false',
@@ -167,141 +156,217 @@ function navPill(label: string, count: number, active: boolean, index: number, o
   });
   node.append(
     el('span', { text: label }),
-    el('span', { class: cn('rounded-full px-1.5 text-[10px]', active ? 'bg-ink/20' : accent.soft), text: String(count) }),
+    el('span', { class: cn('rounded-full px-1 text-[10px]', active ? 'bg-ink/20' : accent.soft), text: String(count) }),
   );
   return node;
 }
 
-function renderGroupSection(group: GroupWithLinks, links: Link[], index: number, props: BookmarksProps, editable: boolean): HTMLElement {
+function renderSection(group: GroupWithLinks, index: number, props: BookmarksProps, pinned: boolean): HTMLElement {
+  const editable = props.authed && props.editing;
   const accent = accentAt(index + 1);
-  const section = el('section', { class: 'mb-8', 'aria-label': group.name });
-  const header = el('div', { class: 'mb-3 flex flex-wrap items-end justify-between gap-2 border-b-4 border-dashed pb-2', style: 'border-color:' + accent.cssVar });
-  append(header, [
-    el('div', { class: 'flex items-end gap-2' },
-      el('span', { class: cn('font-display text-[10px] uppercase tracking-[0.3em]', accent.text), text: String(index + 1).padStart(2, '0') }),
-      el('h2', { class: 'text-xl text-fg ts-cn sm:text-2xl', text: group.name }),
-      el('span', { class: 'mb-0.5 text-xs text-fg/50', text: links.length + ' 条' }),
-    ),
-    editable
-      ? el('div', { class: 'flex flex-wrap items-center gap-1.5' },
-          button({ label: '加一条', iconName: 'plus', variant: 'secondary', size: 'xs', onClick: () => props.onAddLink(group.id) }),
-          button({ variant: 'icon', iconName: 'edit', title: '重命名分组', onClick: () => props.onEditGroup(group) }),
-          button({ variant: 'icon', iconName: 'trash', title: '删除分组', onClick: () => props.onDeleteGroup(group) }),
-        )
-      : null,
-  ]);
+  const mode = modeOf(group);
+  const links = props.query ? group.links.filter((link) => matches(link, props.query)) : group.links;
+
+  const section = el('section', {
+    class: cn(pinned ? 'pattern-dots rounded-[20px] border-4 bg-[var(--c-surface)]/60 p-3' : 'rounded-[16px] border-2 px-2.5 py-2', accent.border),
+    'aria-label': group.name,
+  });
+
+  const header = el('div', { class: 'mb-2 flex flex-wrap items-center gap-1.5' });
+  header.append(
+    el('span', { class: cn('font-display text-[10px] uppercase tracking-[0.25em]', accent.text), text: pinned ? 'PIN' : String(index + 1).padStart(2, '0') }),
+    el('h2', { class: 'text-sm font-black text-fg ts-cn', text: group.name }),
+    el('span', { class: 'text-[10px] text-fg/45', text: String(links.length) }),
+  );
+
+  if (editable) {
+    const tools = el('div', { class: 'ml-auto flex flex-wrap items-center gap-1' });
+    tools.append(
+      tinyAction(pinned ? '取消置顶' : '设为置顶', pinned ? 'arrow-down' : 'arrow-up', () => props.onTogglePin(group)),
+      tinyAction('详情卡模式', 'grid', () => props.onDisplayMode(group, 'grid'), mode === 'grid'),
+      tinyAction('紧凑行模式', 'list', () => props.onDisplayMode(group, 'list'), mode === 'list'),
+      tinyAction('极小图标模式', 'bookmark', () => props.onDisplayMode(group, 'icon'), mode === 'icon'),
+      tinyAction('加一条', 'plus', () => props.onAddLink(group.id)),
+      tinyAction('改名', 'edit', () => props.onEditGroup(group)),
+      tinyAction('删除组', 'trash', () => props.onDeleteGroup(group)),
+    );
+    header.appendChild(tools);
+  }
   section.appendChild(header);
 
-  const grid = el('div', {
-    class: cn(
-      props.view === 'grid'
-        ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
-        : 'flex flex-col gap-2',
-    ),
-  });
-  links.forEach((link, linkIndex) => {
-    grid.appendChild(renderLinkCard(link, linkIndex, index, props, links, editable));
-  });
-  if (links.length === 0 && editable) {
-    grid.appendChild(renderAddCard(group, props));
+  if (links.length === 0) {
+    section.appendChild(el('p', { class: 'px-1 py-1 text-[11px] text-fg/45', text: '（空分组）' }));
+    return section;
   }
-  section.appendChild(grid);
+
+  if (mode === 'grid') {
+    const grid = el('div', { class: cn('grid gap-2.5', pinned ? 'grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4') });
+    links.forEach((link, i) => grid.appendChild(renderGridCard(link, i + index, props, links, editable)));
+    if (editable) grid.appendChild(renderAddCard(group, props));
+    section.appendChild(grid);
+  } else if (mode === 'list') {
+    const grid = el('div', { class: 'grid gap-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4' });
+    links.forEach((link, i) => grid.appendChild(renderListRow(link, i + index, props, links, editable)));
+    if (editable) grid.appendChild(renderAddRow(group, props));
+    section.appendChild(grid);
+  } else {
+    const wrap = el('div', { class: 'flex flex-wrap items-center gap-1.5' });
+    links.forEach((link, i) => wrap.appendChild(renderChip(link, i + index, props, links, editable)));
+    if (editable) wrap.appendChild(renderChipAdd(group, props));
+    section.appendChild(wrap);
+  }
+
   return section;
 }
 
-function renderAddCard(group: GroupWithLinks, props: BookmarksProps): HTMLElement {
+function tinyAction(title: string, iconName: 'arrow-up' | 'arrow-down' | 'grid' | 'list' | 'bookmark' | 'plus' | 'edit' | 'trash', onClick: () => void, active = false): HTMLElement {
   const node = el('button', {
-    class: 'pressable flex min-h-[92px] items-center justify-center gap-2 rounded-[18px] border-4 border-dotted border-quaternary p-4 font-heading text-xs font-black uppercase tracking-widest text-fg/70 transition-all duration-300 hover:-rotate-1 hover:border-solid hover:text-fg',
-    onClick: () => props.onAddLink(group.id),
+    type: 'button',
+    class: cn(
+      'pressable flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all duration-200',
+      active ? 'border-tertiary bg-riot text-ink' : 'border-quaternary/70 text-fg/70 hover:border-accent hover:text-fg',
+    ),
+    title,
+    'aria-label': title,
+    'aria-pressed': active ? 'true' : 'false',
+    onClick,
   });
-  append(node, [icon('plus', { size: 18 }), el('span', { text: '往「' + group.name + '」加一条' })]);
+  node.append(icon(iconName, { size: 13 }));
   return node;
 }
 
-function renderLinkCard(link: Link, linkIndex: number, groupIndex: number, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const accent = accentAt(linkIndex + groupIndex);
-  const wrap = card({
-    index: linkIndex + groupIndex,
-    rotate: linkIndex % 2 === 1 ? 1 : 0,
-    class: cn('group relative overflow-hidden', editable ? 'cursor-grab active:cursor-grabbing' : ''),
+function dragify(node: HTMLElement, link: Link, siblings: Link[], props: BookmarksProps): void {
+  node.draggable = true;
+  node.addEventListener('dragstart', (event) => {
+    event.dataTransfer?.setData('text/plain', String(link.id));
+    node.classList.add('opacity-40');
   });
-  wrap.appendChild(
-    el('div', {
-      class: 'pattern-checker pointer-events-none absolute inset-0 opacity-30 transition-opacity duration-500 group-hover:opacity-60',
-      'aria-hidden': 'true',
-    }),
-  );
+  node.addEventListener('dragend', () => node.classList.remove('opacity-40'));
+  node.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    node.classList.add('ring-2', 'ring-tertiary');
+  });
+  node.addEventListener('dragleave', () => node.classList.remove('ring-2', 'ring-tertiary'));
+  node.addEventListener('drop', (event) => {
+    event.preventDefault();
+    node.classList.remove('ring-2', 'ring-tertiary');
+    const fromId = Number(event.dataTransfer?.getData('text/plain'));
+    if (!fromId || fromId === link.id) return;
+    const ids = siblings.map((item) => item.id).filter((id) => id !== fromId);
+    const targetIndex = ids.indexOf(link.id);
+    ids.splice(targetIndex, 0, fromId);
+    props.onReorder(link.group_id, ids);
+  });
+}
 
+function renderGridCard(link: Link, index: number, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
+  const accent = accentAt(index);
+  const wrap = card({ index, class: 'group relative overflow-hidden', padding: 'sm' });
   const initial = (link.title || hostOf(link.url)).slice(0, 1).toUpperCase();
-  const head = el('div', { class: 'relative flex items-start gap-2.5' });
+  const head = el('div', { class: 'relative flex items-start gap-2' });
   head.append(
     el('span', {
-      class: cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-4 font-heading text-sm font-black text-ink', accent.border, accent.bg),
+      class: cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 font-heading text-[11px] font-black text-ink', accent.border, accent.bg),
       'aria-hidden': 'true',
       text: initial,
     }),
     el('div', { class: 'min-w-0 flex-1' },
-      el('a', {
-        href: link.url,
-        target: '_blank',
-        rel: 'noopener noreferrer',
-        class: 'ts-cn block truncate font-heading text-base font-black leading-tight text-fg hover:text-accent',
-        text: link.title,
-      }),
-      el('p', { class: 'truncate text-[11px] text-fg/50', text: hostOf(link.url) }),
+      el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'ts-cn block truncate font-heading text-sm font-black leading-tight text-fg hover:text-accent', text: link.title }),
+      el('p', { class: 'truncate text-[10px] text-fg/50', text: hostOf(link.url) }),
     ),
   );
   wrap.appendChild(head);
-
   if (link.description) {
-    wrap.appendChild(el('p', { class: 'relative mt-2 line-clamp-2 text-xs leading-snug text-fg/70', text: link.description }));
+    wrap.appendChild(el('p', { class: 'relative mt-1.5 line-clamp-2 text-[11px] leading-snug text-fg/65', text: link.description }));
   }
+  if (editable) {
+    const tools = el('div', { class: 'relative mt-1.5 flex items-center gap-1' });
+    tools.append(
+      tinyAction('编辑', 'edit', () => props.onEditLink(link)),
+      tinyAction('删除', 'trash', () => props.onDeleteLink(link)),
+      tinyAction('上移', 'arrow-up', () => props.onMoveLink(link, -1)),
+      tinyAction('下移', 'arrow-down', () => props.onMoveLink(link, 1)),
+    );
+    wrap.appendChild(tools);
+    dragify(wrap, link, siblings, props);
+  }
+  return wrap;
+}
 
-  const actions = el('div', { class: 'relative mt-2.5 flex flex-wrap items-center gap-1.5' });
-  actions.append(
-    el('a', {
-      href: link.url,
-      target: '_blank',
-      rel: 'noopener noreferrer',
-      class: 'inline-flex h-7 items-center gap-1 rounded-full border-2 border-secondary px-2.5 text-[10px] font-black uppercase tracking-widest text-fg hover:bg-secondary hover:text-ink',
-    },
-      icon('external', { size: 12 }),
-      el('span', { text: '打开' }),
+function renderListRow(link: Link, index: number, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
+  const accent = accentAt(index);
+  const row = el('div', {
+    class: 'group flex h-8 items-center gap-1.5 rounded-md border-2 bg-[var(--c-panel)] pl-1 pr-1 transition-colors hover:border-accent',
+    style: 'border-color:' + accent.cssVar,
+  });
+  const initial = (link.title || hostOf(link.url)).slice(0, 1).toUpperCase();
+  row.append(
+    el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex min-w-0 flex-1 items-center gap-1.5', title: link.url },
+      el('span', { class: cn('flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 text-[9px] font-black text-ink', accent.border, accent.bg), text: initial }),
+      el('span', { class: 'min-w-0 flex-1' },
+        el('span', { class: 'block truncate text-[11px] font-bold leading-none text-fg', text: link.title }),
+        el('span', { class: 'block truncate text-[9px] leading-none text-fg/45', text: hostOf(link.url) }),
+      ),
     ),
   );
   if (editable) {
-    actions.append(
-      button({ variant: 'icon', iconName: 'edit', title: '编辑', onClick: () => props.onEditLink(link) }),
-      button({ variant: 'icon', iconName: 'trash', title: '删除', onClick: () => props.onDeleteLink(link) }),
-      button({ variant: 'icon', iconName: 'arrow-up', title: '上移', onClick: () => props.onMoveLink(link, -1) }),
-      button({ variant: 'icon', iconName: 'arrow-down', title: '下移', onClick: () => props.onMoveLink(link, 1) }),
+    const tools = el('div', { class: 'flex items-center gap-0.5' });
+    tools.append(
+      tinyAction('编辑', 'edit', () => props.onEditLink(link)),
+      tinyAction('删除', 'trash', () => props.onDeleteLink(link)),
     );
+    row.appendChild(tools);
+    dragify(row, link, siblings, props);
   }
-  wrap.appendChild(actions);
+  return row;
+}
 
+function renderChip(link: Link, index: number, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
+  const accent = accentAt(index);
+  const wrap = el('div', {
+    class: 'group flex h-6 items-center gap-0.5 rounded-full border-2 bg-[var(--c-panel)] pl-0.5 pr-1 transition-all duration-200 hover:scale-[1.04]',
+    style: 'border-color:' + accent.cssVar,
+  });
+  const initial = (link.title || hostOf(link.url)).slice(0, 1).toUpperCase();
+  wrap.appendChild(
+    el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex min-w-0 items-center gap-1', title: link.title + ' · ' + link.url },
+      el('span', { class: cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-black text-ink', accent.bg), text: initial }),
+      el('span', { class: 'max-w-[8.5rem] truncate text-[11px] font-bold leading-none text-fg', text: link.title }),
+    ),
+  );
   if (editable) {
-    wrap.draggable = true;
-    wrap.addEventListener('dragstart', (event) => {
-      event.dataTransfer?.setData('text/plain', String(link.id));
-      wrap.classList.add('opacity-40');
-    });
-    wrap.addEventListener('dragend', () => wrap.classList.remove('opacity-40'));
-    wrap.addEventListener('dragover', (event) => {
-      event.preventDefault();
-      wrap.classList.add('ring-4', 'ring-tertiary');
-    });
-    wrap.addEventListener('dragleave', () => wrap.classList.remove('ring-4', 'ring-tertiary'));
-    wrap.addEventListener('drop', (event) => {
-      event.preventDefault();
-      wrap.classList.remove('ring-4', 'ring-tertiary');
-      const fromId = Number(event.dataTransfer?.getData('text/plain'));
-      if (!fromId || fromId === link.id) return;
-      const ids = siblings.map((item) => item.id).filter((id) => id !== fromId);
-      const targetIndex = ids.indexOf(link.id);
-      ids.splice(targetIndex, 0, fromId);
-      props.onReorder(link.group_id, ids);
-    });
+    wrap.append(
+      tinyAction('编辑', 'edit', () => props.onEditLink(link)),
+      tinyAction('删除', 'trash', () => props.onDeleteLink(link)),
+    );
+    dragify(wrap, link, siblings, props);
   }
-
   return wrap;
+}
+
+function renderAddCard(group: GroupWithLinks, props: BookmarksProps): HTMLElement {
+  const node = el('button', {
+    class: 'pressable flex min-h-[64px] items-center justify-center gap-1.5 rounded-[14px] border-2 border-dotted border-quaternary p-2 font-heading text-[10px] font-black uppercase tracking-widest text-fg/60 transition-all hover:border-solid hover:text-fg',
+    onClick: () => props.onAddLink(group.id),
+  });
+  append(node, [icon('plus', { size: 14 }), el('span', { text: '加一条' })]);
+  return node;
+}
+
+function renderAddRow(group: GroupWithLinks, props: BookmarksProps): HTMLElement {
+  const node = el('button', {
+    class: 'pressable flex h-8 items-center justify-center gap-1 rounded-md border-2 border-dotted border-quaternary text-[10px] font-black uppercase text-fg/60 hover:border-solid hover:text-fg',
+    onClick: () => props.onAddLink(group.id),
+  });
+  append(node, [icon('plus', { size: 12 }), el('span', { text: '加一条' })]);
+  return node;
+}
+
+function renderChipAdd(group: GroupWithLinks, props: BookmarksProps): HTMLElement {
+  const node = el('button', {
+    class: 'pressable flex h-6 items-center gap-1 rounded-full border-2 border-dotted border-quaternary px-2 text-[10px] font-black uppercase text-fg/60 hover:border-solid hover:text-fg',
+    onClick: () => props.onAddLink(group.id),
+  });
+  append(node, [icon('plus', { size: 11 }), el('span', { text: '加一条' })]);
+  return node;
 }

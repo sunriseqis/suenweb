@@ -63,9 +63,11 @@ export class GroupsRepo {
     const existing = await this.findByKey(key);
     if (existing) return { group: existing, merged: true };
     try {
+      const type = input.type === 'tab' ? 'tab' : 'fixed';
+      const displayMode = typeof input.display_mode === 'string' ? input.display_mode : type === 'fixed' ? 'grid' : 'icon';
       const res = await this.db.run(
-        "INSERT INTO groups (name, name_key, icon, sort_order) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM groups))",
-        [name, key, normalizeIcon(input.icon)],
+        "INSERT INTO groups (name, name_key, icon, type, display_mode, sort_order) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM groups))",
+        [name, key, normalizeIcon(input.icon), type, displayMode],
       );
       const group = await this.requireById(res.lastInsertRowid);
       return { group, merged: false };

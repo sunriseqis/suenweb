@@ -96,6 +96,8 @@ export const api = {
     request<{ changed: boolean }>('/api/auth/change-password', { method: 'POST', ...json({ currentPassword, newPassword }) }),
 
   createGroup: (name: string) => request<{ group: Group; merged: boolean }>('/api/groups', { method: 'POST', ...json({ name }) }),
+  updateGroup: (id: number, patch: { name?: string; type?: 'fixed' | 'tab'; display_mode?: 'grid' | 'list' | 'icon' }) =>
+    request<{ group: Group; merged: boolean }>('/api/groups/' + id, { method: 'PUT', ...json(patch) }),
   renameGroup: (id: number, name: string) =>
     request<{ group: Group; merged: boolean }>('/api/groups/' + id, { method: 'PUT', ...json({ name }) }),
   deleteGroup: (id: number) => request<{ deleted: number }>('/api/groups/' + id, { method: 'DELETE' }),

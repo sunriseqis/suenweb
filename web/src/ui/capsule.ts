@@ -35,7 +35,7 @@ export function mountCapsule(items: CapsuleItem[]): void {
   clear(root);
 
   const bar = el('div', {
-    class: 'capsule mx-auto flex w-fit items-center gap-2 rounded-full border-4 border-tertiary bg-[var(--c-panel)] p-2 backdrop-blur-md',
+    class: 'capsule pointer-events-auto mx-auto flex w-fit items-center gap-2 rounded-full border-4 border-tertiary bg-[var(--c-panel)] p-2 backdrop-blur-md',
     style: '--sh-1:var(--c-secondary);--sh-2:var(--c-accent);box-shadow:5px 5px 0 var(--sh-1),10px 10px 0 var(--sh-2);',
     role: 'toolbar',
     'aria-label': '页面操作',

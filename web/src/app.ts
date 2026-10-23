@@ -11,7 +11,7 @@ import {
   watchSystemTheme,
 } from './lib/theme.ts';
 import { renderAuth } from './pages/auth.ts';
-import { renderBookmarks } from './pages/bookmarks.ts';
+import { renderBookmarks, type DisplayMode } from './pages/bookmarks.ts';
 import { openConfirmDialog, openGroupDialog, openLinkDrawer, type LinkDraft } from './pages/dialogs.ts';
 import { renderSettings, type IgnoreRow } from './pages/settings.ts';
 import { button } from './ui/button.ts';
@@ -357,6 +357,16 @@ function render(): void {
             await afterMutation(await api.deleteGroup(group.id), '分组已删除');
           },
         });
+      },
+      onTogglePin: async (group: GroupWithLinks) => {
+        const nextType: 'fixed' | 'tab' = group.type === 'fixed' ? 'tab' : 'fixed';
+        const patch: { type: 'fixed' | 'tab'; display_mode?: DisplayMode } = { type: nextType };
+        if (nextType === 'fixed' && group.display_mode === 'icon') patch.display_mode = 'grid';
+        if (nextType === 'tab' && (group.display_mode === 'grid' || group.display_mode === 'list')) patch.display_mode = 'icon';
+        await afterMutation(await api.updateGroup(group.id, patch), nextType === 'fixed' ? '已置顶' : '已取消置顶');
+      },
+      onDisplayMode: async (group: GroupWithLinks, mode: DisplayMode) => {
+        await afterMutation(await api.updateGroup(group.id, { display_mode: mode }), '显示模式已切换');
       },
       onLogin: () => go('#/login'),
     }),
