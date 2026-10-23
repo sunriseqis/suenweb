@@ -23,7 +23,7 @@ export function accentAt(index: number): Accent {
   return ACCENTS[((index % ACCENTS.length) + ACCENTS.length) % ACCENTS.length];
 }
 
-/** 撞色：边框用「下一个」颜色，永远不和本卡主色一致 */
+/** 撞色：边框用「下一个」颜色，永远不和本卡主色一致（只在置顶区这种少数元素上用） */
 export function clashBorder(index: number): string {
   return accentAt(index + 2).border;
 }
@@ -39,25 +39,39 @@ export type CardOptions = {
   index?: number;
   class?: string;
   dashed?: boolean;
-  padding?: 'sm' | 'md';
   rotate?: 0 | 1 | 2 | -1 | -2;
   as?: string;
+  padding?: 'sm' | 'md';
+  /** quiet = 内容区中性卡：细边框、无彩色硬阴影，只在 hover 时透出所在组的强调色 */
+  quiet?: boolean;
 };
 
+const LOUD = 'panel rounded-[20px] border-4 transition-all duration-300 ease-out shadow-multi-sm shadow-multi-sm-hover';
+const QUIET = 'panel rounded-[12px] border-2 border-fg/15 transition-colors duration-200 hover:border-accent/60 hover:bg-[var(--c-surface)]';
+
+const ROTATE: Record<string, string> = { '1': 'rotate-1', '2': 'rotate-2', '-1': '-rotate-1', '-2': '-rotate-2' };
+
 export function card(options: CardOptions = {}, ...children: Child[]): HTMLElement {
-  const { index = 0, class: className = '', dashed = false, rotate = 0, as = 'div', padding = 'sm' } = options;
-  const sides = [];
-  if (rotate) sides.push(rotate === 1 || rotate === 2 ? 'rotate-' + rotate : 'rotate-' + rotate);
+  const {
+    index = 0,
+    class: className = '',
+    dashed = false,
+    rotate = 0,
+    as = 'div',
+    padding = 'sm',
+    quiet = false,
+  } = options;
+  const rotateClass = ROTATE[String(rotate)] ?? '';
   const node = el(as, {
     class: cn(
-      'panel rounded-[20px] border-4 transition-all duration-300 ease-out shadow-multi-sm shadow-multi-sm-hover',
-      padding === 'md' ? 'p-6' : 'p-4',
-      clashBorder(index),
-      dashed ? 'border-dashed' : 'border-solid',
-      sides.join(' '),
+      quiet ? QUIET : LOUD,
+      quiet ? (padding === 'md' ? 'p-5' : 'p-2.5') : padding === 'md' ? 'p-6' : 'p-4',
+      quiet ? '' : clashBorder(index),
+      !quiet && dashed ? 'border-dashed' : '',
+      quiet ? '' : rotateClass,
       className,
     ),
-    style: shadowVars(index),
+    style: quiet ? '' : shadowVars(index),
   });
   append(node, children);
   return node;
