@@ -22,6 +22,10 @@ function applyProps(node: HTMLElement, props: Props): void {
         node.addEventListener(event, handler);
       }
     } else if (key === 'ref') (value as (n: HTMLElement) => void)(node);
+    else if (key.length > 2 && key.startsWith('on') && typeof value === 'function') {
+      // onClick / onInput 这类写法要真的挂监听，不能变成属性字符串
+      node.addEventListener(key.slice(2).toLowerCase(), value as EventListener);
+    }
     else if (value === true) node.setAttribute(key, '');
     else node.setAttribute(key, String(value));
   }

@@ -52,6 +52,8 @@
 - 旧版插件产物 4 份副本 + key.pem 入库：构建生成、单一真源、产物 gitignore。
 - settings 的 value 是 JSON 文本：服务端取内部值必须用 getValue（会 JSON.parse），直接用 getRaw 会拿到带引号的字符串，导致密码校验永远失败。
 - node:sqlite 的 prepare().run/all/get 参数必须收窄成 SQLInputValue，bind 里要把 undefined→null、boolean→0/1、Date→ISO。
+- el() 传 onClick 曾静默失效：applyProps 把它当普通属性 setAttribute 成字符串，按钮点不动。现在只有 on* 且值是函数才挂 addEventListener；新增交互后跑 npm --prefix web run check:dom（happy-dom，无需浏览器）回归。
+- 胶囊容器 pointer-events-none 时必须给内层 pointer-events-auto，否则整块点穿。
 - 手写 JSON Schema 时 type 的值必须带引号（'integer' 写成 integer 就静默失效）。
 - node:sqlite 的同步 API 与 worker 通信都要有超时：proxy 侧单次调用 20s、exec/batch 60s，worker 崩溃最多重启 5 次。
 - 新增表必须写新迁移文件（0002_xxx），不要改 0001：已部署实例靠 schema_migrations 只跑未应用的版本，改旧文件不会重跑。
