@@ -30,7 +30,7 @@ const guestInfo = await g.evaluate(() => ({
   cards: document.querySelectorAll('section .panel').length,
   banner: Array.from(document.querySelectorAll('div')).some((n) => (n.textContent ?? '').includes('游客模式')),
   heroFont: getComputedStyle(document.querySelector('h1')).fontFamily,
-  heroBorder: getComputedStyle(document.querySelector('header')).borderTopWidth,
+  heroBorder: (() => { const h = document.querySelector('.pattern-mesh'); return h ? getComputedStyle(h).borderTopWidth : 'none'; })(),
   cardShadow: (() => { const c = document.querySelector('section .panel'); return c ? getComputedStyle(c).boxShadow : 'none'; })(),
   gradientAnim: (() => { const n = document.querySelector('.anim-gradient'); return n ? getComputedStyle(n).animationName : 'none'; })(),
   contentAnim: (() => { const c = document.querySelector('section .panel'); return c ? getComputedStyle(c).animationName : 'none'; })(),
@@ -81,11 +81,13 @@ await login.page.close();
 const settings = await open(BASE + '/#/settings', 'dark');
 const settingsInfo = await settings.page.evaluate(() => ({
   themeButtons: Array.from(document.querySelectorAll('button')).filter((b) => ['跟随系统', '浅色', '深色'].some((t) => (b.textContent ?? '').includes(t))).length,
-  calmToggle: Array.from(document.querySelectorAll('button')).some((b) => (b.textContent ?? '').includes('降噪')),
+  calmToggle: Array.from(document.querySelectorAll('button')).some((b) => (b.getAttribute('aria-label') ?? '').includes('降噪')),
+  logo: document.querySelectorAll('header svg').length,
   sections: document.querySelectorAll('section, .panel').length,
 }));
 check('settings: 三个主题按钮', settingsInfo.themeButtons >= 3, String(settingsInfo.themeButtons));
 check('settings: 有降噪开关', settingsInfo.calmToggle === true, String(settingsInfo.calmToggle));
+check('顶栏品牌标已渲染', settingsInfo.logo >= 1, String(settingsInfo.logo));
 check('settings: 无控制台错误', settings.errors.length === 0, settings.errors.join(' | ').slice(0, 200));
 await settings.page.close();
 

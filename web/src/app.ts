@@ -16,7 +16,7 @@ import { renderBookmarks } from './pages/bookmarks.ts';
 import { openConfirmDialog, openGroupDialog, openLinkDrawer, type LinkDraft } from './pages/dialogs.ts';
 import { renderSettings, type IgnoreRow } from './pages/settings.ts';
 import { button } from './ui/button.ts';
-import { icon } from './ui/icons.ts';
+import { brandLogo } from './ui/logo.ts';
 import { toast } from './ui/toast.ts';
 
 const VERSION = '2.0.0-m2';
@@ -100,7 +100,7 @@ function renderHeader(state: AppState): HTMLElement {
 
   const brand = el('a', { href: '#/', class: 'flex items-center gap-2 font-display text-base tracking-[0.2em] text-fg' });
   brand.append(
-    el('span', { class: 'flex h-9 w-9 items-center justify-center rounded-xl border-4 border-tertiary bg-riot text-ink' }, icon('bookmark', { size: 18 })),
+    el('span', { class: 'flex h-9 w-9 items-center justify-center rounded-xl border-4 border-tertiary bg-riot text-ink' }, brandLogo(20)),
     el('span', { class: 'text-gradient anim-gradient', text: 'SUENWEB' }),
   );
 

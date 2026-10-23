@@ -3,6 +3,7 @@ import { append, el } from '../lib/dom.ts';
 import { button } from '../ui/button.ts';
 import { field } from '../ui/field.ts';
 import { icon, type IconName } from '../ui/icons.ts';
+import { brandLogo } from '../ui/logo.ts';
 
 type Floater = { name: IconName; top: string; left: string; size: number; color: string; anim: string };
 
@@ -56,7 +57,7 @@ export function renderAuth(props: AuthProps): HTMLElement {
   });
 
   append(cardEl, [
-    el('p', { class: 'font-display text-[11px] uppercase tracking-[0.4em] text-secondary', text: 'SuenWeb' }),
+    el('div', { class: 'flex items-center gap-2 text-accent' }, brandLogo(26), el('span', { class: 'font-display text-[11px] uppercase tracking-[0.4em] text-secondary', text: 'SuenWeb' })),
     el('h1', { class: 'mt-3 text-5xl text-fg sm:text-6xl' },
       el('span', { class: 'text-gradient anim-gradient', text: mode === 'setup' ? 'FIRST' : 'WELCOME' }),
       el('span', { class: 'ts-cn block text-2xl sm:text-3xl', text: mode === 'setup' ? '先设一个管理密码' : '回到你的书签' }),
