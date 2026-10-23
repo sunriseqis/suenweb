@@ -63,39 +63,34 @@
 
 ---
 
-## 五、目录结构（拟）
+## 五、目录结构（必守）
 
     suenweb/
-      src/
-        server.ts            启动入口（读配置、跑迁移、注册路由、起调度器）
-        app.ts               Fastify 实例装配
-        config/              环境变量与默认值（zod 校验）
-        data/
-          worker.ts          SQLite 数据 worker（唯一持有 node:sqlite 句柄）
-          proxy.ts           主线程访问 worker 的异步代理（查询/事务/批量）
-          migrations/        0001_init.sql ...
-          repositories/      groups / links / settings / extensions / backups / sessions
-        domain/              纯业务逻辑（无 IO，易单测）
-        http/
-          routes/            auth, groups, links, settings, importExport, backup, extensions, sync, icon, events
-          plugins/           auth-guard, rate-limit, error-handler
-        infra/
-          crypto.ts          PBKDF2 / AES-256-GCM（备份加解密）
-          webdav.ts          WebDAV 客户端与连通测试
-          fetcher.ts         统一出网（超时/并发/重试/白名单）
-          icon.ts            favicon 抓取与缓存
-          scheduler.ts       node-cron + 互斥
-          jobs.ts            后台任务执行器
-          logger.ts          pino
-          cache.ts           LRU
-        workers/             worker_threads（zip/加密/解析）
-      web/                   前端（Vite + TS）源码
-      public/                前端构建产物（生成，不入库）
-      packaging/
-        docker/              Dockerfile, docker-compose.yml
-        fpk/                 manifest 模板 + repack.sh（fnpack build）
-      data/                  运行时数据（gitignore，容器挂载 /data）
-      docs/
+      server/                 后端（Fastify 5 + node:sqlite，零原生依赖）
+        src/
+          server.ts           启动入口（读配置、跑迁移、注册路由、起调度器）
+          app.ts              Fastify 实例装配
+          config.ts           环境变量与默认值（启动即校验，失败即退出）
+          data/
+            worker.ts          SQLite 数据 worker（唯一持有 node:sqlite 句柄）
+            proxy.ts           主线程异步代理（查询 / 事务批量 / 语句缓存 / 读写分流）
+            migrate.ts         迁移器（写入 worker 内、启动时执行）
+            migrations/        0001_init.sql ...
+            repositories/      groups / links / settings / extensions / backups / sessions
+          domain/              纯业务逻辑（归一化、合并策略；无 IO，易单测）
+          http/
+            routes/            auth, data, groups, links, settings, import, export, backup, extensions, sync, icon, events
+            plugins/           auth-guard, rate-limit, error-handler
+          infra/               logger / crypto / webdav / fetcher / icon / scheduler / jobs / cache
+          workers/             worker_threads（zip / 加解密 / 解析 / 抓取）
+        test/                  node:test + fastify inject
+        package.json
+      web/                     前端（Vite + TS + 原生 DOM；原型来自 docs/design）
+      addons/                  浏览器插件（Firefox MV3 事件页为主，Chrome/Edge 同步支持）
+      fn/                      飞牛 fnOS 原生应用包（manifest + 运行时 + fnpack 脚本）
+      docker/                  Dockerfile / docker-compose.yml / .dockerignore
+      docs/                    摘要索引 / 需求 / 架构 / memory / plan / design
+      data/                    运行时数据（gitignore；容器挂载 /data）
 
 ---
 
@@ -103,15 +98,15 @@
 
 | 脚本 | 作用 |
 |---|---|
-| npm run dev | tsx watch 启动服务（默认 http://127.0.0.1:8080） |
+| npm run dev | node --watch 启动后端（原生 TS 类型擦除，无需构建），默认 http://127.0.0.1:8080 |
 | npm run db:migrate | 执行未应用的迁移 |
 | npm run db:reset | 清库重建 + 种子（仅开发） |
-| npm run build | 后端 tsc → dist；前端 vite build → public |
-| npm start | node dist/server.js（生产启动，容器内使用） |
-| npm test / test:watch | node:test（后端）+ vitest（前端） |
+| npm run build | 后端无需构建（直接跑 TS）；前端 vite build → public（生成物不入库） |
+| npm start | 生产启动（容器与飞牛原生包共用同一启动约定） |
+| npm test / test:watch | node:test + fastify inject（后端）；前端测试随 web 成型后补 |
 | npm run lint | eslint + tsc --noEmit |
 | npm run pack:ext | 生成插件 xpi/zip/crx（产物不入库） |
-| npm run pack:fpk | 构建镜像并打 .fpk（仅 M7） |
+| npm run pack:fpk | 打飞牛原生应用包（fn/，仅 M7） |
 
 ---
 
@@ -121,12 +116,14 @@
 |---|---|---|---|
 | PORT | 否 | 8080 | 监听端口 |
 | DATA_DIR | 否 | ./data | 数据目录（SQLite / 图标缓存 / 临时备份） |
-| SESSION_SECRET | **是** | — | 会话与签名密钥 |
+| HOST | 否 | 0.0.0.0 | 监听地址；容器与飞牛内需 0.0.0.0，本机开发可用 127.0.0.1 |
 | BACKUP_WRAP_KEY | 否 | — | 包裹备份派生密钥；缺省按功能基线第九章的降级方案 |
 | BASE_URL | 否 | 自动推断 | 生成绝对链接 |
 | TZ | 否 | Asia/Shanghai | 定时任务时区 |
 | LOG_LEVEL | 否 | info | pino 日志级别 |
 | OUTBOUND_CONCURRENCY | 否 | 8 | 出网并发上限 |
+
+说明：**不再需要 SESSION_SECRET** —— 会话为不透明随机 token，服务端只存其 SHA-256 哈希，Cookie 无需签名密钥；管理密码用 scrypt 哈希存 settings 表。
 
 ---
 
@@ -134,7 +131,8 @@
 
 ### 8.1 Docker
 
-- 多阶段构建：builder（npm ci + build）→ runtime（node:22-slim，非 root，仅带 dist / public / package.json）。
+- 多阶段构建：builder（npm ci + 前端 build）→ runtime（node:24-slim，非 root，只带 server/src、public、package.json）。
+- 文件位置：docker/Dockerfile、docker/docker-compose.yml、docker/.dockerignore（构建上下文为仓库根）。
 - 唯一持久化点：**卷 /data**（SQLite 文件 + 图标缓存 + 临时备份）。
 - compose 提供：端口映射、卷、环境变量、restart: unless-stopped、healthcheck（GET /health）。
 
@@ -145,7 +143,7 @@
 - **与 Docker 形态的差异**：Docker 用镜像层隔离、卷挂载 /data；原生应用用系统路径（应用私有数据目录）持久化，SQLite 文件与图标缓存放该目录，升级时保留。
 - **打包工具**：仍以官方 fnpack 产出安装包（fnpack build），但包内容为原生应用而非镜像。
 - **M7 前必须以官方「原生应用」文档核对**：manifest 中应用类型/启动命令/端口与反代的声明写法、应用私有数据目录的规范路径、运行用户与权限、日志目录约定、多架构分发方式、应用中心提交流程。核对项逐条落到 packaging/fpk 的 README，未确认前不写死字段名。
-- **目录约定**：packaging/fpk 放 manifest 模板、启动/停止脚本、repack.sh（版本号取自 package.json）。
+- **目录约定**：fn/ 放 manifest 模板、启动/停止脚本、fnpack 打包脚本（版本号取自 package.json），核对结论也回填到 fn/README.md。
 
 ---
 

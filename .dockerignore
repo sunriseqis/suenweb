@@ -1,0 +1,10 @@
+.git
+node_modules
+**/node_modules
+data
+docs
+addons
+fn
+web
+*.log
+.env*

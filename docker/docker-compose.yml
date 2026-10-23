@@ -1,0 +1,22 @@
+services:
+  suenweb:
+    container_name: suenweb
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: suenweb:2.0.0-m1
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      TZ: Asia/Shanghai
+      LOG_LEVEL: info
+      # BASE_URL: https://book.example.com   # 走 https 反代时填写，Cookie 才会带 Secure
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ['CMD-SHELL', "node -e \"fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

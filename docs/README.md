@@ -1,12 +1,39 @@
-# SuenWeb 2.0 文档索引
+# SuenWeb 2.0 文档中心
+
+> 本页是 docs 根目录唯一的摘要索引。文档新增、改名、完结，都必须回来更新此页（项目铁律 2）。
+
+## 一句话产品定义
+
+自托管书签服务：浏览器插件一键收藏，服务端统一存储，加密备份 / 导入导出 / 跨浏览器扩展清单还原。本机部署（Docker 与飞牛 fnOS 原生应用包两种形态），开发期统一用 npm 启动。
+
+## 文档地图
 
 | 文件 | 内容 | 状态 |
 |---|---|---|
-| [REQUIREMENTS.md](./REQUIREMENTS.md) | **功能基线 v1.5**：55 条功能项（ID + 验收标准）、16 条裁决记录、数据模型、接口草案、Firefox 优先策略、备份加密简化方案、里程碑 | 已裁定，开发前必读 |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | **技术架构 v1**：退出 Workers 的理由、Node/Fastify/node:sqlite 选型、8 条低阻塞铁律、目录与 npm 脚本、Docker 与 fnOS 原生应用包部署、性能目标 | 开发前必读 |
-| [requirements/00-需求总清单-裁决稿.md](./requirements/00-需求总清单-裁决稿.md) | 旧版（v1.3.0）现状需求清单与三张裁决表 | 历史参考 |
-| [requirements/01-backend.md](./requirements/01-backend.md) | 旧版后端现状（71 条 + 25 条技术债） | 历史参考 |
-| [requirements/02-frontend.md](./requirements/02-frontend.md) | 旧版前端现状（111 条 + 23 条技术债） | 历史参考 |
-| [requirements/03-extension.md](./requirements/03-extension.md) | 旧版插件与构建链现状（48 条 + 14 条技术债） | 历史参考 |
+| REQUIREMENTS.md | 功能基线 v1.5：55 项需求 + 裁决记录 + 数据模型 + 接口草案 + 非功能要求 + 里程碑 | 生效中，需求唯一真源 |
+| ARCHITECTURE.md | 技术架构 v1：选型、低阻塞八铁律、目录与脚本约定、部署形态、待核对项 | 生效中 |
+| memory/MEMORY.md | 项目铁律、已锁定决策、已知坑与规避 | 每次决策后更新 |
+| plan/PLAN.md | 里程碑 M1–M7、当前进度、下一步 | 每次开工/收工更新 |
+| design/README.md | 原型 / 图标 / 视觉稿的落盘规则与清单 | 占位，随原型产出填充 |
+| requirements/ | v1.3.0 旧版三维度现状分析（后端 71 / 前端 111 / 插件 48 项） | 历史参考，不再维护 |
 
-约定：开发任务、PR、验收一律引用 REQUIREMENTS.md 的功能 ID（如 NAV-03、BAK-07）。
+## 代码目录（与文档对应的实体）
+
+| 目录 | 职责 |
+|---|---|
+| server/ | 后端：Fastify 5 + node:sqlite（worker 内），零原生依赖 |
+| web/ | 前端：Vite + TS + 原生 DOM |
+| fn/ | 飞牛 fnOS 原生应用包（非 Docker 转包） |
+| docker/ | 容器化部署 |
+| addons/ | 浏览器插件（Firefox 优先） |
+| docs/ | 文档：摘要、需求、架构、memory、plan、design |
+
+## 怎么读
+
+先 memory/MEMORY.md（铁律与决策）→ plan/PLAN.md（现在做什么）→ REQUIREMENTS.md（做到什么算完成）。改需求先改 REQUIREMENTS.md 并追加裁决记录，再写代码。
+
+## 口径
+
+- 需求编号（NAV-03 / BAK-07 …）是任务、PR、验收的唯一契约。
+- 返回体统一 { ok, data, error }；读接口公开、写接口强鉴权。
+- 版本：需求基线 v1.5，架构 v1。

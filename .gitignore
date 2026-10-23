@@ -1,0 +1,30 @@
+# 依赖与运行时
+node_modules/
+/data/
+*.log
+.env
+.env.*
+.DS_Store
+
+# 构建产物（一律生成，不入库）
+public/
+dist/
+web/dist/
+addons/dist/
+addons/*.xpi
+addons/*.crx
+addons/*.zip
+fn/build/
+fn/*.fpk
+
+# 密钥与证书
+*.pem
+*.key
+*.p12
+*.p7b
+*.crt
+
+# 编辑器
+.idea/
+.vscode/
+*.swp

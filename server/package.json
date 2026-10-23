@@ -1,0 +1,28 @@
+{
+  "name": "suenweb-server",
+  "version": "2.0.0-m1",
+  "private": true,
+  "description": "SuenWeb 2.0 后端：Fastify 5 + node:sqlite（worker 内），零原生依赖",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "node --watch --disable-warning=ExperimentalWarning src/server.ts",
+    "start": "node --disable-warning=ExperimentalWarning src/server.ts",
+    "db:migrate": "node --disable-warning=ExperimentalWarning src/data/migrate-cli.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "test:watch": "node --disable-warning=ExperimentalWarning --test --watch test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "bench": "node --disable-warning=ExperimentalWarning scripts/bench.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.0",
+    "fastify": "^5.0.0",
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0"
+  }
+}
