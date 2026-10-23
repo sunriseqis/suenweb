@@ -39,17 +39,19 @@ export type CardOptions = {
   index?: number;
   class?: string;
   dashed?: boolean;
+  padding?: 'sm' | 'md';
   rotate?: 0 | 1 | 2 | -1 | -2;
   as?: string;
 };
 
 export function card(options: CardOptions = {}, ...children: Child[]): HTMLElement {
-  const { index = 0, class: className = '', dashed = false, rotate = 0, as = 'div' } = options;
+  const { index = 0, class: className = '', dashed = false, rotate = 0, as = 'div', padding = 'sm' } = options;
   const sides = [];
   if (rotate) sides.push(rotate === 1 || rotate === 2 ? 'rotate-' + rotate : 'rotate-' + rotate);
   const node = el(as, {
     class: cn(
-      'panel rounded-[26px] border-4 p-6 shadow-multi transition-all duration-300 ease-out',
+      'panel rounded-[20px] border-4 transition-all duration-300 ease-out shadow-multi-sm shadow-multi-sm-hover',
+      padding === 'md' ? 'p-6' : 'p-4',
       clashBorder(index),
       dashed ? 'border-dashed' : 'border-solid',
       sides.join(' '),

@@ -9,13 +9,13 @@ import {
   setThemeMode,
   setTier,
   watchSystemTheme,
-  type ThemeMode,
 } from './lib/theme.ts';
 import { renderAuth } from './pages/auth.ts';
 import { renderBookmarks } from './pages/bookmarks.ts';
 import { openConfirmDialog, openGroupDialog, openLinkDrawer, type LinkDraft } from './pages/dialogs.ts';
 import { renderSettings, type IgnoreRow } from './pages/settings.ts';
 import { button } from './ui/button.ts';
+import { mountCapsule, unmountCapsule, type CapsuleItem } from './ui/capsule.ts';
 import { brandLogo } from './ui/logo.ts';
 import { toast } from './ui/toast.ts';
 
@@ -27,6 +27,7 @@ type AppState = {
   route: Route;
   initialized: boolean;
   authed: boolean;
+  editing: boolean;
   groups: GroupWithLinks[];
   query: string;
   activeGroupId: number | null;
@@ -41,6 +42,7 @@ const store = createStore<AppState>({
   route: '#/',
   initialized: true,
   authed: false,
+  editing: false,
   groups: [],
   query: '',
   activeGroupId: null,
@@ -79,6 +81,7 @@ async function refresh(): Promise<void> {
     groups: data.data.groups,
     initialized: status.data.initialized,
     authed: status.data.authenticated,
+    editing: status.data.authenticated ? store.get().editing : false,
     loadError: null,
   });
   if (!status.data.initialized && currentRoute() === '#/') go('#/setup');
@@ -91,87 +94,53 @@ async function loadIgnores(): Promise<void> {
   if (result.ok) store.set({ ignores: result.data.ignores });
 }
 
-function renderHeader(state: AppState): HTMLElement {
+function renderHeader(): HTMLElement {
   const header = el('header', {
     class: 'sticky top-0 z-30 border-b-8 border-accent',
-    style: 'background:color-mix(in srgb, var(--c-bg) 84%, transparent);backdrop-filter:blur(10px);',
+    style: 'background:color-mix(in srgb, var(--c-bg) 86%, transparent);backdrop-filter:blur(10px);',
   });
-  const inner = el('div', { class: 'mx-auto flex w-full max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-8' });
-
-  const brand = el('a', { href: '#/', class: 'flex items-center gap-2 font-display text-base tracking-[0.2em] text-fg' });
+  const inner = el('div', { class: 'mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-2 sm:px-6' });
+  const brand = el('a', { href: '#/', class: 'flex items-center gap-2 font-display text-sm tracking-[0.2em] text-fg' });
   brand.append(
-    el('span', { class: 'flex h-9 w-9 items-center justify-center rounded-xl border-4 border-tertiary bg-riot text-ink' }, brandLogo(20)),
+    el('span', { class: 'flex h-8 w-8 items-center justify-center rounded-lg border-4 border-tertiary bg-riot text-ink' }, brandLogo(17)),
     el('span', { class: 'text-gradient anim-gradient', text: 'SUENWEB' }),
   );
-
-  const actions = el('div', { class: 'ml-auto flex flex-wrap items-center gap-2' });
-
-  const theme = getThemeMode();
-  actions.appendChild(
-    button({
-      variant: 'icon',
-      iconName: theme === 'light' ? 'sun' : theme === 'dark' ? 'moon' : 'monitor',
-      title: '主题：' + (theme === 'system' ? '跟随系统' : theme === 'light' ? '浅色' : '深色'),
-      onClick: () => {
-        const next: ThemeMode = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
-        setThemeMode(next);
-        toast('主题：' + (next === 'system' ? '跟随系统' : next === 'light' ? '浅色' : '深色'));
-        render();
-      },
-    }),
-  );
-
-  actions.appendChild(
-    button({
-      variant: 'icon',
-      iconName: 'calm',
-      title: isCalm() ? '降噪模式：开' : '降噪模式：关',
-      onClick: () => {
-        setCalm(!isCalm());
-        toast(isCalm() ? '已开启降噪模式' : '已关闭降噪模式');
-        render();
-      },
-    }),
-  );
-
-  actions.appendChild(
-    button({
-      variant: 'icon',
-      iconName: state.view === 'grid' ? 'list' : 'grid',
-      title: state.view === 'grid' ? '切换列表视图' : '切换网格视图',
-      onClick: () => {
-        store.set({ view: state.view === 'grid' ? 'list' : 'grid' });
-      },
-    }),
-  );
-
-  actions.appendChild(
-    button({ variant: 'icon', iconName: 'settings', title: '设置', onClick: () => go('#/settings') }),
-  );
-
-  if (state.authed) {
-    actions.appendChild(
-      button({
-        label: '退出',
-        iconName: 'logout',
-        variant: 'secondary',
-        size: 'sm',
-        onClick: async () => {
-          const result = await api.logout();
-          if (!result.ok) toast(result.error.message, 'error');
-          await refresh();
-        },
-      }),
-    );
-  } else {
-    actions.appendChild(
-      button({ label: '登录', iconName: 'login', variant: 'primary', size: 'sm', onClick: () => go('#/login') }),
-    );
-  }
-
-  inner.append(brand, actions);
+  inner.appendChild(brand);
   header.appendChild(inner);
   return header;
+}
+
+function capsuleItems(state: AppState): CapsuleItem[] {
+  if (!state.authed) {
+    return [
+      { key: 'login', label: '登录', iconName: 'login', showLabel: true, onClick: () => go('#/login') },
+    ];
+  }
+  return [
+    {
+      key: 'edit',
+      label: state.editing ? '编辑模式已开：点按回到只读' : '只读：点按进入编辑模式',
+      iconName: state.editing ? 'lock-open' : 'lock',
+      active: state.editing,
+      onClick: () => {
+        const next = !store.get().editing;
+        store.set({ editing: next });
+        toast(next ? '编辑模式已开启：可拖动、可编辑' : '已锁定：只读模式');
+      },
+    },
+    { key: 'settings', label: '设置', iconName: 'settings', onClick: () => go('#/settings') },
+    {
+      key: 'logout',
+      label: '登出',
+      iconName: 'logout',
+      onClick: async () => {
+        await api.logout();
+        store.set({ editing: false });
+        await refresh();
+        go('#/');
+      },
+    },
+  ];
 }
 
 async function submitAuth(password: string): Promise<void> {
@@ -247,6 +216,7 @@ function render(): void {
   setTier(state.route === '#/' ? 'half' : 'full');
 
   if (state.route === '#/login' || state.route === '#/setup') {
+    unmountCapsule();
     app.appendChild(
       renderAuth({
         mode: state.route === '#/setup' ? 'setup' : 'login',
@@ -259,7 +229,7 @@ function render(): void {
     return;
   }
 
-  app.appendChild(renderHeader(state));
+  app.appendChild(renderHeader());
 
   if (state.loadError) {
     const box = el('div', { class: 'relative z-10 mx-auto mt-10 w-full max-w-2xl px-4' });
@@ -267,11 +237,12 @@ function render(): void {
       el('div', { class: 'rounded-[26px] border-8 border-dotted border-quaternary p-8 text-center' },
         el('h2', { class: 'text-3xl text-fg', text: '服务端连不上' }),
         el('p', { class: 'mt-2 text-fg/70', text: state.loadError }),
-        el('p', { class: 'mt-2 text-sm text-fg/50', text: '开发期请在仓库根目录执行 npm run dev 启动后端（默认 8080），前端用 npm --prefix web run dev（5173，已代理 /api）。' }),
+        el('p', { class: 'mt-2 text-sm text-fg/50', text: '开发期请在仓库根目录执行 npm run dev 启动后端，前端用 npm run web。' }),
         el('div', { class: 'mt-5 flex justify-center' }, button({ label: '重试', iconName: 'refresh', onClick: () => void refresh() })),
       ),
     );
     app.appendChild(box);
+    mountCapsule(capsuleItems(state));
     return;
   }
 
@@ -307,12 +278,14 @@ function render(): void {
         onLogin: () => go('#/login'),
         onLogout: async () => {
           await api.logout();
+          store.set({ editing: false });
           await refresh();
           go('#/');
         },
         onHome: () => go('#/'),
       }),
     );
+    mountCapsule(capsuleItems(state));
     return;
   }
 
@@ -320,6 +293,7 @@ function render(): void {
     renderBookmarks({
       groups: state.groups,
       authed: state.authed,
+      editing: state.editing,
       view: state.view,
       query: state.query,
       activeGroupId: state.activeGroupId,
@@ -387,6 +361,7 @@ function render(): void {
       onLogin: () => go('#/login'),
     }),
   );
+  mountCapsule(capsuleItems(state));
 }
 
 export function boot(): void {

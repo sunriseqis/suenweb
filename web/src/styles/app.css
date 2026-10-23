@@ -271,3 +271,37 @@ html[data-calm='true'] .anim-gradient {
 .curved-cut {
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 26px), calc(100% - 26px) 100%, 0 100%);
 }
+
+/* 紧凑卡片的小号多层阴影（比例缩小用） */
+.shadow-multi-sm {
+  box-shadow:
+    5px 5px 0 var(--sh-1, var(--c-secondary)),
+    10px 10px 0 var(--sh-2, var(--c-accent));
+}
+.shadow-multi-sm-hover:hover {
+  box-shadow:
+    7px 7px 0 var(--sh-1, var(--c-secondary)),
+    14px 14px 0 var(--sh-2, var(--c-accent)),
+    21px 21px 0 var(--sh-3, var(--c-tertiary));
+}
+
+/* 按下：阴影收一层但不消失，避免按下就割裂 */
+.pressable {
+  will-change: transform;
+}
+.pressable:active {
+  transform: translate(3px, 3px);
+  box-shadow:
+    3px 3px 0 var(--sh-1, var(--c-secondary)),
+    6px 6px 0 var(--sh-2, var(--c-accent));
+}
+
+/* 右下角自动隐藏胶囊 */
+.capsule {
+  transition: transform 420ms cubic-bezier(0.68, -0.55, 0.265, 1.55), opacity 260ms ease-out;
+}
+.capsule[data-hidden='true'] {
+  transform: translate(18%, 150%) scale(0.86);
+  opacity: 0;
+  pointer-events: none;
+}

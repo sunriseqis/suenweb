@@ -26,7 +26,7 @@ export type SettingsProps = {
 };
 
 function section(index: number, title: string, subtitle: string, ...children: HTMLElement[]): HTMLElement {
-  const wrap = card({ index, class: 'mb-8', dashed: index % 2 === 1 });
+  const wrap = card({ index, class: 'mb-6', dashed: index % 2 === 1, padding: 'md' });
   wrap.append(
     el('p', { class: 'font-display text-[11px] uppercase tracking-[0.3em] text-fg/50', text: String(index + 1).padStart(2, '0') }),
     el('h2', { class: 'mt-1 text-3xl text-fg ts-cn', text: title }),

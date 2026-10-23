@@ -26,6 +26,7 @@ export type FieldOptions = {
   textarea?: boolean;
   rows?: number;
   autofocus?: boolean;
+  compact?: boolean;
 };
 
 export type FieldHandle = {
@@ -47,6 +48,7 @@ export function field(options: FieldOptions): FieldHandle {
     textarea = false,
     rows = 3,
     autofocus = false,
+    compact = false,
   } = options;
   const accent = accentAt(index);
   const id = 'f-' + Math.random().toString(36).slice(2, 9);
@@ -63,7 +65,7 @@ export function field(options: FieldOptions): FieldHandle {
         id,
         name: name ?? id,
         type,
-        class: inputClass(index),
+        class: compact ? inputClass(index, 'rounded-full px-4 py-2 text-sm') : inputClass(index),
         placeholder,
         autocomplete: autocomplete ?? 'off',
         required: required || undefined,
@@ -72,7 +74,7 @@ export function field(options: FieldOptions): FieldHandle {
 
   const labelNode = el('label', {
     for: id,
-    class: cn('mb-2 inline-block font-display text-[12px] uppercase tracking-[0.2em] text-fg/80', accent.text),
+    class: cn(compact ? 'mb-1 inline-block font-display text-[10px] uppercase tracking-[0.2em] text-fg/70' : 'mb-2 inline-block font-display text-[12px] uppercase tracking-[0.2em] text-fg/80', accent.text),
     text: label,
   });
 

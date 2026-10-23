@@ -3,14 +3,14 @@ import { append, el, type Child } from '../lib/dom.ts';
 import { icon, type IconName } from './icons.ts';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'icon';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const BASE =
-  'inline-flex select-none items-center justify-center gap-2 rounded-full font-heading font-black uppercase tracking-widest transition-all duration-300 ease-out disabled:pointer-events-none disabled:opacity-50';
+  'pressable inline-flex select-none items-center justify-center gap-2 rounded-full font-heading font-black uppercase tracking-widest transition-all duration-300 ease-out disabled:pointer-events-none disabled:opacity-50';
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-riot border-4 border-tertiary text-ink shadow-multi glow hover:-rotate-1 hover:scale-105 active:scale-95 active:shadow-none',
+    'bg-riot border-4 border-tertiary text-ink shadow-multi glow hover:-rotate-1 hover:scale-105',
   secondary:
     'border-4 border-dashed border-accent bg-transparent text-fg hover:border-solid hover:bg-accent hover:text-ink hover:scale-105',
   outline:
@@ -18,10 +18,11 @@ const VARIANTS: Record<ButtonVariant, string> = {
   ghost:
     'border-0 bg-transparent text-fg underline decoration-4 decoration-accent underline-offset-4 hover:scale-105 hover:decoration-secondary',
   icon:
-    'h-12 w-12 border-4 border-quaternary bg-[var(--c-panel)] text-fg hover:rotate-6 hover:scale-110 hover:border-accent',
+    'h-9 w-9 border-4 border-quaternary bg-[var(--c-panel)] text-fg hover:rotate-6 hover:scale-110 hover:border-accent',
 };
 
 const SIZES: Record<ButtonSize, string> = {
+  xs: 'h-8 px-3 text-[10px]',
   sm: 'h-10 px-5 text-[11px]',
   md: 'h-14 px-8 text-sm',
   lg: 'h-16 px-12 text-base tracking-[0.2em]',
