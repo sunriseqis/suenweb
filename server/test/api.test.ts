@@ -294,3 +294,20 @@ test('站点图标：开启后游客只读缓存，不触发抓取', async () =>
     await h.close();
   }
 });
+
+test('置顶组：layout_mode 可切 single / multi 并回显', async () => {
+  const h = await createHarness();
+  try {
+    const token = await setupAdmin(h.app);
+    const created = await h.app.inject({ method: 'POST', url: '/api/groups', headers: bearer(token), payload: { name: '置顶测试' } });
+    const id = parse(created).data.group.id;
+    const single = await h.app.inject({ method: 'PUT', url: '/api/groups/' + id, headers: bearer(token), payload: { type: 'fixed', layout_mode: 'single' } });
+    assert.equal(single.statusCode, 200);
+    assert.equal(parse(single).data.group.layout_mode, 'single');
+    const multi = await h.app.inject({ method: 'PUT', url: '/api/groups/' + id, headers: bearer(token), payload: { layout_mode: 'multi' } });
+    assert.equal(multi.statusCode, 200);
+    assert.equal(parse(multi).data.group.layout_mode, 'multi');
+  } finally {
+    await h.close();
+  }
+});

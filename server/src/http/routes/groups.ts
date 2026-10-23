@@ -9,7 +9,7 @@ const groupBody = {
     icon: { type: ['string', 'null'], maxLength: 500 },
     type: { type: 'string', enum: ['fixed', 'tab'] },
     display_mode: { type: 'string', enum: ['grid', 'list', 'icon'] },
-    layout_mode: { type: 'string', enum: ['auto', 'compact', 'comfortable'] },
+    layout_mode: { type: 'string', enum: ['single', 'multi', 'auto'] },
   },
 };
 
