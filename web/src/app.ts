@@ -294,18 +294,6 @@ function render(): void {
       authed: state.authed,
       editing: state.editing,
       view: state.view,
-      query: state.query,
-      activeGroupId: state.activeGroupId,
-      onQuery: (query) => {
-        store.set({ query });
-        render();
-        const input = document.querySelector<HTMLInputElement>('input[type="search"]');
-        if (input) {
-          input.value = query;
-          input.focus();
-        }
-      },
-      onActiveGroup: (id) => store.set({ activeGroupId: id }),
       onAddLink: (groupId) => openCreateLink(groupId),
       onEditLink: (link) => openEditLink(link),
       onDeleteLink: (link) => {

@@ -86,3 +86,9 @@
 | 按钮 | `ui/button.ts` 五个变体：primary（强调色填充）/ secondary（细边）/ outline / ghost / icon |
 | 图标 | `ui/icons.ts` 内联 SVG，线宽 1.8 |
 | 强调色语义 | 只出现在可交互状态，见第四节 |
+
+## 十、页面搜索与分组切换
+
+搜索框就是**网页搜索**，不是书签过滤：左侧引擎下拉（Google / Bing / DuckDuckGo / Brave / Startpage / Mojeek / Qwant），右侧输入框，回车在新标签打开；引擎选择存本地（`sw.engine`），默认 Google。页内找书签用浏览器原生查找。
+
+分组不切页：置顶组固定在最上方独立成块，不参与 tab；普通组在下方共用一条 sticky tab 条，点击滚动到对应分组、滚动时联动高亮，**内容全程保持展开**（tab 是定位工具，不是内容容器）。

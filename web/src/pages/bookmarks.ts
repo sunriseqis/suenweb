@@ -2,9 +2,9 @@ import type { GroupWithLinks, Link } from '../lib/api.ts';
 import { cn } from '../lib/cn.ts';
 import { append, el } from '../lib/dom.ts';
 import { button } from '../ui/button.ts';
-import { field } from '../ui/field.ts';
 import { icon } from '../ui/icons.ts';
 import { tile } from '../ui/surfaces.ts';
+import { webSearchBar } from '../ui/websearch.ts';
 
 export type DisplayMode = 'grid' | 'list' | 'icon';
 
@@ -13,10 +13,6 @@ export type BookmarksProps = {
   authed: boolean;
   editing: boolean;
   view: 'grid' | 'list';
-  query: string;
-  activeGroupId: number | null;
-  onQuery: (value: string) => void;
-  onActiveGroup: (id: number | null) => void;
   onAddLink: (groupId?: number) => void;
   onEditLink: (link: Link) => void;
   onDeleteLink: (link: Link) => void;
@@ -38,25 +34,19 @@ function hostOf(url: string): string {
   }
 }
 
-function matches(link: Link, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  return (
-    link.title.toLowerCase().includes(q) ||
-    link.url.toLowerCase().includes(q) ||
-    (link.description ?? '').toLowerCase().includes(q)
-  );
-}
-
 function modeOf(group: GroupWithLinks): DisplayMode {
   const mode = group.display_mode;
   if (mode === 'grid' || mode === 'list' || mode === 'icon') return mode;
   return group.type === 'fixed' ? 'grid' : 'icon';
 }
 
+function sectionId(group: GroupWithLinks): string {
+  return 'group-' + group.id;
+}
+
 export function renderBookmarks(props: BookmarksProps): HTMLElement {
   const editable = props.authed && props.editing;
-  const root = el('div', { class: 'relative z-10 mx-auto w-full max-w-[1500px] px-4 pb-24 pt-4 sm:px-6' });
+  const root = el('div', { class: 'relative z-10 mx-auto w-full max-w-[1500px] px-4 pb-24 pt-3 sm:px-6' });
 
   const pinned = props.groups.filter((group) => group.type === 'fixed');
   const normal = props.groups.filter((group) => group.type !== 'fixed');
@@ -69,36 +59,16 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
       el('p', { class: 'mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--c-fg-soft)]', text: props.groups.length + ' groups / ' + totalLinks + ' links' }),
     ),
     editable
-      ? button({ label: '收藏一条', iconName: 'plus', variant: 'primary', size: 'xs', onClick: () => props.onAddLink(props.activeGroupId ?? undefined) })
+      ? button({ label: '收藏一条', iconName: 'plus', variant: 'primary', size: 'xs', onClick: () => props.onAddLink() })
       : null,
     editable
       ? button({ label: '新建分组', iconName: 'folder', variant: 'secondary', size: 'xs', onClick: props.onAddGroup })
       : null,
   ]);
 
-  const search = field({
-    label: '搜索',
-    type: 'search',
-    value: props.query,
-    placeholder: '标题 / 网址 / 备注',
-    compact: true,
-  });
-  search.input.addEventListener('input', (event) => {
-    props.onQuery((event.target as HTMLInputElement).value);
-  });
-  bar.appendChild(el('div', { class: 'ml-auto w-full max-w-[14rem]' }, search.wrapper));
+  const search = webSearchBar('搜索网页（回车开新标签）');
+  bar.appendChild(el('div', { class: 'ml-auto w-full max-w-md' }, search.element));
   root.appendChild(bar);
-
-  const nav = el('nav', { class: 'mb-4 flex items-center gap-1 overflow-x-auto pb-1', 'aria-label': '分组导航' });
-  nav.appendChild(navChip('全部', totalLinks, props.activeGroupId === null, () => props.onActiveGroup(null)));
-  props.groups.forEach((group) => {
-    nav.appendChild(
-      navChip(group.name, group.links.length, props.activeGroupId === group.id, () =>
-        props.onActiveGroup(props.activeGroupId === group.id ? null : group.id),
-      ),
-    );
-  });
-  root.appendChild(nav);
 
   if (editable) {
     const hint = el('div', { class: 'mb-3 flex items-center gap-2 text-[11px] text-[var(--c-fg-soft)]' });
@@ -109,25 +79,97 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
     root.appendChild(hint);
   }
 
-  const showPinned = pinned.filter((group) => props.activeGroupId === null || group.id === props.activeGroupId);
-  if (showPinned.length > 0) {
-    const area = el('div', { class: 'mb-5 space-y-3 border border-[var(--c-line)] bg-[var(--c-surface-2)]/40 p-3', 'aria-label': '置顶组' });
-    showPinned.forEach((group) => area.appendChild(renderSection(group, props, true)));
+  if (pinned.length > 0) {
+    const area = el('div', { class: 'mb-4 space-y-3 border border-[var(--c-line)] bg-[var(--c-surface-2)]/40 p-3', 'aria-label': '置顶组' });
+    pinned.forEach((group) => area.appendChild(renderSection(group, props, true)));
     root.appendChild(area);
   }
 
-  const showNormal = normal.filter((group) => props.activeGroupId === null || group.id === props.activeGroupId);
-  if (showNormal.length > 0) {
-    const area = el('div', { class: 'space-y-4', 'aria-label': '普通组' });
-    showNormal.forEach((group) => area.appendChild(renderSection(group, props, false)));
-    root.appendChild(area);
+  if (normal.length > 0) {
+    const strip = el('div', {
+      class: 'sticky top-[41px] z-20 -mx-4 mb-3 flex items-center gap-1 overflow-x-auto border-y border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-1.5 sm:-mx-6 sm:px-6',
+      role: 'tablist',
+      'aria-label': '普通分组',
+    });
+    const buttons = new Map<number, HTMLElement>();
+    const setActive = (id: number): void => {
+      buttons.forEach((node, key) => {
+        const on = key === id;
+        node.setAttribute('aria-selected', on ? 'true' : 'false');
+        node.className = cn(
+          'pressable shrink-0 whitespace-nowrap border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]',
+          on
+            ? 'border-accent bg-accent text-[color:var(--c-accent-ink)]'
+            : 'border-transparent text-[var(--c-fg-soft)] hover:border-[var(--c-line)] hover:bg-[var(--c-surface-2)] hover:text-fg',
+        );
+      });
+    };
+
+    for (const group of normal) {
+      const node = el('button', {
+        type: 'button',
+        class: cn(
+          'pressable shrink-0 whitespace-nowrap border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]',
+          'border-transparent text-[var(--c-fg-soft)] hover:border-[var(--c-line)] hover:bg-[var(--c-surface-2)] hover:text-fg',
+        ),
+        role: 'tab',
+        'aria-selected': 'false',
+        onClick: () => {
+          const target = document.getElementById(sectionId(group));
+          if (target) {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+          }
+          setActive(group.id);
+        },
+      });
+      node.append(
+        el('span', { text: group.name }),
+        el('span', { class: 'ml-1.5 text-[10px] opacity-60', text: String(group.links.length) }),
+      );
+      buttons.set(group.id, node);
+      strip.appendChild(node);
+    }
+
+    const sections = el('div', { class: 'space-y-4' });
+    for (const group of normal) {
+      const section = renderSection(group, props, false);
+      section.id = sectionId(group);
+      section.classList.add('scroll-mt-[84px]');
+      sections.appendChild(section);
+    }
+
+    if (typeof IntersectionObserver !== 'undefined') {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries.filter((entry) => entry.isIntersecting);
+          if (visible.length === 0) return;
+          const top = visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          const id = Number(top.target.id.replace('group-', ''));
+          if (!Number.isNaN(id)) setActive(id);
+        },
+        { rootMargin: '-45% 0px -50% 0px', threshold: 0 },
+      );
+      queueMicrotask(() => {
+        for (const group of normal) {
+          const node = document.getElementById(sectionId(group));
+          if (node) observer.observe(node);
+        }
+        if (normal.length > 0) setActive(normal[0].id);
+      });
+    } else if (normal.length > 0) {
+      setActive(normal[0].id);
+    }
+
+    root.appendChild(strip);
+    root.appendChild(sections);
   }
 
   if (props.groups.length === 0) {
     const empty = el('div', { class: 'border border-dashed border-[var(--c-line-strong)] p-10 text-center' });
     empty.append(
-      el('h2', { class: 'text-[17px] font-light text-fg', text: props.query ? '没有匹配的结果' : '还没有书签' }),
-      el('p', { class: 'mx-auto mt-2 max-w-md text-[12px] text-[var(--c-fg-soft)]', text: props.query ? '换个关键词试试。' : '点右下角胶囊的锁头进入编辑模式即可添加。' }),
+      el('h2', { class: 'text-[17px] font-light text-fg', text: '还没有书签' }),
+      el('p', { class: 'mx-auto mt-2 max-w-md text-[12px] text-[var(--c-fg-soft)]', text: '点右下角胶囊的锁头进入编辑模式即可添加。' }),
     );
     root.appendChild(empty);
   }
@@ -135,28 +177,10 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
   return root;
 }
 
-function navChip(label: string, count: number, active: boolean, onClick: () => void): HTMLElement {
-  const node = el('button', {
-    class: cn(
-      'pressable flex shrink-0 items-center gap-1.5 border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]',
-      active
-        ? 'border-accent bg-accent text-[color:var(--c-accent-ink)]'
-        : 'border-transparent text-[var(--c-fg-soft)] hover:border-[var(--c-line)] hover:bg-[var(--c-surface-2)] hover:text-fg',
-    ),
-    'aria-pressed': active ? 'true' : 'false',
-    onClick,
-  });
-  node.append(
-    el('span', { text: label }),
-    el('span', { class: cn('text-[10px]', active ? 'text-[color:var(--c-accent-ink)]/70' : 'text-[var(--c-fg-soft)]'), text: String(count) }),
-  );
-  return node;
-}
-
 function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boolean): HTMLElement {
   const editable = props.authed && props.editing;
   const mode = modeOf(group);
-  const links = props.query ? group.links.filter((link) => matches(link, props.query)) : group.links;
+  const links = group.links;
 
   const section = el('section', { 'aria-label': group.name });
   const header = el('div', { class: 'mb-2 flex flex-wrap items-center gap-2' });
@@ -190,17 +214,17 @@ function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boo
   if (mode === 'grid') {
     const grid = el('div', { class: 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderWideTile(link, props, links, editable)));
-    if (editable) grid.appendChild(addTile('加一条', 'min-h-[92px]', () => props.onAddLink(group.id)));
+    if (editable) grid.appendChild(addTile('min-h-[92px]', () => props.onAddLink(group.id)));
     section.appendChild(grid);
   } else if (mode === 'list') {
     const grid = el('div', { class: 'grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderRowTile(link, props, links, editable)));
-    if (editable) grid.appendChild(addTile('加一条', 'h-9', () => props.onAddLink(group.id)));
+    if (editable) grid.appendChild(addTile('h-9', () => props.onAddLink(group.id)));
     section.appendChild(grid);
   } else {
     const grid = el('div', { class: 'grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderSquareTile(link, props, links, editable)));
-    if (editable) grid.appendChild(addTile('加一条', 'aspect-square', () => props.onAddLink(group.id)));
+    if (editable) grid.appendChild(addTile('aspect-square', () => props.onAddLink(group.id)));
     section.appendChild(grid);
   }
 
@@ -307,7 +331,7 @@ function renderSquareTile(link: Link, props: BookmarksProps, siblings: Link[], e
   return wrap;
 }
 
-function addTile(label: string, sizeClass: string, onClick: () => void): HTMLElement {
+function addTile(sizeClass: string, onClick: () => void): HTMLElement {
   const node = el('button', {
     class: cn(
       'pressable flex items-center justify-center gap-1 border border-dashed border-[var(--c-line-strong)] text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--c-fg-soft)] hover:border-accent hover:text-fg',
@@ -315,6 +339,6 @@ function addTile(label: string, sizeClass: string, onClick: () => void): HTMLEle
     ),
     onClick,
   });
-  append(node, [icon('plus', { size: 12, stroke: 1.8 }), el('span', { text: label })]);
+  append(node, [icon('plus', { size: 12, stroke: 1.8 })]);
   return node;
 }

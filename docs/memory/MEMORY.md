@@ -71,6 +71,8 @@
 - 交互：链接拖拽（桌面 HTML5 DnD）+ 上移下移按钮；编辑用右侧抽屉（移动端全宽）；跨组重复走 409 后三选弹窗（allow / ignore / skip）。
 - 页面级操作只在右下角胶囊（web/src/ui/capsule.ts）里：未登录 1 个「登录」，登录后 3 个（编辑锁 / 设置 / 登出）。顶栏只留品牌标，不要再往顶栏加图标。
 - 编辑态是 `state.editing`（默认 false = 锁定只读）：`editable = authed && editing`，只有 editable 时才有拖动、增删改按钮与「加一条」入口；锁定时连拖拽都不绑定。退出登录会强制 `editing = false`。
+- 书签页是展开式：不按分类切页；置顶组固定顶部独立成块、不进 tab；普通组共用页内 sticky tab 条（滚动定位 + 联动高亮），内容始终全展开。
+- 搜索框是网页搜索而非书签过滤：引擎在 web/src/ui/websearch.ts 定义（google / bing / duckduckgo / brave / startpage / mojeek / qwant），默认 google，选择存 sw.engine；新增引擎只改这一处。
 - 色彩预算：书签页一页一个主色（按组轮转，只用于组标题圆点 / 选中态 / hover / 置顶区边框），链接卡与胶囊一律中性（border-fg/10~15、无彩色阴影、无每卡图案）。新增列表类组件先守这条，再谈风格。
 - 卡片密度：桌面 1/2/3/4/5 列（sm/lg/xl/2xl），gap-4，卡片 padding p-4、圆角 20px、阴影走 `.shadow-multi-sm`（5/10px）。改密度只动 surfaces.card 与 bookmarks 的 class，不要在页面里散落写死尺寸。
 - 按钮统一 `.pressable`：按下时 `translate(3px,3px)` 且阴影收到 3/6px，**不允许 shadow-none**；选中态（如分组 pill、主题按钮）保留 `shadow-multi-sm`。- 验收脚本：web/scripts/ui-check.mjs（样式与结构断言）、ui-flow.mjs（交互全流程），需要 puppeteer 与本地 chromium，不列为默认依赖。

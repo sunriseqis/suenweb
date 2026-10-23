@@ -96,6 +96,15 @@
 | 组件 | button 五变体改扁平（primary 强调填充 / secondary 细边 / outline / ghost / icon）；input 1px 边；弹窗与抽屉 1px 面板 + 2px 强调顶线；胶囊改细边条 |
 | 登录页 | 去掉漂浮装饰、巨型背景字、渐变标题，改单面板 + 2px 强调顶线 |
 | 验收 | tsc 0 error；check:dom 13 项全过；CSS 41KB → 28KB（gzip 8.2 → 6.4） |
+## M2 迭代 5（展开式布局 + 网页搜索，2026-10-23）
+
+| 项 | 处理 |
+|---|---|
+| 布局 | 去掉顶部分类 tab 切换；所有分组一页全部展开 |
+| 置顶组 | 固定在顶部独立容器，不进 tab、不随 tab 切换移动 |
+| 普通组 | 下方共用一条 sticky 页内 tab 条：点击平滑滚动定位，滚动时用 IntersectionObserver 联动高亮；内容不隐藏 |
+| 搜索 | 搜索框改为网页搜索：引擎下拉（7 个）+ 回车开新标签；默认 Google，可切 Bing / DuckDuckGo / Brave / Startpage / Mojeek / Qwant；选择存 localStorage（sw.engine）。书签过滤改用浏览器原生查找 |
+| 验收 | tsc 0 error；check:dom 18 项全过（含引擎数量 / 默认引擎 / URL 编码 / 隐私引擎 / 选择器渲染） |
 ## 待确认（需用户裁决或外部核实；D-1 已关闭）
 
 | 编号 | 问题 | 现状 |

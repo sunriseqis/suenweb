@@ -15,6 +15,7 @@ document.body.innerHTML = '<div id="capsule-root"></div>';
 const { el } = await import('../src/lib/dom.ts');
 const { mountCapsule } = await import('../src/ui/capsule.ts');
 const { renderBookmarks } = await import('../src/pages/bookmarks.ts');
+const { ENGINES, searchUrl, getEngineId } = await import('../src/ui/websearch.ts');
 
 const hits = [];
 const failures = [];
@@ -47,10 +48,6 @@ const page = renderBookmarks({
   authed: true,
   editing: true,
   view: 'grid',
-  query: '',
-  activeGroupId: null,
-  onQuery: () => {},
-  onActiveGroup: (id) => pageHits.push('nav:' + id),
   onAddLink: () => pageHits.push('addLink'),
   onEditLink: () => pageHits.push('editLink'),
   onDeleteLink: () => pageHits.push('deleteLink'),
@@ -64,14 +61,18 @@ const page = renderBookmarks({
   onLogin: () => pageHits.push('login'),
 });
 document.body.appendChild(page);
-const pills = Array.from(page.querySelectorAll('nav button'));
-pills[1].click();
-expect('分组导航可点击', pageHits.includes('nav:1'), pageHits.join(','));
 for (const node of Array.from(page.querySelectorAll('button[aria-label]'))) node.click();
 for (const key of ['togglePin', 'displayMode', 'addLink', 'editGroup', 'deleteGroup', 'editLink', 'deleteLink', 'move']) {
   expect('页面操作可点击: ' + key, pageHits.includes(key));
 }
 
+
+expect('搜索引擎不少于 7 个', ENGINES.length >= 7, String(ENGINES.length));
+expect('默认引擎是 Google', getEngineId() === 'google', getEngineId());
+expect('URL 模板正确编码', searchUrl('a b', 'duckduckgo') === 'https://duckduckgo.com/?q=a%20b', searchUrl('a b', 'duckduckgo'));
+expect('含隐私型引擎', ['brave', 'startpage', 'mojeek', 'qwant'].every((id) => ENGINES.some((e) => e.id === id)));
+const engineSelect = page.querySelector('select[aria-label="搜索引擎"]');
+expect('页面渲染出引擎选择器', Boolean(engineSelect), engineSelect ? String(engineSelect.options.length) : 'missing');
 console.log('---');
 console.log('failed', failures.length);
 process.exit(failures.length === 0 ? 0 : 1);
