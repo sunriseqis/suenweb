@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="SuenWeb">
+  <!-- Metro 磁贴：直角方块底 + 白书签 + 一块小方砖，单色、无渐变 -->
+  <rect width="128" height="128" fill="#1BA1E2"/>
+  <rect x="22" y="22" width="30" height="30" fill="#FFFFFF" opacity="0.55"/>
+  <path d="M52 22h54v88l-27-18-27 18z" fill="#FFFFFF"/>
+</svg>

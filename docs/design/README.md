@@ -23,5 +23,7 @@
 | 文件 | 说明 | 状态 |
 |---|---|---|
 | DESIGN-SYSTEM.md | 设计系统落地版，随 M2 一起生效 | 生效中 |
-| logo原型.svg | 用户提供的品牌标（1024 viewBox 单路径）：已接入前端顶栏与登录页，并作为 favicon（web/src/assets/logo.svg、web/public/logo.svg） | 已启用 |
+| logo-metro.svg | **当前品牌标**（Metro 磁贴版）：强调蓝直角方块 + 白色书签 + 一块浅色方砖，单色无渐变。前端顶栏用单色版（web/src/assets/logo.svg），favicon 与扩展图标用满色版（web/public/logo.svg、addons/icons/icon.svg） | 已启用 |
+| logo原型.svg | 早前那版 1024 单路径 logo（已停用，仅存档） | 历史 |
+| 扩展图标 PNG | addons/scripts/make-icons.mjs 生成 16/32/48/96/128 五档（无第三方依赖） | 已生成 |
 | （待填充） | 应用图标 512/128/48/32 PNG 与插件 16/32/48/128 四档导出（M3/M7 需要） | 未开始 |

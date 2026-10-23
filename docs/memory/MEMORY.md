@@ -68,6 +68,7 @@
 - 动效分级靠 html 上的 data-tier（full / half）与 data-calm（true / false）：半功率档下 .anim-* 只对带 data-decor 的装饰元素生效；降噪模式与 prefers-reduced-motion 全部停帧。
 - 主题与动效偏好存 localStorage：sw.theme（system / light / dark）、sw.tier、sw.calm；不进服务端 settings（多设备各自决定，访客也能切）。
 - 图标是 web/src/ui/icons.ts 的内联 SVG 表；禁止 emoji。
+- 品牌标是 Metro 磁贴版：强调蓝直角方块 + 白色书签 + 一块 55% 白小方砖；应用内用单色版（currentColor），favicon 与扩展用满色版；PNG 五档由 addons/scripts/make-icons.mjs 生成（无依赖）。
 - 交互：链接拖拽（桌面 HTML5 DnD）+ 上移下移按钮；编辑用右侧抽屉（移动端全宽）；跨组重复走 409 后三选弹窗（allow / ignore / skip）。
 - 页面级操作只在右下角胶囊（web/src/ui/capsule.ts）里：未登录 1 个「登录」，登录后 3 个（编辑锁 / 设置 / 登出）。顶栏只留品牌标，不要再往顶栏加图标。
 - 编辑态是 `state.editing`（默认 false = 锁定只读）：`editable = authed && editing`，只有 editable 时才有拖动、增删改按钮与「加一条」入口；锁定时连拖拽都不绑定。退出登录会强制 `editing = false`。

@@ -38,5 +38,5 @@ Firefox 永久安装需要签名（AMO）或开发者版关闭签名校验；临
 
 ## 已知限制
 
-- 图标目前是 SVG（Firefox 可用；Chrome 可能要 PNG，M7 再补）。
+- 图标同时提供 SVG 源（icons/icon.svg）与 16/32/48/96/128 PNG（icons/icon-*.png），由 scripts/make-icons.mjs 生成，Chrome 与 Firefox 都能用。
 - 只做单向回写（服务端 → 浏览器），浏览器里手动删改不会同步回服务端。
