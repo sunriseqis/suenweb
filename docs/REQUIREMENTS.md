@@ -1,8 +1,8 @@
-# SuenWeb 2.0 · 功能清单（重构基线 v1.5）
+# SuenWeb 2.0 · 功能清单（重构基线 v1.6）
 
 > 用途：本项目重建后的**唯一功能参照**。开发任务、提交、PR、验收一律引用本文的功能 ID。
-> 版本：v1.5（全部决策已裁定，见第零章「裁决记录」；本地部署 + 低阻塞架构，详见 [ARCHITECTURE.md](./ARCHITECTURE.md)）
-> 变更摘要：访客只读、分组名唯一且重名自动合并、Firefox 为主力、外观个性化后置、AI 能力移除、备份口令复用管理密码且仅在有 WebDAV 时启用；**放弃 Cloudflare Workers，改本地部署（Docker + fnOS .fpk），开发期一律 npm 启动**。
+> 版本：v1.6（全部决策已裁定，见第零章「裁决记录」；本地部署 + 低阻塞架构，详见 [ARCHITECTURE.md](./ARCHITECTURE.md)）
+> 变更摘要：访客只读、分组名唯一且重名自动合并、Firefox 为主力、外观个性化后置、AI 能力移除、备份口令复用管理密码且仅在有 WebDAV 时启用；**放弃 Cloudflare Workers，改本地部署（Docker + fnOS 原生包），开发期一律 npm 启动**；v1.6 追加：密码最短 6 位、链接去重同组静默 / 跨组弹窗确认（用户忽略后不再提示）。
 
 ---
 
@@ -25,6 +25,8 @@
 | 14 | 技术架构 | 升级为**并发阻塞更小**的路径：全异步 I/O、单写队列 + 并发读、重活下沉线程、后台任务与请求解耦（详见 ARCHITECTURE.md） |
 | 15 | fnOS 打包形态 | **原生 fn 应用**，不是「Docker 转 .fpk」；包内交付运行时与启动脚本，由系统直接拉起进程 |
 | 16 | 原生依赖 | **零原生依赖**：不引入需 node-gyp/预编译二进制的模块；数据库改用 Node 内置 node:sqlite，跑在 worker 线程内 |
+| 17 | 密码强度 | **最短 6 位**：管理密码即备份口令，只卡长度、不强制复杂度、不设过期、不锁定账号 |
+| 18 | 链接去重提示 | **同组重复直接去重（静默合并，不打扰）**；**跨组出现同一 URL 必须由前端弹窗让用户放行**；用户选「忽略」后，同一 URL 到同一分组不再提示（记录可撤销） |
 
 连带影响：OPS 域整体改写为本地部署口径（不再有 Workers/D1/R2 绑定与 Workers AI）；TOOL 域移除 AI 项；IMP/BAK 加解密口径为「管理密码派生」（见 IMP-06、BAK-07）。
 
@@ -87,7 +89,7 @@
 
 | ID | 功能 | 定义与要点 | 验收标准 |
 |---|---|---|---|
-| AUTH-01 | 首次设密与登录 | **首次使用即强制设置访问密码**（该密码同时是备份加密口令，故系统中恒不存在无密码实例）；之后需登录才能编辑 | 新实例首个访问者被引导设密，无法跳过；强度与重复输入校验生效 |
+| AUTH-01 | 首次设密与登录 | **首次使用即强制设置访问密码**（该密码同时是备份加密口令，故系统中恒不存在无密码实例）；之后需登录才能编辑 | 新实例首个访问者被引导设密，无法跳过；最短 6 位校验与重复输入校验生效 |
 | AUTH-02 | 会话管理 | 登录签发有时效 token（建议 30 天）；支持注销与修改密码 | 注销后旧 token 立即失效；改密后其他设备全部下线 |
 | AUTH-03 | 访客只读 | **未登录可浏览全部书签，但不能编辑**；写接口一律 401 | 访客态界面上无任何编辑入口；直接调写接口返回 401；读接口稳定可用 |
 | AUTH-04 | 登录限流 | 同 IP 连续失败达阈值后锁定一段时间 | 返回剩余锁定时间；限流记录定期清理 |
@@ -201,8 +203,10 @@
 | extensions | id, ext_id, name, version, url, browser, updated_at；UNIQUE(ext_id, browser) | 扩展清单 |
 | backups | id, kind, location, size, created_at, status | 备份索引；文件本体在 WebDAV（加密态） |
 | sessions | token_hash, created_at, expires_at, device | token 只存哈希；支持按设备注销 |
+| dedupe_ignores | url_normalized + group_id（主键）、created_at | 跨组重复的「不再提示」记忆；按 (URL, 目标分组) 粒度，可撤销 |
 
-去重口径统一：入库时写 url_normalized（协议+主机小写、去尾斜杠、去常见跟踪参数），判重、导入、收藏均以此为准。
+去重口径统一：入库时写 url_normalized（协议+主机小写、去默认端口、去尾斜杠、去常见跟踪参数、丢 hash、query 排序），判重、导入、收藏均以此为准。
+重复分两类处理：**同组重复**（该分组里已有同一 URL）直接静默合并，不提示；**跨组重复**（别的分组已有同一 URL）必须由前端弹窗让用户选择 —— 放行（两组各留一份）／忽略（放行且以后不再提示）／不加（返回已存在那条）。插件收藏与批量导入走同一套口径。
 分组名归一化：trim + 连续空白折叠 + 大小写不敏感比较，用于「同名自动合并」。
 
 ---
@@ -214,6 +218,7 @@
     书签      GET  /api/data                                  （公开，访客可读）
               POST/PUT/DELETE /api/groups, /api/groups/:id     （鉴权；同名合并）
               POST/PUT/DELETE /api/links, /api/links/:id       （鉴权）
+              POST /api/links 支持 on_duplicate=prompt|allow|ignore|skip；跨组重复默认返回 409 CROSS_GROUP_DUPLICATE，details 带已有条目与目标分组
               POST /api/reorder/groups | /api/reorder/links    （鉴权）
     设置      GET  /api/settings（公开：外观相关）  PUT /api/settings（鉴权）
     导入导出  POST /api/import/preview | /api/import            （鉴权；需 backupToken）
@@ -223,6 +228,7 @@
     备份      POST /api/backup/run | /api/backup/restore        （鉴权；restore 需管理密码）
               GET  /api/backup/list | POST /api/backup/test     （WebDAV 配置与连通测试）
               PUT  /api/backup/config                            （WebDAV 地址/账号/密码 + 是否启用）
+    重复管理  GET /api/dedupe/ignores | POST /api/dedupe/ignores | DELETE /api/dedupe/ignores  （鉴权；跨组重复的「忽略提示」记录，可撤销）
     扩展清单  GET/POST /api/extensions   DELETE /api/extensions/:id
     插件联动  POST /api/sync/heartbeat | GET /api/sync/status
               GET  /api/sync/pending | POST /api/sync/ack

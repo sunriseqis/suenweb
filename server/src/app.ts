@@ -13,6 +13,7 @@ import { AppError, unauthorized } from './domain/errors.ts';
 import { extractToken } from './http/plugins/auth.ts';
 import { authRoutes } from './http/routes/auth.ts';
 import { dataRoutes } from './http/routes/data.ts';
+import { dedupeRoutes } from './http/routes/dedupe.ts';
 import { groupRoutes } from './http/routes/groups.ts';
 import { healthRoutes } from './http/routes/health.ts';
 import { linkRoutes } from './http/routes/links.ts';
@@ -127,6 +128,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(healthRoutes);
   await app.register(authRoutes);
   await app.register(dataRoutes);
+  await app.register(dedupeRoutes);
   await app.register(groupRoutes);
   await app.register(linkRoutes);
   await app.register(settingRoutes);

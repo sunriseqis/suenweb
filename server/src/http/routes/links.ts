@@ -8,6 +8,7 @@ const linkProperties = {
   description: { type: ['string', 'null'], maxLength: 2000 },
   icon: { type: ['string', 'null'], maxLength: 500 },
   icon_type: { type: 'string', enum: ['auto', 'emoji', 'url', 'none'] },
+  on_duplicate: { type: 'string', enum: ['prompt', 'allow', 'ignore', 'skip'] },
 };
 
 const createBody = {

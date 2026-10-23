@@ -55,6 +55,26 @@ test('初始化 → 登录 → 状态 → 登出', async () => {
   }
 });
 
+test('密码最短 6 位：5 位拒绝、6 位通过；改密同一条线', async () => {
+  const h = await createHarness();
+  try {
+    const weak = await h.app.inject({ method: 'POST', url: '/api/auth/setup', payload: { password: 'abc12' } });
+    assert.equal(weak.statusCode, 400);
+    assert.equal(parse(weak).error.code, 'WEAK_PASSWORD');
+    const okSetup = await h.app.inject({ method: 'POST', url: '/api/auth/setup', payload: { password: 'abc123' } });
+    assert.equal(okSetup.statusCode, 200);
+    const login = await h.app.inject({ method: 'POST', url: '/api/auth/login', payload: { password: 'abc123' } });
+    assert.equal(login.statusCode, 200);
+    const token = parse(login).data.token as string;
+    const change = await h.app.inject({
+      method: 'POST', url: '/api/auth/change-password', headers: bearer(token),
+      payload: { currentPassword: 'abc123', newPassword: '12345' },
+    });
+    assert.equal(change.statusCode, 400);
+  } finally {
+    await h.close();
+  }
+});
 test('分组：重名自动合并、空名拒绝', async () => {
   const h = await createHarness();
   try {
@@ -74,41 +94,61 @@ test('分组：重名自动合并、空名拒绝', async () => {
   }
 });
 
-test('链接：同组按 url_normalized 去重，跨组允许重复', async () => {
+test('链接去重：同组静默去重，跨组默认弹窗(409) / allow 放行 / skip 不加', async () => {
   const h = await createHarness();
   try {
     const token = await setupAdmin(h.app);
     const g1 = parse(await h.app.inject({ method: 'POST', url: '/api/groups', headers: bearer(token), payload: { name: 'A' } })).data.group;
     const g2 = parse(await h.app.inject({ method: 'POST', url: '/api/groups', headers: bearer(token), payload: { name: 'B' } })).data.group;
+
     const l1 = await h.app.inject({
       method: 'POST', url: '/api/links', headers: bearer(token),
       payload: { group_id: g1.id, title: '示例', url: 'https://Example.com/path/?utm_source=x' },
     });
     assert.equal(l1.statusCode, 201);
     assert.equal(parse(l1).data.link.url_normalized, 'https://example.com/path');
-    const l2 = await h.app.inject({
+
+    const sameGroup = await h.app.inject({
       method: 'POST', url: '/api/links', headers: bearer(token),
       payload: { group_id: g1.id, url: 'example.com/path' },
     });
-    assert.equal(l2.statusCode, 200);
-    assert.equal(parse(l2).data.merged, true);
-    assert.equal(parse(l2).data.link.id, parse(l1).data.link.id);
-    const l3 = await h.app.inject({
+    assert.equal(sameGroup.statusCode, 200);
+    assert.equal(parse(sameGroup).data.merged, true);
+    assert.equal(parse(sameGroup).data.link.id, parse(l1).data.link.id);
+
+    const cross = await h.app.inject({
       method: 'POST', url: '/api/links', headers: bearer(token),
       payload: { group_id: g2.id, url: 'https://example.com/path' },
     });
-    assert.equal(l3.statusCode, 201);
-    const bad = await h.app.inject({
+    assert.equal(cross.statusCode, 409);
+    assert.equal(parse(cross).error.code, 'CROSS_GROUP_DUPLICATE');
+    assert.equal(parse(cross).error.details.existing.group_id, g1.id);
+    assert.deepEqual(parse(cross).error.details.options, ['allow', 'ignore', 'skip']);
+
+    const allowed = await h.app.inject({
       method: 'POST', url: '/api/links', headers: bearer(token),
-      payload: { group_id: g1.id, url: 'ftp://example.com/x' },
+      payload: { group_id: g2.id, url: 'https://example.com/path', on_duplicate: 'allow' },
     });
-    assert.equal(bad.statusCode, 400);
+    assert.equal(allowed.statusCode, 201);
+    assert.equal(parse(allowed).data.cross_group_duplicate, true);
+
+    const g3 = parse(await h.app.inject({ method: 'POST', url: '/api/groups', headers: bearer(token), payload: { name: 'C' } })).data.group;
+    const skipped = await h.app.inject({
+      method: 'POST', url: '/api/links', headers: bearer(token),
+      payload: { group_id: g3.id, url: 'https://example.com/path', on_duplicate: 'skip' },
+    });
+    assert.equal(skipped.statusCode, 200);
+    assert.equal(parse(skipped).data.skipped, true);
+    assert.equal(parse(skipped).data.link.id, parse(l1).data.link.id);
+
+    const data = parse(await h.app.inject({ method: 'GET', url: '/api/data' })).data;
+    assert.equal(data.meta.groupCount, 3);
+    assert.equal(data.meta.linkCount, 2);
   } finally {
     await h.close();
   }
 });
-
-test('排序与跨组移动（含目标组重复合并）', async () => {
+test('排序与跨组移动（目标组重复则静默合并）', async () => {
   const h = await createHarness();
   try {
     const token = await setupAdmin(h.app);
@@ -123,6 +163,7 @@ test('排序与跨组移动（含目标组重复合并）', async () => {
     assert.equal(reordered.statusCode, 200);
     const order = parse(reordered).data.links.map((l: { id: number }) => l.id);
     assert.deepEqual(order, [b.id, a.id]);
+
     const moved = await h.app.inject({
       method: 'POST', url: '/api/links/' + a.id + '/move', headers: bearer(token),
       payload: { group_id: g2.id },
@@ -130,12 +171,16 @@ test('排序与跨组移动（含目标组重复合并）', async () => {
     assert.equal(moved.statusCode, 200);
     assert.equal(parse(moved).data.merged, false);
     assert.equal(parse(moved).data.link.group_id, g2.id);
-    parse(await h.app.inject({ method: 'POST', url: '/api/links', headers: bearer(token), payload: { group_id: g2.id, url: 'https://a.example.com' } }));
+
+    await h.app.inject({
+      method: 'POST', url: '/api/links', headers: bearer(token),
+      payload: { group_id: g2.id, url: 'https://b.example.com', on_duplicate: 'allow' },
+    });
     const mergeOnMove = await h.app.inject({
       method: 'POST', url: '/api/links/' + b.id + '/move', headers: bearer(token),
       payload: { group_id: g2.id },
     });
-    assert.equal(parse(mergeOnMove).data.merged, false);
+    assert.equal(parse(mergeOnMove).data.merged, true);
   } finally {
     await h.close();
   }
@@ -180,7 +225,7 @@ test('删除分组级联删除链接', async () => {
   }
 });
 
-test('改密码：旧会话失效，新密码可登录', async () => {
+test('改密码：其他会话失效，新密码可登录', async () => {
   const h = await createHarness();
   try {
     const keep = await setupAdmin(h.app);

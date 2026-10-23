@@ -7,7 +7,7 @@ import { hashPassword, randomToken, sha256Hex, verifyPassword } from '../infra/c
 export const ADMIN_HASH_KEY = 'auth.password_hash';
 export const ADMIN_INIT_KEY = 'auth.initialized_at';
 
-const MIN_PASSWORD_LENGTH = 8;
+const MIN_PASSWORD_LENGTH = 6;
 const MAX_PASSWORD_LENGTH = 128;
 
 export type IssuedSession = { token: string; expiresAt: string; row: SessionRow };

@@ -25,25 +25,26 @@
 - [x] 分组 CRUD（同名自动合并，返回 merged 标记）+ 排序 + 改名合并
 - [x] 链接 CRUD（同组 url_normalized 去重合并）+ 排序 + 跨组移动（目标组重复则合并）
 - [x] 公开读接口 GET /api/data（分组内嵌链接，一次往返）+ GET /api/settings 公开子集
-- [x] 冒烟测试 13 条（node:test + fastify inject）全绿；tsc --noEmit 零错误
+- [x] 冒烟测试 15 条（node:test + fastify inject）全绿；tsc --noEmit 零错误
 - [x] 压测脚本 npm run bench（延迟分位 + event loop 延迟）
 
 ## M1 验收记录（2026-10-23）
 
 | 项 | 结果 |
 |---|---|
-| npm test | 13 pass / 0 fail（含合并、去重、排序、跨组移动、改密踢会话、设置白名单） |
+| npm test | 15 pass / 0 fail（含同名合并、同组静默去重、跨组 409 弹窗与 allow/skip/ignore、忽略撤销、排序、跨组移动、改密踢会话、设置白名单、密码 6 位下限） |
 | npm run typecheck | 0 error（strict + erasableSyntaxOnly） |
 | npm run dev / npm start | 启动后 /api/health、/api/data、/api/auth/status、404 均正确 |
+| 迁移升级路径 | 0001 已应用的旧库再次 db:migrate，正确补上 0002（dedupe_ignores + 索引） |
 | npm run bench（300 请求 / 并发 20 / 200 条种子链接） | 232 qps，p50 70.6ms，p95 177.9ms，p99 322.6ms，event loop p99 31.3ms |
 
 已知取舍：单进程下 p99 偏高（222 条读 + 每请求一次 session 查询）；M2/M6 再做查询合并与索引优化，暂不影响功能验收。
 
-## 待确认（需用户裁决或外部核实）
+## 待确认（需用户裁决或外部核实；D-1 已关闭）
 
 | 编号 | 问题 | 现状 |
 |---|---|---|
-| D-1 | 链接去重范围：同组唯一（当前实现）还是全局唯一 | 暂定同组，可改 |
+| D-1 | 链接去重范围 | **已裁决（v1.6）**：同组静默去重、跨组 409 弹窗放行、忽略后不再提示 |
 | D-2 | 飞牛原生包 manifest 字段与数据目录规范 | 需按官方文档核对，不许编造 |
 | D-3 | 飞牛包内 Node 运行时交付方式（内置运行时 vs SEA 单文件） | M7 前定 |
 
