@@ -10,6 +10,7 @@ import type { SessionRow } from './data/repositories/sessions.ts';
 import { SettingsRepo } from './data/repositories/settings.ts';
 import { AuthService } from './domain/authService.ts';
 import { AppError, unauthorized } from './domain/errors.ts';
+import { AppEvents } from './infra/events.ts';
 import { IconCache } from './infra/iconCache.ts';
 import { extractToken } from './http/plugins/auth.ts';
 import { authRoutes } from './http/routes/auth.ts';
@@ -20,6 +21,7 @@ import { healthRoutes } from './http/routes/health.ts';
 import { iconRoutes } from './http/routes/icon.ts';
 import { linkRoutes } from './http/routes/links.ts';
 import { settingRoutes } from './http/routes/settings.ts';
+import { syncRoutes } from './http/routes/sync.ts';
 import type { Logger } from './infra/logger.ts';
 
 export type Repos = {
@@ -47,6 +49,7 @@ declare module 'fastify' {
     auth: AuthService;
     requireAuth: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
     icons: IconCache;
+    events: AppEvents;
   }
 }
 
@@ -68,6 +71,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.decorate('db', deps.db);
   app.decorate('repos', repos);
   app.decorate('icons', new IconCache(deps.config.dataDir));
+  app.decorate('events', new AppEvents());
 
   const auth = new AuthService({
     db: deps.db,
@@ -85,6 +89,22 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   await app.register(cookie);
+
+  // 写操作成功后广播事件，SSE 推给网页与插件（不需要每个路由各自 emit）
+  app.addHook('onResponse', async (req, reply) => {
+    const method = req.method;
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+    if (reply.statusCode >= 400) return;
+    const url = req.url;
+    if (url.startsWith('/api/links') || url.startsWith('/api/reorder/links')) {
+      app.events.emit('links-changed', { url, method });
+      return;
+    }
+    if (url.startsWith('/api/groups') || url.startsWith('/api/reorder/groups')) {
+      app.events.emit('groups-changed', { url, method });
+      app.events.emit('links-changed', { url, method });
+    }
+  });
 
   app.addHook('onRequest', async (req) => {
     const token = extractToken(req);
@@ -137,6 +157,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(linkRoutes);
   await app.register(settingRoutes);
   await app.register(iconRoutes);
+  await app.register(syncRoutes);
 
   return app;
 }

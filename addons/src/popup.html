@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="ui.css" />
+    <title>收藏到 SuenWeb</title>
+  </head>
+  <body>
+    <header>
+      <span class="mark"></span>
+      <strong>SuenWeb</strong>
+      <button id="openOptions" class="ghost" title="设置">设置</button>
+    </header>
+    <main>
+      <p id="pageTitle" class="title">读取当前页面…</p>
+      <p id="pageUrl" class="url"></p>
+      <label for="group">收藏到</label>
+      <select id="group"><option value="">未配置</option></select>
+      <div class="row">
+        <button id="save" class="primary">收藏</button>
+        <button id="sync" class="secondary">同步本地</button>
+      </div>
+      <p id="status" class="status" role="status"></p>
+    </main>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

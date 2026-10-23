@@ -135,7 +135,7 @@ export class LinksRepo {
     }
 
     const res = await this.db.run(
-      "INSERT INTO links (group_id, title, url, url_normalized, description, icon, icon_type, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM links WHERE group_id = ?))",
+      "INSERT INTO links (group_id, title, url, url_normalized, description, icon, icon_type, sort_order, sync_state) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM links WHERE group_id = ?), 'pending')",
       [
         groupId,
         displayTitle(input.title, url),
@@ -204,6 +204,7 @@ export class LinksRepo {
       params.push(patch.icon_type);
     }
     if (sets.length === 0) return { link: current, merged: false };
+    if (patch.url !== undefined || patch.title !== undefined) sets.push('sync_state = ' + 'pending');
     sets.push('updated_at = ' + NOW_SQL);
     params.push(id);
     await this.db.run('UPDATE links SET ' + sets.join(', ') + ' WHERE id = ?', params);

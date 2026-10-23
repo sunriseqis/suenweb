@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="ui.css" />
+    <title>SuenWeb 扩展设置</title>
+    <style>
+      body { width: auto; max-width: 560px; margin: 32px auto; padding: 0 16px; }
+      main { padding: 16px 0; gap: 12px; }
+      h1 { font-size: 18px; font-weight: 300; margin: 0 0 4px; }
+      .hint { color: var(--muted); font-size: 11px; margin: 0; }
+      .field { display: grid; gap: 4px; }
+      .field span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="mark"></span>
+      <strong>SuenWeb</strong>
+    </header>
+    <main>
+      <h1>连接你的书签服务</h1>
+      <p class="hint">填服务端地址与管理密码；密码同时是备份口令，扩展只保存登录后的 token，不保存密码。</p>
+      <label class="field">
+        <span>服务端地址</span>
+        <input id="baseUrl" placeholder="http://192.168.89.10:8080" />
+      </label>
+      <label class="field">
+        <span>管理密码</span>
+        <input id="password" type="password" placeholder="至少 6 位" />
+      </label>
+      <div class="row">
+        <button id="login" class="primary">登录并保存</button>
+        <button id="sync" class="secondary">立即同步</button>
+      </div>
+      <p id="status" class="status" role="status"></p>
+      <p class="hint">收藏会写进浏览器书签的「其他书签 / SuenWeb / 分组名」下；服务端新增的书签每 5 分钟自动回写一次。</p>
+    </main>
+    <script src="options.js" type="module"></script>
+  </body>
+</html>

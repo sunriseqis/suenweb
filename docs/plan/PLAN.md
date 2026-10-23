@@ -138,6 +138,16 @@
 | 图标缓存 | iconCache 升级为多源回退 + 负缓存：https favicon.ico → https apple-touch-icon.png → http favicon.ico → icons.duckduckgo.com；拒绝 text/html/text/plain；命中 30 天、负缓存 1 天；单源 3s 超时、200KB 上限 |
 | 磁贴尺寸 | 方 88→116px、行 36→40px、宽 190→232px（高 104px）；标题 11→12/13/14px，域名 9→10/11px，行高与描边同步 |
 | 验收 | 服务端 17 tests 全过；web check:dom 20 项全过（新增 layoutMode）；构建通过 |
+## M3 插件快速收藏（进行中）
+
+- [x] 后端同步底座：`POST /api/sync/heartbeat`、`GET /api/sync/status`、`GET /api/sync/pending`、`POST /api/sync/ack`、`GET /api/events/stream`（SSE + 25s 心跳）
+- [x] 事件总线：写操作成功后由 `onResponse` 钩子广播 `links-changed`/`groups-changed`，无需逐路由 emit
+- [x] `links` 新链接与改 URL/标题默认回到 `pending`（保证插件能回写）
+- [x] 扩展骨架 `addons/`：MV3 事件页 + 弹窗 + 设置页 + 右键菜单 + 5 分钟 alarm 同步 + 打包脚本
+- [ ] 网页端接 SSE 自动刷新
+- [ ] 扩展图标补 PNG（Chrome 兼容）、AMO 签名流程
+- [ ] 首启引导（未配置时弹设置页）
+
 ## 待确认（需用户裁决或外部核实；D-1 已关闭）
 
 | 编号 | 问题 | 现状 |

@@ -311,3 +311,27 @@ test('置顶组：layout_mode 可切 single / multi 并回显', async () => {
     await h.close();
   }
 });
+
+test('插件同步：新链接 pending → 待同步列表 → ack 后 synced；心跳记录设备', async () => {
+  const h = await createHarness();
+  try {
+    const token = await setupAdmin(h.app);
+    const group = parse(await h.app.inject({ method: 'POST', url: '/api/groups', headers: bearer(token), payload: { name: '同步组' } })).data.group;
+    const created = parse(await h.app.inject({ method: 'POST', url: '/api/links', headers: bearer(token), payload: { group_id: group.id, url: 'https://sync.example.com' } })).data.link;
+    assert.equal(created.sync_state, 'pending');
+    const pending = parse(await h.app.inject({ method: 'GET', url: '/api/sync/pending', headers: bearer(token) })).data.links;
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].id, created.id);
+    const ack = await h.app.inject({ method: 'POST', url: '/api/sync/ack', headers: bearer(token), payload: { ids: [created.id] } });
+    assert.equal(ack.statusCode, 200);
+    const status = parse(await h.app.inject({ method: 'GET', url: '/api/sync/status', headers: bearer(token) })).data;
+    assert.equal(status.pending, 0);
+    assert.equal(status.synced, 1);
+    const beat = await h.app.inject({ method: 'POST', url: '/api/sync/heartbeat', headers: bearer(token), payload: { device: 'firefox-extension' } });
+    assert.equal(parse(beat).data.device, 'firefox-extension');
+    const guest = await h.app.inject({ method: 'GET', url: '/api/sync/pending' });
+    assert.equal(guest.statusCode, 401);
+  } finally {
+    await h.close();
+  }
+});

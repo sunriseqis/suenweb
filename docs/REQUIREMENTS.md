@@ -36,6 +36,7 @@
 | 25 | 顶栏无标题 + 默认引擎在设置 | 顶栏不显示页面标题，只保留居中搜索框与右侧操作；**默认搜索引擎在「设置」里固定**（7 选 1，写到本机 `sw.engine`），搜索框内的下拉仍可临时切换并记住 |
 | 26 | 站点图标抓取 | **默认关闭**：不开时磁贴只显示文字、服务端不出网；在设置页开启后按域名取 favicon（GET /api/icon?domain=），缓存到 data/icons/（30 天、200KB 上限、6s 超时）。**访客只读缓存**，抓取只由已登录用户的请求触发，避免被当作 SSRF 跳板；取不到就静默回退纯文字磁贴 |
 | 27 | 置顶分栏 / 图标缓存 / 磁贴尺寸 | **置顶组自动分栏**（参照旧版）：`layout_mode=single` 独占一行，其余按 3 列打包进网格（4 个时拆成 2+2），每组可在编辑模式下切换单列/并排。**图标缓存参照旧版**：多源回退（https favicon.ico → apple-touch-icon → http favicon.ico → DuckDuckGo 图标代理）、拒绝 text/html、命中缓存 30 天、全部失败写 1 天负缓存。**磁贴放大**：方 116px、行 40px、宽 232px×104px，标题 12-14px、域名 10-11px |
+| 28 | 插件同步契约 | **新链接一律 `sync_state=pending`**；插件 `GET /api/sync/pending` 取件 → **先写进浏览器书签，成功后才 `POST /api/sync/ack { ids, ok:true }`**，失败必须回报 `ok:false`（绝不提前确认，杜绝旧版「ack 后丢书签」）。心跳 `POST /api/sync/heartbeat` 记录设备与时间；`GET /api/sync/status` 返回 pending/synced/failed；变化通过 `GET /api/events/stream`（SSE）推给网页与插件 |
 
 连带影响：OPS 域整体改写为本地部署口径（不再有 Workers/D1/R2 绑定与 Workers AI）；TOOL 域移除 AI 项；IMP/BAK 加解密口径为「管理密码派生」（见 IMP-06、BAK-07）。
 
