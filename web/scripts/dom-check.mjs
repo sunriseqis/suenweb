@@ -42,12 +42,14 @@ expect('胶囊自身可接收指针事件', Boolean(bar && bar.className.include
 
 const link = { id: 1, group_id: 1, title: 'T', url: 'https://a.example.com', url_normalized: 'https://a.example.com', description: null, icon: null, icon_type: 'auto', sort_order: 10, sync_state: 'synced', created_at: '', updated_at: '' };
 const group = { id: 1, name: '置顶组', name_key: 'p', icon: null, type: 'fixed', display_mode: 'grid', layout_mode: 'auto', sort_order: 10, created_at: '', updated_at: '', links: [link] };
+const tabGroup = { ...group, id: 2, name: '普通组', name_key: 't', type: 'tab', display_mode: 'icon', links: [{ ...link, id: 2, group_id: 2 }] };
 const pageHits = [];
 const page = renderBookmarks({
-  groups: [group],
+  groups: [group, tabGroup],
   authed: true,
   editing: true,
-  view: 'grid',
+  activeTabId: null,
+  onTab: (id) => pageHits.push('tab:' + id),
   onAddLink: () => pageHits.push('addLink'),
   onEditLink: () => pageHits.push('editLink'),
   onDeleteLink: () => pageHits.push('deleteLink'),
@@ -73,6 +75,10 @@ expect('URL 模板正确编码', searchUrl('a b', 'duckduckgo') === 'https://duc
 expect('含隐私型引擎', ['brave', 'startpage', 'mojeek', 'qwant'].every((id) => ENGINES.some((e) => e.id === id)));
 const engineSelect = page.querySelector('select[aria-label="搜索引擎"]');
 expect('页面渲染出引擎选择器', Boolean(engineSelect), engineSelect ? String(engineSelect.options.length) : 'missing');
+const tabButton = page.querySelector('[role=tab]');
+tabButton.click();
+expect('tab 切换可点击', pageHits.includes('tab:2'), pageHits.join(','));
+
 console.log('---');
 console.log('failed', failures.length);
 process.exit(failures.length === 0 ? 0 : 1);

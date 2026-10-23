@@ -11,13 +11,9 @@ export type SettingsProps = {
   authed: boolean;
   initialized: boolean;
   themeMode: 'system' | 'light' | 'dark';
-  calm: boolean;
-  view: 'grid' | 'list';
   ignores: IgnoreRow[];
   version: string;
   onTheme: (mode: 'system' | 'light' | 'dark') => void;
-  onCalm: (value: boolean) => void;
-  onView: (view: 'grid' | 'list') => void;
   onChangePassword: (current: string, next: string) => void;
   onUndoIgnore: (urlNormalized: string, groupId: number) => void;
   onLogin: () => void;
@@ -34,19 +30,6 @@ function section(index: number, title: string, subtitle: string, ...children: HT
     el('div', { class: 'mt-5 space-y-4' }, ...children),
   );
   return wrap;
-}
-
-function toggleRow(label: string, active: boolean, onClick: () => void, activeLabel: string, idleLabel: string): HTMLElement {
-  return el('div', { class: 'flex flex-wrap items-center justify-between gap-3' },
-    el('span', { class: 'text-sm font-bold text-fg', text: label }),
-    button({
-      label: active ? activeLabel : idleLabel,
-      variant: active ? 'primary' : 'secondary',
-      size: 'sm',
-      ariaLabel: label + '：' + (active ? '已开启' : '已关闭'),
-      onClick,
-    }),
-  );
 }
 
 export function renderSettings(props: SettingsProps): HTMLElement {
@@ -90,20 +73,12 @@ export function renderSettings(props: SettingsProps): HTMLElement {
   }
 
   root.appendChild(
-    section(0, '外观', '深浅两套都保留撞色边框与多层阴影，浅色只是把五色加深，不做极简。',
+    section(0, '外观', '深色为炭黑底 + Metro 蓝，浅色为浅灰底 + 同色系深蓝；版式与磁贴尺寸完全一致。',
       el('div', { class: 'space-y-2' },
         el('span', { class: 'font-display text-[11px] uppercase tracking-[0.25em] text-fg/60', text: '主题' }),
         themeButtons,
       ),
-      toggleRow('降噪模式（停掉持续动画）', props.calm, () => props.onCalm(!props.calm), '已开启', '已关闭'),
-      el('div', { class: 'space-y-2' },
-        el('span', { class: 'font-display text-[11px] uppercase tracking-[0.25em] text-fg/60', text: '默认视图' }),
-        el('div', { class: 'flex gap-2' },
-          button({ label: '网格', iconName: 'grid', variant: props.view === 'grid' ? 'primary' : 'outline', size: 'sm', onClick: () => props.onView('grid') }),
-          button({ label: '列表', iconName: 'list', variant: props.view === 'list' ? 'primary' : 'outline', size: 'sm', onClick: () => props.onView('list') }),
-        ),
-      ),
-      el('p', { class: 'text-xs text-fg/50', text: '主题与动效偏好保存在本机浏览器；书籍数据与备份口令才在服务端。' }),
+      el('p', { class: 'text-xs text-fg/50', text: '主题偏好保存在本机浏览器；书签数据与备份口令才在服务端。' }),
     ),
   );
 

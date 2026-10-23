@@ -12,7 +12,8 @@ export type BookmarksProps = {
   groups: GroupWithLinks[];
   authed: boolean;
   editing: boolean;
-  view: 'grid' | 'list';
+  activeTabId: number | null;
+  onTab: (id: number) => void;
   onAddLink: (groupId?: number) => void;
   onEditLink: (link: Link) => void;
   onDeleteLink: (link: Link) => void;
@@ -40,34 +41,31 @@ function modeOf(group: GroupWithLinks): DisplayMode {
   return group.type === 'fixed' ? 'grid' : 'icon';
 }
 
-function sectionId(group: GroupWithLinks): string {
-  return 'group-' + group.id;
-}
-
 export function renderBookmarks(props: BookmarksProps): HTMLElement {
   const editable = props.authed && props.editing;
-  const root = el('div', { class: 'relative z-10 mx-auto w-full max-w-[1500px] px-4 pb-24 pt-3 sm:px-6' });
+  const root = el('div', { class: 'mx-auto w-full max-w-[1500px] px-4 pb-16 pt-3 sm:px-6' });
 
   const pinned = props.groups.filter((group) => group.type === 'fixed');
   const normal = props.groups.filter((group) => group.type !== 'fixed');
-  const totalLinks = props.groups.reduce((sum, group) => sum + group.links.length, 0);
 
-  const bar = el('div', { class: 'mb-3 flex flex-wrap items-end gap-2 border-b border-[var(--c-line)] pb-3' });
-  append(bar, [
-    el('div', { class: 'mr-2' },
-      el('h1', { class: 'text-[22px] font-light leading-none text-fg', text: '书签' }),
-      el('p', { class: 'mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--c-fg-soft)]', text: props.groups.length + ' groups / ' + totalLinks + ' links' }),
-    ),
+  const bar = el('div', {
+    class: 'mb-3 grid items-center gap-3 border-b border-[var(--c-line)] pb-3 sm:grid-cols-[minmax(4rem,auto)_1fr_minmax(4rem,auto)]',
+  });
+  bar.appendChild(el('h1', { class: 'text-[20px] font-light leading-none text-fg', text: '书签' }));
+
+  const search = webSearchBar('搜索网页，回车开新标签');
+  bar.appendChild(el('div', { class: 'mx-auto w-full max-w-2xl' }, search.element));
+
+  const actions = el('div', { class: 'flex items-center justify-end gap-1.5' });
+  append(actions, [
     editable
-      ? button({ label: '收藏一条', iconName: 'plus', variant: 'primary', size: 'xs', onClick: () => props.onAddLink() })
+      ? button({ label: '收藏', iconName: 'plus', variant: 'primary', size: 'xs', onClick: () => props.onAddLink(props.activeTabId ?? undefined) })
       : null,
     editable
       ? button({ label: '新建分组', iconName: 'folder', variant: 'secondary', size: 'xs', onClick: props.onAddGroup })
       : null,
   ]);
-
-  const search = webSearchBar('搜索网页（回车开新标签）');
-  bar.appendChild(el('div', { class: 'ml-auto w-full max-w-md' }, search.element));
+  bar.appendChild(actions);
   root.appendChild(bar);
 
   if (editable) {
@@ -86,83 +84,39 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
   }
 
   if (normal.length > 0) {
+    const activeId = normal.some((group) => group.id === props.activeTabId) ? (props.activeTabId as number) : normal[0].id;
+    const active = normal.find((group) => group.id === activeId) ?? normal[0];
+
     const strip = el('div', {
-      class: 'sticky top-[41px] z-20 -mx-4 mb-3 flex items-center gap-1 overflow-x-auto border-y border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-1.5 sm:-mx-6 sm:px-6',
+      class: 'sticky top-0 z-20 -mx-4 mb-3 flex items-center gap-1 overflow-x-auto border-b border-[var(--c-line)] bg-[var(--c-bg)] px-4 py-1.5 sm:-mx-6 sm:px-6',
       role: 'tablist',
       'aria-label': '普通分组',
     });
-    const buttons = new Map<number, HTMLElement>();
-    const setActive = (id: number): void => {
-      buttons.forEach((node, key) => {
-        const on = key === id;
-        node.setAttribute('aria-selected', on ? 'true' : 'false');
-        node.className = cn(
-          'pressable shrink-0 whitespace-nowrap border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]',
-          on
-            ? 'border-accent bg-accent text-[color:var(--c-accent-ink)]'
-            : 'border-transparent text-[var(--c-fg-soft)] hover:border-[var(--c-line)] hover:bg-[var(--c-surface-2)] hover:text-fg',
-        );
-      });
-    };
-
     for (const group of normal) {
+      const on = group.id === activeId;
       const node = el('button', {
         type: 'button',
         class: cn(
-          'pressable shrink-0 whitespace-nowrap border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]',
-          'border-transparent text-[var(--c-fg-soft)] hover:border-[var(--c-line)] hover:bg-[var(--c-surface-2)] hover:text-fg',
+          'pressable flex shrink-0 items-center gap-1.5 whitespace-nowrap border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]',
+          on
+            ? 'border-accent bg-accent text-[color:var(--c-accent-ink)]'
+            : 'border-transparent text-[var(--c-fg-soft)] hover:border-[var(--c-line)] hover:bg-[var(--c-surface-2)] hover:text-fg',
         ),
         role: 'tab',
-        'aria-selected': 'false',
-        onClick: () => {
-          const target = document.getElementById(sectionId(group));
-          if (target) {
-            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-          }
-          setActive(group.id);
-        },
+        'aria-selected': on ? 'true' : 'false',
+        onClick: () => props.onTab(group.id),
       });
       node.append(
         el('span', { text: group.name }),
-        el('span', { class: 'ml-1.5 text-[10px] opacity-60', text: String(group.links.length) }),
+        el('span', { class: cn('text-[10px]', on ? 'text-[color:var(--c-accent-ink)]/70' : 'text-[var(--c-fg-soft)]'), text: String(group.links.length) }),
       );
-      buttons.set(group.id, node);
       strip.appendChild(node);
     }
-
-    const sections = el('div', { class: 'space-y-4' });
-    for (const group of normal) {
-      const section = renderSection(group, props, false);
-      section.id = sectionId(group);
-      section.classList.add('scroll-mt-[84px]');
-      sections.appendChild(section);
-    }
-
-    if (typeof IntersectionObserver !== 'undefined') {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          const visible = entries.filter((entry) => entry.isIntersecting);
-          if (visible.length === 0) return;
-          const top = visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-          const id = Number(top.target.id.replace('group-', ''));
-          if (!Number.isNaN(id)) setActive(id);
-        },
-        { rootMargin: '-45% 0px -50% 0px', threshold: 0 },
-      );
-      queueMicrotask(() => {
-        for (const group of normal) {
-          const node = document.getElementById(sectionId(group));
-          if (node) observer.observe(node);
-        }
-        if (normal.length > 0) setActive(normal[0].id);
-      });
-    } else if (normal.length > 0) {
-      setActive(normal[0].id);
-    }
-
     root.appendChild(strip);
-    root.appendChild(sections);
+
+    const panel = el('div', { role: 'tabpanel', 'aria-label': active.name });
+    panel.appendChild(renderSection(active, props, false));
+    root.appendChild(panel);
   }
 
   if (props.groups.length === 0) {

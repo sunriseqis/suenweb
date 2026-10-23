@@ -4,8 +4,6 @@ import { createStore } from './lib/store.ts';
 import {
   applyTheme,
   getThemeMode,
-  isCalm,
-  setCalm,
   setThemeMode,
   setTier,
   watchSystemTheme,
@@ -28,6 +26,7 @@ type AppState = {
   initialized: boolean;
   authed: boolean;
   editing: boolean;
+  tabGroupId: number | null;
   groups: GroupWithLinks[];
   query: string;
   activeGroupId: number | null;
@@ -43,6 +42,7 @@ const store = createStore<AppState>({
   initialized: true,
   authed: false,
   editing: false,
+  tabGroupId: null,
   groups: [],
   query: '',
   activeGroupId: null,
@@ -210,11 +210,12 @@ function render(): void {
   const state = store.get();
   const app = document.getElementById('app');
   if (!app) return;
+  const isAuth = state.route === '#/login' || state.route === '#/setup';
   clear(app);
-  app.className = 'pattern-global relative min-h-screen';
+  app.className = isAuth ? 'relative min-h-screen bg-[var(--c-bg)]' : 'app-shell relative bg-[var(--c-bg)]';
   setTier(state.route === '#/' ? 'half' : 'full');
 
-  if (state.route === '#/login' || state.route === '#/setup') {
+  if (isAuth) {
     unmountCapsule();
     app.appendChild(
       renderAuth({
@@ -229,6 +230,8 @@ function render(): void {
   }
 
   app.appendChild(renderHeader());
+  const scroll = el('div', { class: 'app-scroll' });
+  app.appendChild(scroll);
 
   if (state.loadError) {
     const box = el('div', { class: 'relative z-10 mx-auto mt-10 w-full max-w-2xl px-4' });
@@ -240,30 +243,23 @@ function render(): void {
         el('div', { class: 'mt-5 flex justify-center' }, button({ label: '重试', iconName: 'refresh', onClick: () => void refresh() })),
       ),
     );
-    app.appendChild(box);
+    scroll.appendChild(box);
     mountCapsule(capsuleItems(state));
     return;
   }
 
   if (state.route === '#/settings') {
-    app.appendChild(
+    scroll.appendChild(
       renderSettings({
         authed: state.authed,
         initialized: state.initialized,
         themeMode: getThemeMode(),
-        calm: isCalm(),
-        view: state.view,
-        ignores: state.ignores,
+          ignores: state.ignores,
         version: VERSION,
         onTheme: (mode) => {
           setThemeMode(mode);
           render();
         },
-        onCalm: (value) => {
-          setCalm(value);
-          render();
-        },
-        onView: (view) => store.set({ view }),
         onChangePassword: async (currentPassword, next) => {
           if (next.length < 6) {
             toast('新密码至少 6 位', 'error');
@@ -288,12 +284,13 @@ function render(): void {
     return;
   }
 
-  app.appendChild(
+  scroll.appendChild(
     renderBookmarks({
       groups: state.groups,
       authed: state.authed,
       editing: state.editing,
-      view: state.view,
+      activeTabId: state.tabGroupId,
+      onTab: (id) => store.set({ tabGroupId: id }),
       onAddLink: (groupId) => openCreateLink(groupId),
       onEditLink: (link) => openEditLink(link),
       onDeleteLink: (link) => {

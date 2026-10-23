@@ -105,6 +105,16 @@
 | 普通组 | 下方共用一条 sticky 页内 tab 条：点击平滑滚动定位，滚动时用 IntersectionObserver 联动高亮；内容不隐藏 |
 | 搜索 | 搜索框改为网页搜索：引擎下拉（7 个）+ 回车开新标签；默认 Google，可切 Bing / DuckDuckGo / Brave / Startpage / Mojeek / Qwant；选择存 localStorage（sw.engine）。书签过滤改用浏览器原生查找 |
 | 验收 | tsc 0 error；check:dom 18 项全过（含引擎数量 / 默认引擎 / URL 编码 / 隐私引擎 / 选择器渲染） |
+## M2 迭代 6（有底布局 + 真 tab，2026-10-23）
+
+| 项 | 处理 |
+|---|---|
+| 页面高度 | 新增 `.app-shell`（100dvh，纵向 flex）与 `.app-scroll`（内部滚动）；顶栏固定，内容区滚动，页面有底 |
+| 顶栏 | 三段式：标题「书签」/ 居中 max-w-2xl 搜索框 / 右侧操作；删掉 counts 行 |
+| 普通组 | 改为真 tab：只渲染当前 tab 的分组，其余不占空间；tab 条 sticky 在内容区顶部 |
+| 置顶组 | 常驻顶部，不参与 tab，不受 tab 切换影响 |
+| 清理 | 移除已失效的「降噪模式」（现在没有持续动画）与「默认视图」（密度改为按组记忆）两个控件及其 props |
+| 验收 | tsc 0 error；check:dom 19 项全过（新增 tab 切换断言）；构建通过 |
 ## 待确认（需用户裁决或外部核实；D-1 已关闭）
 
 | 编号 | 问题 | 现状 |
