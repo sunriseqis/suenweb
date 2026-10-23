@@ -10,12 +10,14 @@ import type { SessionRow } from './data/repositories/sessions.ts';
 import { SettingsRepo } from './data/repositories/settings.ts';
 import { AuthService } from './domain/authService.ts';
 import { AppError, unauthorized } from './domain/errors.ts';
+import { IconCache } from './infra/iconCache.ts';
 import { extractToken } from './http/plugins/auth.ts';
 import { authRoutes } from './http/routes/auth.ts';
 import { dataRoutes } from './http/routes/data.ts';
 import { dedupeRoutes } from './http/routes/dedupe.ts';
 import { groupRoutes } from './http/routes/groups.ts';
 import { healthRoutes } from './http/routes/health.ts';
+import { iconRoutes } from './http/routes/icon.ts';
 import { linkRoutes } from './http/routes/links.ts';
 import { settingRoutes } from './http/routes/settings.ts';
 import type { Logger } from './infra/logger.ts';
@@ -44,6 +46,7 @@ declare module 'fastify' {
     repos: Repos;
     auth: AuthService;
     requireAuth: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    icons: IconCache;
   }
 }
 
@@ -64,6 +67,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.decorate('config', deps.config);
   app.decorate('db', deps.db);
   app.decorate('repos', repos);
+  app.decorate('icons', new IconCache(deps.config.dataDir));
 
   const auth = new AuthService({
     db: deps.db,
@@ -132,6 +136,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(groupRoutes);
   await app.register(linkRoutes);
   await app.register(settingRoutes);
+  await app.register(iconRoutes);
 
   return app;
 }

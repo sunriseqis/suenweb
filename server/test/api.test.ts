@@ -265,3 +265,32 @@ test('设置：公开读、需登录写、内部键不可写', async () => {
     await h.close();
   }
 });
+
+test('站点图标：默认关闭时返回 ICONS_DISABLED，非法域名 400', async () => {
+  const h = await createHarness();
+  try {
+    const off = await h.app.inject({ method: 'GET', url: '/api/icon?domain=example.com' });
+    assert.equal(off.statusCode, 404);
+    assert.equal(parse(off).error.code, 'ICONS_DISABLED');
+    const bad = await h.app.inject({ method: 'GET', url: '/api/icon?domain=' + encodeURIComponent('https://x/y') });
+    assert.equal(bad.statusCode, 400);
+  } finally {
+    await h.close();
+  }
+});
+
+test('站点图标：开启后游客只读缓存，不触发抓取', async () => {
+  const h = await createHarness();
+  try {
+    const token = await setupAdmin(h.app);
+    const put = await h.app.inject({
+      method: 'PUT', url: '/api/settings', headers: bearer(token), payload: { 'ui.fetch_icons': true },
+    });
+    assert.equal(put.statusCode, 200);
+    const guest = await h.app.inject({ method: 'GET', url: '/api/icon?domain=example.com' });
+    assert.equal(guest.statusCode, 404);
+    assert.equal(parse(guest).error.code, 'ICON_NOT_CACHED');
+  } finally {
+    await h.close();
+  }
+});

@@ -13,6 +13,7 @@ export const PUBLIC_SETTING_KEYS = [
   'ui.density',
   'ui.show_icons',
   'ui.default_view',
+  'ui.fetch_icons',
 ];
 
 /** 前端可写键：只允许外观与站点信息，内部键（auth.* / backup.*）一律走服务端 */

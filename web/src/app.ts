@@ -27,6 +27,7 @@ type AppState = {
   initialized: boolean;
   authed: boolean;
   editing: boolean;
+  fetchIcons: boolean;
   tabGroupId: number | null;
   groups: GroupWithLinks[];
   query: string;
@@ -43,6 +44,7 @@ const store = createStore<AppState>({
   initialized: true,
   authed: false,
   editing: false,
+  fetchIcons: false,
   tabGroupId: null,
   groups: [],
   query: '',
@@ -82,6 +84,7 @@ async function refresh(): Promise<void> {
     groups: data.data.groups,
     initialized: status.data.initialized,
     authed: status.data.authenticated,
+    fetchIcons: (data.data.settings as Record<string, unknown>)['ui.fetch_icons'] === true,
     editing: status.data.authenticated ? store.get().editing : false,
     loadError: null,
   });
@@ -256,6 +259,7 @@ function render(): void {
         initialized: state.initialized,
         themeMode: getThemeMode(),
         engineId: getEngineId(),
+        fetchIcons: state.fetchIcons,
           ignores: state.ignores,
         version: VERSION,
         onTheme: (mode) => {
@@ -265,6 +269,13 @@ function render(): void {
         onEngine: (id) => {
           setEngineId(id);
           render();
+        },
+        onFetchIcons: async (value) => {
+          if (!store.get().authed) {
+            toast('登录后才能修改图标抓取', 'error');
+            return;
+          }
+          await afterMutation(await api.updateSettings({ 'ui.fetch_icons': value }), value ? '已开启站点图标' : '已关闭站点图标');
         },
         onChangePassword: async (currentPassword, next) => {
           if (next.length < 6) {
@@ -295,6 +306,7 @@ function render(): void {
       groups: state.groups,
       authed: state.authed,
       editing: state.editing,
+      fetchIcons: state.fetchIcons,
       activeTabId: state.tabGroupId,
       onTab: (id) => store.set({ tabGroupId: id }),
       onAddLink: (groupId) => openCreateLink(groupId),

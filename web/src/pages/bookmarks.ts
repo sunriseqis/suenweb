@@ -12,6 +12,7 @@ export type BookmarksProps = {
   groups: GroupWithLinks[];
   authed: boolean;
   editing: boolean;
+  fetchIcons: boolean;
   activeTabId: number | null;
   onTab: (id: number) => void;
   onAddLink: (groupId?: number) => void;
@@ -33,6 +34,17 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+function faviconSpan(host: string, size: number, extra = ''): HTMLElement {
+  const node = el('span', {
+    class: 'pointer-events-none absolute bg-contain bg-center bg-no-repeat opacity-80 ' + extra,
+    'aria-hidden': 'true',
+  });
+  node.style.width = size + 'px';
+  node.style.height = size + 'px';
+  node.style.backgroundImage = 'url(/api/icon?domain=' + encodeURIComponent(host) + ')';
+  return node;
 }
 
 function modeOf(group: GroupWithLinks): DisplayMode {
@@ -239,7 +251,8 @@ function hoverTools(link: Link, props: BookmarksProps, withMove = false): HTMLEl
 }
 
 function renderWideTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'min-h-[92px] p-3' });
+  const wrap = tile({ class: 'relative min-h-[92px] p-3' });
+  if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 13, 'right-2 top-2'));
   wrap.append(
     el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex h-full flex-col justify-between', title: link.title + ' · ' + link.url },
       el('span', { class: 'line-clamp-2 text-[13px] font-semibold leading-snug text-fg', text: link.title }),
@@ -257,7 +270,8 @@ function renderWideTile(link: Link, props: BookmarksProps, siblings: Link[], edi
 }
 
 function renderRowTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'flex h-9 items-center gap-2 px-2.5' });
+  const wrap = tile({ class: 'relative flex h-9 items-center gap-2 px-2.5' });
+  if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 12, 'right-1.5 top-1.5'));
   wrap.appendChild(
     el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex min-w-0 flex-1 items-baseline gap-2', title: link.url },
       el('span', { class: 'truncate text-[12px] text-fg', text: link.title }),
@@ -272,7 +286,8 @@ function renderRowTile(link: Link, props: BookmarksProps, siblings: Link[], edit
 }
 
 function renderSquareTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'flex aspect-square items-center justify-center p-1.5', square: true });
+  const wrap = tile({ class: 'relative flex aspect-square items-center justify-center p-1.5', square: true });
+  if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 12, 'right-1 top-1'));
   wrap.appendChild(
     el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex h-full w-full items-center justify-center text-center', title: link.title + ' · ' + link.url },
       el('span', { class: 'line-clamp-3 text-[11px] font-medium leading-tight text-fg', text: link.title }),

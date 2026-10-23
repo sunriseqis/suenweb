@@ -48,6 +48,7 @@ const page = renderBookmarks({
   groups: [group, tabGroup],
   authed: true,
   editing: true,
+  fetchIcons: false,
   activeTabId: null,
   onTab: (id) => pageHits.push('tab:' + id),
   onAddLink: () => pageHits.push('addLink'),
