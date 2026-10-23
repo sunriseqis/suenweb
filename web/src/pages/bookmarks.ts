@@ -94,25 +94,18 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
     const area = el('div', { class: 'mb-4 border border-[var(--c-line)] bg-[var(--c-surface-2)]/40 p-3', 'aria-label': '置顶组' });
     const singles = pinned.filter((group) => group.layout_mode === 'single');
     const multis = pinned.filter((group) => group.layout_mode !== 'single');
-    const singleBox = el('div', { class: 'space-y-3' });
+    const singleBox = el('div', { class: 'grid items-start gap-3' });
     singles.forEach((group) => singleBox.appendChild(pinnedCard(group, props)));
     if (singles.length > 0) area.appendChild(singleBox);
-    let cursor = 0;
-    packMultiRows(multis.length).forEach((cols) => {
-      if (cursor > 0 || singles.length > 0) {
-        area.appendChild(el('div', { class: 'h-3', 'aria-hidden': 'true' }));
-      }
-      const slice = multis.slice(cursor, cursor + cols);
-      cursor += cols;
-      const row = el('div', {
-        class: cols === 3 ? 'grid gap-3 md:grid-cols-2 lg:grid-cols-3' : cols === 2 ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3',
+    if (multis.length > 0) {
+      const grid = el('div', {
+        class: 'grid items-start gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr))]',
       });
-      slice.forEach((group) => row.appendChild(pinnedCard(group, props)));
-      area.appendChild(row);
-    });
+      multis.forEach((group) => grid.appendChild(pinnedCard(group, props)));
+      area.appendChild(grid);
+    }
     root.appendChild(area);
   }
-
   if (normal.length > 0) {
     const activeId = normal.some((group) => group.id === props.activeTabId) ? (props.activeTabId as number) : normal[0].id;
     const active = normal.find((group) => group.id === activeId) ?? normal[0];
@@ -159,19 +152,6 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
   }
 
   return root;
-}
-
-function packMultiRows(count: number): number[] {
-  const rows: number[] = [];
-  let left = count;
-  while (left > 0) {
-    if (left === 1) { rows.push(1); break; }
-    if (left === 2) { rows.push(2); break; }
-    if (left === 4) { rows.push(2, 2); break; }
-    rows.push(3);
-    left -= 3;
-  }
-  return rows;
 }
 
 function pinnedCard(group: GroupWithLinks, props: BookmarksProps): HTMLElement {
@@ -223,7 +203,7 @@ function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boo
   }
 
   if (mode === 'grid') {
-    const grid = el('div', { class: 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(232px,1fr))]' });
+    const grid = el('div', { class: pinned ? 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]' : 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(232px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderWideTile(link, props, links, editable)));
     if (editable) grid.appendChild(addTile('min-h-[104px]', () => props.onAddLink(group.id)));
     section.appendChild(grid);
