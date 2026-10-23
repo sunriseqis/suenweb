@@ -15,6 +15,7 @@ import { renderSettings, type IgnoreRow } from './pages/settings.ts';
 import { button } from './ui/button.ts';
 import { mountCapsule, unmountCapsule, type CapsuleItem } from './ui/capsule.ts';
 import { brandLogo } from './ui/logo.ts';
+import { getEngineId, setEngineId } from './ui/websearch.ts';
 import { toast } from './ui/toast.ts';
 
 const VERSION = '2.0.0-m2';
@@ -254,10 +255,15 @@ function render(): void {
         authed: state.authed,
         initialized: state.initialized,
         themeMode: getThemeMode(),
+        engineId: getEngineId(),
           ignores: state.ignores,
         version: VERSION,
         onTheme: (mode) => {
           setThemeMode(mode);
+          render();
+        },
+        onEngine: (id) => {
+          setEngineId(id);
           render();
         },
         onChangePassword: async (currentPassword, next) => {

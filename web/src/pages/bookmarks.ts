@@ -49,12 +49,12 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
   const normal = props.groups.filter((group) => group.type !== 'fixed');
 
   const bar = el('div', {
-    class: 'mb-3 grid items-center gap-3 border-b border-[var(--c-line)] pb-3 sm:grid-cols-[minmax(4rem,auto)_1fr_minmax(4rem,auto)]',
+    class: 'mb-3 grid items-center gap-3 border-b border-[var(--c-line)] pb-3 sm:grid-cols-[1fr_minmax(0,42rem)_1fr]',
   });
-  bar.appendChild(el('h1', { class: 'text-[20px] font-light leading-none text-fg', text: '书签' }));
+  bar.appendChild(el('div', { class: 'hidden sm:block', 'aria-hidden': 'true' }));
 
   const search = webSearchBar('搜索网页，回车开新标签');
-  bar.appendChild(el('div', { class: 'mx-auto w-full max-w-2xl' }, search.element));
+  bar.appendChild(el('div', { class: 'mx-auto w-full' }, search.element));
 
   const actions = el('div', { class: 'flex items-center justify-end gap-1.5' });
   append(actions, [

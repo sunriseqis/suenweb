@@ -4,6 +4,7 @@ import { button } from '../ui/button.ts';
 import { field } from '../ui/field.ts';
 import { icon } from '../ui/icons.ts';
 import { card } from '../ui/surfaces.ts';
+import { ENGINES, type EngineId } from '../ui/websearch.ts';
 
 export type IgnoreRow = { url_normalized: string; group_id: number; group_name: string | null; created_at: string };
 
@@ -11,9 +12,11 @@ export type SettingsProps = {
   authed: boolean;
   initialized: boolean;
   themeMode: 'system' | 'light' | 'dark';
+  engineId: EngineId;
   ignores: IgnoreRow[];
   version: string;
   onTheme: (mode: 'system' | 'light' | 'dark') => void;
+  onEngine: (id: EngineId) => void;
   onChangePassword: (current: string, next: string) => void;
   onUndoIgnore: (urlNormalized: string, groupId: number) => void;
   onLogin: () => void;
@@ -82,11 +85,28 @@ export function renderSettings(props: SettingsProps): HTMLElement {
     ),
   );
 
+  const engineButtons = el('div', { class: 'flex flex-wrap gap-1.5' });
+  for (const engine of ENGINES) {
+    engineButtons.appendChild(
+      button({
+        label: engine.name,
+        variant: props.engineId === engine.id ? 'primary' : 'outline',
+        size: 'sm',
+        title: engine.note,
+        onClick: () => props.onEngine(engine.id),
+      }),
+    );
+  }
+  root.appendChild(
+    section(1, '默认搜索引擎', '页面顶部搜索框默认用它；在搜索框里临时切换也会记住。后四个引擎主打不做用户画像。',
+      engineButtons,
+    ),
+  );
   if (props.authed) {
     const current = field({ label: '当前密码', type: 'password', autocomplete: 'current-password', index: 2 });
     const next = field({ label: '新密码（最短 6 位）', type: 'password', autocomplete: 'new-password', index: 3 });
     root.appendChild(
-      section(1, '账号与口令', '改密码后其他设备的会话会立即失效；新密码同时成为新的备份口令。',
+      section(2, '账号与口令', '改密码后其他设备的会话会立即失效；新密码同时成为新的备份口令。',
         current.wrapper,
         next.wrapper,
         el('div', { class: 'flex flex-wrap gap-2' },
@@ -106,7 +126,7 @@ export function renderSettings(props: SettingsProps): HTMLElement {
     );
   } else {
     root.appendChild(
-      section(1, '账号与口令', '当前是游客模式：只能浏览。登录后可编辑书签、改口令。',
+      section(2, '账号与口令', '当前是游客模式：只能浏览。登录后可编辑书签、改口令。',
         button({ label: '去登录', iconName: 'login', variant: 'primary', size: 'sm', onClick: props.onLogin }),
       ),
     );
@@ -128,11 +148,11 @@ export function renderSettings(props: SettingsProps): HTMLElement {
     }
   }
   root.appendChild(
-    section(2, '重复提示记录', '这些网址被允许重复添加，且以后不再弹窗。撤销后重新开始提示。', ignoreList),
+    section(3, '重复提示记录', '这些网址被允许重复添加，且以后不再弹窗。撤销后重新开始提示。', ignoreList),
   );
 
   root.appendChild(
-    section(3, '关于', 'SuenWeb 2.0 自托管书签服务：插件快速收藏、加密备份、跨浏览器扩展清单还原。',
+    section(4, '关于', 'SuenWeb 2.0 自托管书签服务：插件快速收藏、加密备份、跨浏览器扩展清单还原。',
       el('div', { class: 'flex flex-wrap items-center gap-3' },
         el('span', { class: 'rounded-full border-4 border-secondary px-4 py-1 text-sm font-black text-fg', text: '版本 ' + props.version }),
         el('span', { class: 'rounded-full border-4 border-accent px-4 py-1 text-sm font-black text-fg', text: '设计系统 Maximalism / Dopamine' }),
