@@ -4,8 +4,8 @@ import { badRequest } from '../../domain/errors.ts';
 const DOMAIN = /^[a-z0-9.-]+(:[0-9]{1,5})?$/i;
 
 /**
- * GET /api/icon?domain=host:port —— 只发缓存里的图标。
- * 抓取只发生在已登录用户请求、且设置里开启 ui.fetch_icons 的情况下；访客永远只读缓存。
+ * GET /api/icon?domain=host[:port]
+ * 只发缓存。抓取仅发生在已登录用户请求且设置开启 ui.fetch_icons 时；访客永远只读缓存。
  */
 export async function iconRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/icon', async (req, reply) => {
@@ -15,10 +15,14 @@ export async function iconRoutes(app: FastifyInstance): Promise<void> {
 
     const origin = 'https://' + domain;
     const cached = await app.icons.read(origin);
-    if (cached) {
+    if (cached.status === 'hit') {
       reply.header('cache-control', 'public, max-age=604800, immutable');
-      reply.type(cached.type);
-      return reply.send(cached.data);
+      reply.type(cached.icon.type);
+      return reply.send(cached.icon.data);
+    }
+    if (cached.status === 'negative') {
+      reply.code(404);
+      return { ok: false, error: { code: 'ICON_UNAVAILABLE', message: '该站点没有可用图标' } };
     }
 
     const enabled = await app.repos.settings.getValue<boolean>('ui.fetch_icons', false);
@@ -31,13 +35,13 @@ export async function iconRoutes(app: FastifyInstance): Promise<void> {
       return { ok: false, error: { code: 'ICON_NOT_CACHED', message: '访客只能读已缓存的图标' } };
     }
 
-    const fetched = await app.icons.fetchAndStore(origin);
-    if (!fetched) {
+    const resolved = await app.icons.resolve(origin);
+    if (resolved.status !== 'hit') {
       reply.code(404);
       return { ok: false, error: { code: 'ICON_UNAVAILABLE', message: '没有取到该站点的图标' } };
     }
     reply.header('cache-control', 'public, max-age=604800, immutable');
-    reply.type(fetched.type);
-    return reply.send(fetched.data);
+    reply.type(resolved.icon.type);
+    return reply.send(resolved.icon.data);
   });
 }

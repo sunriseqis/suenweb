@@ -25,6 +25,7 @@ export type BookmarksProps = {
   onDeleteGroup: (group: GroupWithLinks) => void;
   onTogglePin: (group: GroupWithLinks) => void;
   onDisplayMode: (group: GroupWithLinks, mode: DisplayMode) => void;
+  onLayoutMode: (group: GroupWithLinks, mode: 'single' | 'multi') => void;
   onLogin: () => void;
 };
 
@@ -90,8 +91,25 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
   }
 
   if (pinned.length > 0) {
-    const area = el('div', { class: 'mb-4 space-y-3 border border-[var(--c-line)] bg-[var(--c-surface-2)]/40 p-3', 'aria-label': '置顶组' });
-    pinned.forEach((group) => area.appendChild(renderSection(group, props, true)));
+    const area = el('div', { class: 'mb-4 border border-[var(--c-line)] bg-[var(--c-surface-2)]/40 p-3', 'aria-label': '置顶组' });
+    const singles = pinned.filter((group) => group.layout_mode === 'single');
+    const multis = pinned.filter((group) => group.layout_mode !== 'single');
+    const singleBox = el('div', { class: 'space-y-3' });
+    singles.forEach((group) => singleBox.appendChild(pinnedCard(group, props)));
+    if (singles.length > 0) area.appendChild(singleBox);
+    let cursor = 0;
+    packMultiRows(multis.length).forEach((cols) => {
+      if (cursor > 0 || singles.length > 0) {
+        area.appendChild(el('div', { class: 'h-3', 'aria-hidden': 'true' }));
+      }
+      const slice = multis.slice(cursor, cursor + cols);
+      cursor += cols;
+      const row = el('div', {
+        class: cols === 3 ? 'grid gap-3 md:grid-cols-2 lg:grid-cols-3' : cols === 2 ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3',
+      });
+      slice.forEach((group) => row.appendChild(pinnedCard(group, props)));
+      area.appendChild(row);
+    });
     root.appendChild(area);
   }
 
@@ -143,6 +161,25 @@ export function renderBookmarks(props: BookmarksProps): HTMLElement {
   return root;
 }
 
+function packMultiRows(count: number): number[] {
+  const rows: number[] = [];
+  let left = count;
+  while (left > 0) {
+    if (left === 1) { rows.push(1); break; }
+    if (left === 2) { rows.push(2); break; }
+    if (left === 4) { rows.push(2, 2); break; }
+    rows.push(3);
+    left -= 3;
+  }
+  return rows;
+}
+
+function pinnedCard(group: GroupWithLinks, props: BookmarksProps): HTMLElement {
+  const box = el('div', { class: 'border border-[var(--c-line)] bg-[var(--c-bg)] p-2.5' });
+  box.appendChild(renderSection(group, props, true));
+  return box;
+}
+
 function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boolean): HTMLElement {
   const editable = props.authed && props.editing;
   const mode = modeOf(group);
@@ -164,6 +201,14 @@ function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boo
       tinyAction('宽磁贴', 'grid', () => props.onDisplayMode(group, 'grid'), mode === 'grid'),
       tinyAction('行磁贴', 'list', () => props.onDisplayMode(group, 'list'), mode === 'list'),
       tinyAction('方磁贴', 'bookmark', () => props.onDisplayMode(group, 'icon'), mode === 'icon'),
+      pinned
+        ? tinyAction(
+            group.layout_mode === 'single' ? '改为并排分栏' : '改为独占整行',
+            'grid',
+            () => props.onLayoutMode(group, group.layout_mode === 'single' ? 'multi' : 'single'),
+            group.layout_mode === 'single',
+          )
+        : null,
       tinyAction('加一条', 'plus', () => props.onAddLink(group.id)),
       tinyAction('改名', 'edit', () => props.onEditGroup(group)),
       tinyAction('删除组', 'trash', () => props.onDeleteGroup(group)),
@@ -178,17 +223,17 @@ function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boo
   }
 
   if (mode === 'grid') {
-    const grid = el('div', { class: 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]' });
+    const grid = el('div', { class: 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(232px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderWideTile(link, props, links, editable)));
-    if (editable) grid.appendChild(addTile('min-h-[92px]', () => props.onAddLink(group.id)));
+    if (editable) grid.appendChild(addTile('min-h-[104px]', () => props.onAddLink(group.id)));
     section.appendChild(grid);
   } else if (mode === 'list') {
-    const grid = el('div', { class: 'grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]' });
+    const grid = el('div', { class: 'grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderRowTile(link, props, links, editable)));
-    if (editable) grid.appendChild(addTile('h-9', () => props.onAddLink(group.id)));
+    if (editable) grid.appendChild(addTile('h-10', () => props.onAddLink(group.id)));
     section.appendChild(grid);
   } else {
-    const grid = el('div', { class: 'grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))]' });
+    const grid = el('div', { class: 'grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(116px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderSquareTile(link, props, links, editable)));
     if (editable) grid.appendChild(addTile('aspect-square', () => props.onAddLink(group.id)));
     section.appendChild(grid);
@@ -251,12 +296,12 @@ function hoverTools(link: Link, props: BookmarksProps, withMove = false): HTMLEl
 }
 
 function renderWideTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'relative min-h-[92px] p-3' });
+  const wrap = tile({ class: 'relative min-h-[104px] p-3.5' });
   if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 13, 'right-2 top-2'));
   wrap.append(
     el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex h-full flex-col justify-between', title: link.title + ' · ' + link.url },
-      el('span', { class: 'line-clamp-2 text-[13px] font-semibold leading-snug text-fg', text: link.title }),
-      el('span', { class: 'mt-2 block truncate text-[10px] uppercase tracking-[0.08em] text-[var(--c-fg-soft)]', text: hostOf(link.url) }),
+      el('span', { class: 'line-clamp-2 text-[14px] font-semibold leading-snug text-fg', text: link.title }),
+      el('span', { class: 'mt-2 block truncate text-[11px] uppercase tracking-[0.06em] text-[var(--c-fg-soft)]', text: hostOf(link.url) }),
     ),
   );
   if (link.description) {
@@ -270,12 +315,12 @@ function renderWideTile(link: Link, props: BookmarksProps, siblings: Link[], edi
 }
 
 function renderRowTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'relative flex h-9 items-center gap-2 px-2.5' });
+  const wrap = tile({ class: 'relative flex h-10 items-center gap-2 px-2.5' });
   if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 12, 'right-1.5 top-1.5'));
   wrap.appendChild(
     el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex min-w-0 flex-1 items-baseline gap-2', title: link.url },
-      el('span', { class: 'truncate text-[12px] text-fg', text: link.title }),
-      el('span', { class: 'shrink-0 truncate text-[9px] uppercase tracking-[0.06em] text-[var(--c-fg-soft)]', text: hostOf(link.url) }),
+      el('span', { class: 'truncate text-[13px] text-fg', text: link.title }),
+      el('span', { class: 'shrink-0 truncate text-[10px] uppercase tracking-[0.04em] text-[var(--c-fg-soft)]', text: hostOf(link.url) }),
     ),
   );
   if (editable) {
@@ -290,7 +335,7 @@ function renderSquareTile(link: Link, props: BookmarksProps, siblings: Link[], e
   if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 12, 'right-1 top-1'));
   wrap.appendChild(
     el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex h-full w-full items-center justify-center text-center', title: link.title + ' · ' + link.url },
-      el('span', { class: 'line-clamp-3 text-[11px] font-medium leading-tight text-fg', text: link.title }),
+      el('span', { class: 'line-clamp-3 text-[12px] font-medium leading-snug text-fg', text: link.title }),
     ),
   );
   if (editable) {

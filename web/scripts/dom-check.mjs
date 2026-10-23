@@ -61,6 +61,7 @@ const page = renderBookmarks({
   onDeleteGroup: () => pageHits.push('deleteGroup'),
   onTogglePin: () => pageHits.push('togglePin'),
   onDisplayMode: () => pageHits.push('displayMode'),
+  onLayoutMode: () => pageHits.push('layoutMode'),
   onLogin: () => pageHits.push('login'),
 });
 document.body.appendChild(page);

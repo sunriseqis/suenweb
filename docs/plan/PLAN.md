@@ -130,6 +130,14 @@
 | 站点图标 | 新增 infra/iconCache.ts 与 GET /api/icon?domain=：磁盘缓存 30 天、200KB 上限、6s 超时、只认 http(s)；默认关闭，开启后才出网；访客只读缓存（ICON_NOT_CACHED）；抓取只由登录请求触发 |
 | 磁贴 | 开启后三种磁贴右上角显示站点图标角标；取不到自动不显示，不影响布局 |
 | 验收 | 服务端 17 tests 全过（新增两条图标用例）；web check:dom 19 项全过；构建通过 |
+## M2 迭代 9（置顶自动分栏 / 图标多源缓存 / 磁贴放大，2026-10-23）
+
+| 项 | 处理 |
+|---|---|
+| 置顶分栏 | 抄旧版 packMultiRows：`single` 独占整行；`multi` 按 3 列打包，4 个拆成 2+2，2 列/1 列自适应；编辑模式每组可切单列/并排（`layout_mode` 取值统一为 single/multi） |
+| 图标缓存 | iconCache 升级为多源回退 + 负缓存：https favicon.ico → https apple-touch-icon.png → http favicon.ico → icons.duckduckgo.com；拒绝 text/html/text/plain；命中 30 天、负缓存 1 天；单源 3s 超时、200KB 上限 |
+| 磁贴尺寸 | 方 88→116px、行 36→40px、宽 190→232px（高 104px）；标题 11→12/13/14px，域名 9→10/11px，行高与描边同步 |
+| 验收 | 服务端 17 tests 全过；web check:dom 20 项全过（新增 layoutMode）；构建通过 |
 ## 待确认（需用户裁决或外部核实；D-1 已关闭）
 
 | 编号 | 问题 | 现状 |

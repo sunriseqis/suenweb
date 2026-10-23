@@ -370,6 +370,12 @@ function render(): void {
       onDisplayMode: async (group: GroupWithLinks, mode: DisplayMode) => {
         await afterMutation(await api.updateGroup(group.id, { display_mode: mode }), '显示模式已切换');
       },
+      onLayoutMode: async (group: GroupWithLinks, mode: 'single' | 'multi') => {
+        await afterMutation(
+          await api.updateGroup(group.id, { layout_mode: mode }),
+          mode === 'single' ? '已改为独占整行' : '已改为并排分栏',
+        );
+      },
       onLogin: () => go('#/login'),
     }),
   );

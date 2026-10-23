@@ -28,7 +28,7 @@ export type GroupInput = {
 const NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 const GROUP_TYPES = new Set(['fixed', 'tab']);
 const DISPLAY_MODES = new Set(['grid', 'list', 'icon']);
-const LAYOUT_MODES = new Set(['auto', 'compact', 'comfortable']);
+const LAYOUT_MODES = new Set(['single', 'multi']);
 
 export class GroupsRepo {
   private readonly db: DataPool;
@@ -66,8 +66,8 @@ export class GroupsRepo {
       const type = input.type === 'tab' ? 'tab' : 'fixed';
       const displayMode = typeof input.display_mode === 'string' ? input.display_mode : type === 'fixed' ? 'grid' : 'icon';
       const res = await this.db.run(
-        "INSERT INTO groups (name, name_key, icon, type, display_mode, sort_order) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM groups))",
-        [name, key, normalizeIcon(input.icon), type, displayMode],
+        "INSERT INTO groups (name, name_key, icon, type, display_mode, layout_mode, sort_order) VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM groups))",
+        [name, key, normalizeIcon(input.icon), type, displayMode, typeof input.layout_mode === 'string' ? input.layout_mode : 'multi'],
       );
       const group = await this.requireById(res.lastInsertRowid);
       return { group, merged: false };
