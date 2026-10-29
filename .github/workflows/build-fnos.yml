@@ -66,7 +66,7 @@ jobs:
           repository: sunriseqis/suenapp
           token: ${{ secrets.SUENAPP_TOKEN }}
           tag_name: ${{ steps.prep.outputs.tag }}
-          name: SuenWeb v${{ steps.prep.outputs.tag }}
+          name: SuenWeb ${{ steps.prep.outputs.tag }}
           files: |
             output/*.fpk
             output/checksums.txt
