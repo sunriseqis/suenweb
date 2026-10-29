@@ -16,12 +16,16 @@ const PLATFORMS = {
   fnos: {
     id: 'SUENWEB-FNOS',
     titleRegex: /###\s+SuenWeb\s+.*?飞牛私有云[\s\S]*?(?=(?:###\s+Suen(?:Music|Web|Money)|<!-- SECTION:)|$)/gi,
-    content: (tag) => `<!-- SECTION:SUENWEB-FNOS -->
-### SuenWeb ${tag} 飞牛私有云（fnOS）原生套件
-
-- **格式**：`.fpk` 纯原生系统运行（免 Docker，零虚拟化损耗）。
-- **功能**：自托管书签服务，内置安装引导，浏览器插件一键收藏与实时同步，AMO 签名版插件可从应用内下载。
-<!-- /SECTION:SUENWEB-FNOS -->`
+    content: function (tag) {
+      const L = [];
+      L.push('<!-- SECTION:SUENWEB-FNOS -->');
+      L.push('### SuenWeb ' + tag + ' 飞牛私有云（fnOS）原生套件');
+      L.push('');
+      L.push('- **格式**：`.fpk` 纯原生系统运行（免 Docker，零虚拟化损耗）。');
+      L.push('- **功能**：自托管书签服务，内置安装引导，浏览器插件一键收藏与实时同步，AMO 签名版插件可从应用内下载。');
+      L.push('<!-- /SECTION:SUENWEB-FNOS -->');
+      return L.join('\n');
+    }
   }
 };
 
