@@ -432,6 +432,8 @@
 
 ## 发布推送（2026-10-29）
 
+- [x] 用户裁定：删除远端门禁 ci.yml——提交前本地跑（typecheck/test/build/check:dom/check:ui），推到远端再跑无意义且门禁红也不挡发布流水线；远端只留 build-fnos.yml 发布线
+
 - [x] build-fnos.yml 重写为 **suenapp 公共仓发布模式**（对齐 suenmusic 实证）：本仓将转私有，fpk + checksums.txt 推送到 sunriseqis/suenapp 的 Release；tag 触发或手动；token 走 GH_RELEASE_TOKEN/SUENAPP_TOKEN/GITHUB_TOKEN 链
 
 - [x] 已知坑记录：public/ 是 gitignore 的构建产物，git 切分支会清空它——本地服务器启动前若 404 先 npm --prefix web run build（Docker/fpk 形态不受影响，构建阶段会生成）
