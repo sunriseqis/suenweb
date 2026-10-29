@@ -367,6 +367,14 @@
 
 **批次 1 结论：12 项严重缺陷全部修复并验收。服务端测试 36/36（新增 4 条：原子性失败注入 / multipart 等价 / 302 拒绝 / 越界删除拒绝）。**
 
+## CAP-05 重构：声明式新标签页（2026-10-29 · 插件 2.0.2）
+
+**用户实测反馈**：原 tabs.onCreated 劫持会覆盖 Firefox 自带的「新标签页设置」——用户改浏览器默认无效（插件每次都把 about:newtab 重定向）。
+- [x] 改为声明式 `chrome_settings_overrides.newtab`（MV2/MV3 双 manifest）——Firefox 新标签页右上角出现「恢复默认」控件，用户可一键还原，插件不再代码对抗
+- [x] 扩展内新增 newtab.html/js：读 newtabEnabled 开关决定跳转 baseUrl 或显示关闭态（提供浏览器默认链接 + 设置入口）
+- [x] 删除 background.js 的 tabs.onCreated 劫持代码
+- [x] options 开关文案更新；版本 2.0.2，双包重打，已推送 main/beta/tag
+
 ## AMO 签名完成（2026-10-29）
 
 - [x] **AMO 签名通过**：用户提交 2.0.0 并拿到签名版 xpi（mozilla.rsa/cose 签名链齐全）
@@ -390,6 +398,8 @@
 - [x] 第二轮：strict_min_version 128 → **142.0**（data_collection_permissions 需桌面 140+/Android 142+；与旧版 suenmusic 实证值一致）。lint 复核 0/0/0
 
 ## 发布推送（2026-10-29）
+
+- [x] 已知坑记录：public/ 是 gitignore 的构建产物，git 切分支会清空它——本地服务器启动前若 404 先 npm --prefix web run build（Docker/fpk 形态不受影响，构建阶段会生成）
 
 - [x] 远端 main → **v1.0 分支 + v1.0 tag**（旧版快照，2f6bd74）
 - [x] beta（v2.0.0 全量工作，含审查修复 69 项、设置页重排、fnOS 包、AMO 签名插件）fast-forward 到 **main** 并推送（b17dfd7）

@@ -194,8 +194,14 @@ export function renderSettings(props: SettingsProps): HTMLElement {
         addonBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: (result.ok ? result.data.hint : result.error.message) ?? '服务端还没有插件包构建产物。' }));
         return;
       }
+      // 只展示签名版；未签名调试包（firefox.xpi 无 -signed）不展示
+      const visible = result.data.files.filter((f) => !(f.endsWith('.xpi') && !f.includes('-signed')));
+      if (visible.length === 0) {
+        addonBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '暂无可展示的插件包。' }));
+        return;
+      }
       const names = el('div', { class: 'flex flex-wrap gap-1.5' });
-      for (const file of result.data.files) {
+      for (const file of visible) {
         names.appendChild(
           el('a', {
             href: ADDON_DOWNLOAD_BASE + file,
