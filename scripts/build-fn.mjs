@@ -94,6 +94,7 @@ async function updateIconAssets() {
     .replace(/for \(const size of \[16, 32, 48, 96, 128\]\) \{/, 'for (const size of [64, 256]) {')
     .replace(/'icon-' \+ size \+ '\.png'/, "(size === 256 ? 'icon_256.png' : 'icon_64.png')");
   if (!patched.includes('icon_256.png')) fail('图标脚本补丁异常：产物中缺少 icon_256 片段');
+  await mkdir(join(APP_DIR, 'ui/images'), { recursive: true });
   const tmp = join(ROOT, 'scripts', '.tmp-icons.mjs');
   await writeFile(tmp, patched, 'utf8');
   try {
