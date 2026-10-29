@@ -66,13 +66,13 @@ jobs:
         run: |
           gh release create "${{ steps.prep.outputs.tag }}" \
             --repo sunriseqis/suenapp \
-            --title "SuenWeb ${{ steps.prep.outputs.tag }}" \
+            --title "SuenWeb v${{ steps.prep.outputs.version }}" \
             --notes-file /tmp/release_body.md \
             output/*.fpk output/checksums.txt || \
           {
             gh release edit "${{ steps.prep.outputs.tag }}" \
               --repo sunriseqis/suenapp \
-              --title "SuenWeb ${{ steps.prep.outputs.tag }}" \
+              --title "SuenWeb v${{ steps.prep.outputs.version }}" \
               --notes-file /tmp/release_body.md
             gh release upload "${{ steps.prep.outputs.tag }}" \
               --repo sunriseqis/suenapp \
