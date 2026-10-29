@@ -49,7 +49,9 @@
 | 链接去重 | url_normalized：协议主机小写、去默认端口、去尾斜杠、去跟踪参数（utm_*、fbclid 等）、丢 hash、query 排序；**同组重复静默合并**；**跨组重复返回 409，由前端弹窗让用户放行**（on_duplicate=allow/ignore/skip）；用户选 ignore 写入 dedupe_ignores，同一 (URL, 分组) 不再提示，可撤销 |
 | 插件交互 | **点图标即用**：未登录点图标开设置页；已登录点图标弹分组网格，点组即收藏并关闭。设置页两态（未登录=地址+密码+登录/测试；已登录=地址+登出/插件备份/插件还原+首页开关）。**没有任何右键菜单**，故无 contextMenus / notifications 权限 |
 | 设置页 | 设置与数据合并为 `#/settings` 两 Tab（通用/数据）+ 8 卡片；**所有输入框进弹窗**，页面只有按钮、开关、只读列表；胶囊「数据」入口已取消 |
-| 端口策略 | **fnOS 端口必须支持自定义**（产品方向）：安装/升级向导 wizard_port 强制覆盖 etc/.env；main/upgrade/uninstall 全链路读 .env 取真实端口；manifest.service_port 是静态默认值（fnOS 限制，用户改端口后 checkport 可能判异常——已知平台限制） |
+| AMO 签名 | gecko.id=sunriseqis@aliyun.com（对齐旧刊登）、strict_min_version=142.0（data_collection 需 140+/142+）、data_collection_permissions.required=["none"]；**签名版 xpi 与未签名调试版并存分发**，前端按钮标注签名/调试；Firefox MV3 host 权限 opt-in 会静默拦请求（实测），Firefox 侧永用 MV2 |
+| 插件交互 | 点图标即用：未登录开设置页、已登录分组网格点组即收藏；设置页两态；**无右键菜单**；新标签页 onCreated+onUpdated 双监听（override 会被用户恢复默认永久锁死，弃用） |
+| AMO 签名版分发 | **fnOS 端口必须支持自定义**（产品方向）：安装/升级向导 wizard_port 强制覆盖 etc/.env；main/upgrade/uninstall 全链路读 .env 取真实端口；manifest.service_port 是静态默认值（fnOS 限制，用户改端口后 checkport 可能判异常——已知平台限制） |
 | 版本 | 全项目统一 **2.0.0**：server / web / addons（含两份 manifest）/ fn manifest |
 | 浏览器 | Firefox 为主（**MV2 包**，host 权限写 permissions 安装即授予），Chrome/Edge 用 MV3 包；双包由 addons/scripts/pack.mjs 产出。Firefox MV3 的 host 权限是用户 opt-in，会导致「权限显示已授予但请求被拦」，故 Firefox 侧用 MV2 |
 | 外观个性化 | 背景/壁纸/字体的个性化选项仍推迟 P3；但**视觉风格本身**按上面第 3 行采用 Maximalism/Dopamine，深浅两套主题随 M2 一起交付 |

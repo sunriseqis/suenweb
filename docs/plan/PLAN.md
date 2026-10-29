@@ -1,6 +1,6 @@
 # 开发计划（唯一进度来源）
 
-最后更新：v2.0.0 完成态——四端代码审查 69 项全部修复并验收清零；剩 NAS 真机装 fpk 与 GitHub Actions 首触发（Docker 定稿/插件自托管下载/SPA 托管/CI 已完成；fnOS 包阻塞 D-2/D-3，镜像构建待有 Docker 的机器实测）。
+最后更新：v2.0.0 已发布（main 推送 + v1.0/v2.0.0 tag + 签名版插件 2.0.4 分发）；NAS fpk 验证与 CI 首跑由用户真机完成（Docker 定稿/插件自托管下载/SPA 托管/CI 已完成；fnOS 包阻塞 D-2/D-3，镜像构建待有 Docker 的机器实测）。
 
 ## 里程碑
 
@@ -366,6 +366,18 @@
 | 后端 | 2d995d6f | S1 删除语义 / S2 单事务 / S4 multipart / S6 webdav / S7 trustProxy | ✅ 静态 12/13 + 36/36 测试（S2「未过」系验收脚本 grep 误报，代码走读确认事务分支正确） |
 
 **批次 1 结论：12 项严重缺陷全部修复并验收。服务端测试 36/36（新增 4 条：原子性失败注入 / multipart 等价 / 302 拒绝 / 越界删除拒绝）。**
+
+## CAP-05 第三轮：恢复旧版双监听（2026-10-29 · 插件 2.0.4 · 已签名）
+
+**AMO 签名通过**：2.0.4 签名版 xpi（26549 bytes）已入服务端分发（/extension/download/），前端显示为「Firefox 签名版 (.xpi)」；未签名调试版并列展示为「Firefox 调试版 (.xpi)」。
+
+用户反馈 override 方案「新窗口无效」。分析：
+- 2.0.2/2.0.3 的 chrome_settings_overrides 有死锁缺陷——用户在 override 页点过「恢复默认」后 Firefox 永久记住选择，插件 override 失效且无法恢复
+- 旧版（suenmusic 同款）用 onCreated+onUpdated **双监听**：onCreated 抓 Ctrl+T，onUpdated 补新窗口首标签的 pendingUrl 漏触发
+- [x] 删除 chrome_settings_overrides（两份 manifest），删除 newtab.html/js
+- [x] 恢复双监听 + REDIRECT_LOCK 防循环；about:blank（用户主动行为）不再拦截
+- [x] 版本 2.0.4，双包重打，已推送
+- 已知取舍：插件开启时用户改 Firefox 新标签页设置会被插件覆盖（所有新标签页插件共性）；关闭开关即恢复浏览器默认
 
 ## 插件下载规则修正（2026-10-29）
 
