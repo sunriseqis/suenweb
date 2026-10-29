@@ -430,6 +430,13 @@
 - [x] 版本 2.0.1，双包重打；web-ext lint 实测通过
 - [x] 第二轮：strict_min_version 128 → **142.0**（data_collection_permissions 需桌面 140+/Android 142+；与旧版 suenmusic 实证值一致）。lint 复核 0/0/0
 
+## CI 首跑修复（2026-10-29）
+
+GitHub Actions 首跑失败：图标写入 ENOENT——`fn/app/ui/images` 在 CI 全新 checkout 不存在（gitignore 排除了 fn/app/*，本地目录是历史构建残留所以没暴露）。
+- [x] build-fn.mjs 图标写入前 `mkdir -p fn/app/ui/images`
+- [x] 本地以全新 clone 模拟 CI 环境（无 fn/app、无 output）构建成功，产物 47.16 MB
+- [x] v2.0.0 tag 重打（旧 tag 指向失败提交）→ Actions 自动重跑
+
 ## 发布推送（2026-10-29）
 
 - [x] 用户裁定：删除远端门禁 ci.yml——提交前本地跑（typecheck/test/build/check:dom/check:ui），推到远端再跑无意义且门禁红也不挡发布流水线；远端只留 build-fnos.yml 发布线
