@@ -43,7 +43,7 @@ jobs:
               TAG="v${RAW_VER}"
             fi
           fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "tag=suenweb-${TAG}" >> $GITHUB_OUTPUT
           echo "version=${RAW_VER}" >> $GITHUB_OUTPUT
 
       - name: Generate Checksums
@@ -54,9 +54,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           repository: sunriseqis/suenapp
-          token: ${{ secrets.GH_RELEASE_TOKEN || secrets.SUENAPP_TOKEN || secrets.GITHUB_TOKEN }}
-          tag_name: ${{ steps.prep.outputs.tag }}
-          name: SuenWeb ${{ steps.prep.outputs.tag }}
+          token: ${{ secrets.SUENAPP_TOKEN }}
+          tag_name: suenweb-${{ steps.prep.outputs.tag }}
+          name: SuenWeb v${{ steps.prep.outputs.tag }}
           files: |
             output/*.fpk
             output/checksums.txt
