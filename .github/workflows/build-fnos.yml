@@ -34,7 +34,7 @@ jobs:
       - name: Prepare Release Tag
         id: prep
         run: |
-          RAW_VER=$(node -p "require(\x27./server/package.json\x27).version.match(/(\d+\.\d+\.\d+)/)[1]")
+          RAW_VER=$(node -p "require('./package.json').version.split('-').pop().replace(/[^0-9.]/g,'')")
           TAG="${{ github.event.inputs.tag_name }}"
           if [ -z "$TAG" ]; then
             if [[ "$GITHUB_REF" == refs/tags/* ]]; then
