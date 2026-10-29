@@ -269,29 +269,8 @@ browser.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-// ---- CAP-05 新标签页跳转（可选开关，默认关）----
-const NEWTAB_PATTERNS = [
-  'about:newtab', 'about:home', 'about:blank',
-  'chrome://newtab/', 'chrome://newtab', 'chrome://new-tab-page/',
-  'edge://newtab/', 'edge://newtab',
-];
-
-async function handleNewTab(tab) {
-  try {
-    const stored = await browser.storage.local.get({ newtabEnabled: false, baseUrl: '' });
-    if (!stored.newtabEnabled || !stored.baseUrl) return;
-    const url = tab.pendingUrl || tab.url || '';
-    if (!url || !NEWTAB_PATTERNS.some((p) => url.toLowerCase().startsWith(p))) return;
-    await browser.tabs.update(tab.id, { url: stored.baseUrl.replace(/\/+$/, '') + '/' });
-  } catch {
-    // 重定向失败不打扰用户
-  }
-}
-
-if (browser.tabs && browser.tabs.onCreated) {
-  browser.tabs.onCreated.addListener((tab) => void handleNewTab(tab));
-}
-
+// ---- CAP-05 新标签页：改用 chrome_settings_overrides 声明式接管（见 manifest 与 src/newtab.html）----
+// 用户可在 Firefox 新标签页右上角一键恢复默认；options 的 newtabEnabled 开关控制跳转页行为
 // 未登录时点图标（popup 已置空）→ 直接打开设置页
 const actionApi = browser.action || browser.browserAction;
 if (actionApi && actionApi.onClicked) {

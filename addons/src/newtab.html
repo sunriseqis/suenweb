@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>新标签页</title>
+  <style>
+    body { font: 14px/1.6 -apple-system, 'Segoe UI', sans-serif; background: #141414; color: #f2f2f2;
+           display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    @media (prefers-color-scheme: light) { body { background: #f3f3f3; color: #1b1b1b; } }
+  </style>
+</head>
+<body>
+  <p id="msg">正在跳转到 SuenWeb…</p>
+  <p id="off" hidden><a href="about:newtab">打开浏览器默认新标签页</a> · <a href="#" id="openOptions">打开扩展设置</a></p>
+  <script src="newtab.js"></script>
+</body>
+</html>

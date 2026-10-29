@@ -389,6 +389,14 @@
 - [x] 版本 2.0.1，双包重打；web-ext lint 实测通过
 - [x] 第二轮：strict_min_version 128 → **142.0**（data_collection_permissions 需桌面 140+/Android 142+；与旧版 suenmusic 实证值一致）。lint 复核 0/0/0
 
+## 发布推送（2026-10-29）
+
+- [x] 远端 main → **v1.0 分支 + v1.0 tag**（旧版快照，2f6bd74）
+- [x] beta（v2.0.0 全量工作，含审查修复 69 项、设置页重排、fnOS 包、AMO 签名插件）fast-forward 到 **main** 并推送（b17dfd7）
+- [x] **v2.0.0 tag** 打在 main
+- [x] 铁律修复：output/fpk 产物曾被误提交，已从 main 移除并 gitignore；fn/app 装配产物、.pack 临时目录一并排除
+- 提醒：push v2.0.0 tag 会触发 build-fnos workflow（需 GitHub Actions 首跑验证）
+
 ## 审查修复批次 3（2026-10-28 · 全部验收通过，69 项审查清零）
 
 **最终门禁**：server typecheck+44 测试 ✓ / web typecheck+build+check:dom+check:ui ✓ / addons 语法 x3+打包 ✓ / fn bash -n x9+build-fn --check ✓
