@@ -69,7 +69,13 @@ jobs:
             --title "SuenWeb ${{ steps.prep.outputs.tag }}" \
             --notes-file /tmp/release_body.md \
             output/*.fpk output/checksums.txt || \
-          gh release upload "${{ steps.prep.outputs.tag }}" \
-            --repo sunriseqis/suenapp \
-            --clobber \
-            output/*.fpk output/checksums.txt
+          {
+            gh release edit "${{ steps.prep.outputs.tag }}" \
+              --repo sunriseqis/suenapp \
+              --title "SuenWeb ${{ steps.prep.outputs.tag }}" \
+              --notes-file /tmp/release_body.md
+            gh release upload "${{ steps.prep.outputs.tag }}" \
+              --repo sunriseqis/suenapp \
+              --clobber \
+              output/*.fpk output/checksums.txt
+          }
