@@ -61,15 +61,15 @@ jobs:
           cd output && sha256sum *.fpk > checksums.txt && cd ..
 
       - name: Release to Public Repo (sunriseqis/suenapp)
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: sunriseqis/suenapp
-          token: ${{ secrets.SUENAPP_TOKEN }}
-          tag_name: ${{ steps.prep.outputs.tag }}
-          name: SuenWeb ${{ steps.prep.outputs.tag }}
-          files: |
-            output/*.fpk
-            output/checksums.txt
-          draft: false
-          prerelease: false
-          append_body: false
+        env:
+          GH_TOKEN: ${{ secrets.SUENAPP_TOKEN }}
+        run: |
+          gh release create "${{ steps.prep.outputs.tag }}" \
+            --repo sunriseqis/suenapp \
+            --title "SuenWeb ${{ steps.prep.outputs.tag }}" \
+            --notes-file /tmp/release_body.md \
+            output/*.fpk output/checksums.txt || \
+          gh release upload "${{ steps.prep.outputs.tag }}" \
+            --repo sunriseqis/suenapp \
+            --clobber \
+            output/*.fpk output/checksums.txt
