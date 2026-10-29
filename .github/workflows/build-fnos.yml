@@ -11,15 +11,10 @@ on:
         required: false
         default: ''
 
-permissions:
-  contents: write
-
 jobs:
   build-and-release-fnos:
     name: Build & Release fnOS FPK
     runs-on: ubuntu-latest
-    env:
-      INPUT_TAG_NAME: ${{ github.event.inputs.tag_name }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -29,22 +24,18 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install & Build Web
+      - name: Build Web Assets
         run: |
           cd web && npm ci --no-audit --no-fund && npm run build && cd ..
 
       - name: Build fnOS FPK Package
-        run: |
-          node scripts/build-fn.mjs
-          cd output
-          sha256sum *.fpk > checksums.txt
-          cd ..
+        run: node scripts/build-fn.mjs
 
-      - name: Prepare Release Assets & Tag
+      - name: Prepare Release Tag
         id: prep
         run: |
-          RAW_VER=$(node -p "require('./server/package.json').version.match(/(\d+\.\d+\.\d+)/)[1]")
-          TAG="${INPUT_TAG_NAME}"
+          RAW_VER=$(node -p "require(\x27./server/package.json\x27).version.match(/(\d+\.\d+\.\d+)/)[1]")
+          TAG="${{ github.event.inputs.tag_name }}"
           if [ -z "$TAG" ]; then
             if [[ "$GITHUB_REF" == refs/tags/* ]]; then
               TAG="${GITHUB_REF#refs/tags/}"
@@ -55,10 +46,15 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "version=${RAW_VER}" >> $GITHUB_OUTPUT
 
-      - name: Attach FPK to GitHub Release
-        # 版本保留 @v2：未做 pin SHA 供应链确认，确认后改为 commit SHA 引用
+      - name: Generate Checksums
+        run: |
+          cd output && sha256sum *.fpk > checksums.txt && cd ..
+
+      - name: Release to Public Repo (sunriseqis/suenapp)
         uses: softprops/action-gh-release@v2
         with:
+          repository: sunriseqis/suenapp
+          token: ${{ secrets.GH_RELEASE_TOKEN || secrets.SUENAPP_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.prep.outputs.tag }}
           name: SuenWeb ${{ steps.prep.outputs.tag }}
           files: |
@@ -66,3 +62,4 @@ jobs:
             output/checksums.txt
           draft: false
           prerelease: false
+          append_body: false
