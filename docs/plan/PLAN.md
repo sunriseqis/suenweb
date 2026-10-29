@@ -393,6 +393,12 @@
 - [x] 版本 2.0.3，双包重打，已推送
 - 需用户确认：装 2.0.3 后「新窗口」场景是否正常；若仍无效请提供浏览器控制台输出
 
+## CI 第四轮：发布链路闭环（2026-10-29 · 全绿）
+
+- [x] 标题修复（tag 已含前缀不再加 v）
+- [x] 已存在 release 时 gh release edit 更新标题与 body（upload 不动 body 的坑）
+- [x] **suenapp Release suenweb-v2.0.0 最终形态**：body 含 SUENWEB-FNOS 段（幂等合并实证）、assets=fpk+checksums.txt
+
 ## CI 第三轮：发行标题/说明字面值（2026-10-29）
 
 用户实测：发行标题 "SuenWeb vsuenweb-v1"、说明 "SuenWeb v vX.Y.Z"——RAW_VER 提取在 Actions 环境失败（node -p 转义链路不可靠）且无 set -e，失败后 TAG 落到字面兜底。
