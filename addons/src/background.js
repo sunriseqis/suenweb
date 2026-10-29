@@ -279,6 +279,36 @@ if (actionApi && actionApi.onClicked) {
   });
 }
 
+
+// ---- CAP-05 新标签页跳转（恢复旧版双监听模式：onCreated + onUpdated 补新窗口首标签漏触发）----
+const NEWTAB_PATTERNS = [
+  'about:newtab', 'about:home',
+  'chrome://newtab/', 'chrome://newtab', 'chrome://new-tab-page/',
+  'edge://newtab/',
+];
+const REDIRECT_LOCK = new Set();
+
+async function handleNewTab(tab) {
+  try {
+    const stored = await browser.storage.local.get({ newtabEnabled: false, baseUrl: '' });
+    if (!stored.newtabEnabled || !stored.baseUrl) return;
+    const url = String(tab.pendingUrl || tab.url || '').toLowerCase();
+    if (!url || !NEWTAB_PATTERNS.some((p) => url.startsWith(p))) return;
+    if (REDIRECT_LOCK.has(tab.id)) return;
+    REDIRECT_LOCK.add(tab.id);
+    await browser.tabs.update(tab.id, { url: stored.baseUrl.replace(/\/+$/, '') + '/' });
+    setTimeout(() => REDIRECT_LOCK.delete(tab.id), 2000);
+  } catch {}
+}
+
+// 双监听：onCreated 抓 Ctrl+T；onUpdated 抓新窗口首标签（onCreated 可能漏 pendingUrl）
+if (browser.tabs && browser.tabs.onCreated) browser.tabs.onCreated.addListener((tab) => void handleNewTab(tab));
+if (browser.tabs && browser.tabs.onUpdated) {
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url || changeInfo.status === 'loading') void handleNewTab({ ...tab, id: tabId, pendingUrl: changeInfo.url || tab?.pendingUrl });
+  });
+}
+
 // ---- 扩展清单备份 / 还原（EXT-01 / EXT-03）----
 const STORE_BASE = {
   firefox: 'https://addons.mozilla.org',
