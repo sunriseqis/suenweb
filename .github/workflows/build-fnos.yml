@@ -46,6 +46,15 @@ jobs:
           echo "tag=suenweb-${TAG}" >> $GITHUB_OUTPUT
           echo "version=${RAW_VER}" >> $GITHUB_OUTPUT
 
+      - name: Prepare Release Notes
+        run: |
+          node scripts/prepare-release-notes.mjs \
+            --platform fnos \
+            --tag "${{ steps.prep.outputs.tag }}" \
+            --output /tmp/release_body.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.SUENAPP_TOKEN || secrets.GITHUB_TOKEN }}
+
       - name: Generate Checksums
         run: |
           cd output && sha256sum *.fpk > checksums.txt && cd ..

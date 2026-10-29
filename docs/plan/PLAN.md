@@ -430,6 +430,18 @@
 - [x] 版本 2.0.1，双包重打；web-ext lint 实测通过
 - [x] 第二轮：strict_min_version 128 → **142.0**（data_collection_permissions 需桌面 140+/Android 142+；与旧版 suenmusic 实证值一致）。lint 复核 0/0/0
 
+## CI 发布失败两轮修复（2026-10-29）
+
+**第一轮**：图标 ENOENT（fn/app/ui/images CI 无目录）→ mkdir 修复。
+**第二轮**：发布到 suenapp 失败——「Found release SuenMusic v2.0.0」：
+- suenapp 仓已有 suenmusic 发的 v2.0.0 tag/release → tag 冲突
+- GITHUB_TOKEN 无跨仓写权限
+修复：
+- [x] 发布 tag 加前缀 `suenweb-v2.0.0`（release name SuenWeb v2.0.0）
+- [x] token 仅用 SUENAPP_TOKEN（需用户在 GitHub 配置：有 suenapp 写权限的 PAT）
+
+**用户待办**：GitHub 本仓 Settings → Secrets → Actions → 新建 `SUENAPP_TOKEN`（classic PAT，勾 repo 权限），然后重跑 workflow。
+
 ## CI 首跑修复（2026-10-29）
 
 GitHub Actions 首跑失败：图标写入 ENOENT——`fn/app/ui/images` 在 CI 全新 checkout 不存在（gitignore 排除了 fn/app/*，本地目录是历史构建残留所以没暴露）。
