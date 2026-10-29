@@ -1,4 +1,7 @@
 import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Config } from './config.ts';
@@ -10,7 +13,10 @@ import type { SessionRow } from './data/repositories/sessions.ts';
 import { SettingsRepo } from './data/repositories/settings.ts';
 import { AuthService } from './domain/authService.ts';
 import { AppError, unauthorized } from './domain/errors.ts';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { AppEvents } from './infra/events.ts';
+import { BackupService } from './infra/backupService.ts';
 import { IconCache } from './infra/iconCache.ts';
 import { extractToken } from './http/plugins/auth.ts';
 import { authRoutes } from './http/routes/auth.ts';
@@ -18,9 +24,15 @@ import { dataRoutes } from './http/routes/data.ts';
 import { dedupeRoutes } from './http/routes/dedupe.ts';
 import { groupRoutes } from './http/routes/groups.ts';
 import { healthRoutes } from './http/routes/health.ts';
+import { importExportRoutes } from './http/routes/importExport.ts';
+import { backupRoutes } from './http/routes/backup.ts';
+import { extensionRoutes } from './http/routes/extensions.ts';
+import { toolsRoutes } from './http/routes/tools.ts';
+import { addonDownloadRoutes } from './http/routes/addonDownload.ts';
 import { iconRoutes } from './http/routes/icon.ts';
 import { linkRoutes } from './http/routes/links.ts';
 import { settingRoutes } from './http/routes/settings.ts';
+import { ExtensionsRepo } from './data/repositories/extensions.ts';
 import { syncRoutes } from './http/routes/sync.ts';
 import type { Logger } from './infra/logger.ts';
 
@@ -28,6 +40,7 @@ export type Repos = {
   groups: GroupsRepo;
   links: LinksRepo;
   settings: SettingsRepo;
+  extensions: ExtensionsRepo;
   sessions: SessionsRepo;
 };
 
@@ -50,13 +63,15 @@ declare module 'fastify' {
     requireAuth: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
     icons: IconCache;
     events: AppEvents;
+    backup: BackupService;
   }
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: deps.logger as unknown as FastifyBaseLogger,
-    trustProxy: true,
+    // 默认没有前置反代：不信任 X-Forwarded-For，req.ip 即 TCP 对端地址（登录失败限速基于它）
+    trustProxy: false,
     bodyLimit: 4 * 1024 * 1024,
   });
 
@@ -65,6 +80,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     links: new LinksRepo(deps.db),
     settings: new SettingsRepo(deps.db),
     sessions: new SessionsRepo(deps.db),
+    extensions: new ExtensionsRepo(deps.db),
   };
 
   app.decorate('config', deps.config);
@@ -72,6 +88,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.decorate('repos', repos);
   app.decorate('icons', new IconCache(deps.config.dataDir));
   app.decorate('events', new AppEvents());
+  app.decorate('backup', new BackupService(deps.db, repos.settings));
 
   const auth = new AuthService({
     db: deps.db,
@@ -89,6 +106,22 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   await app.register(cookie);
+  // 导入接口的 multipart 上传分支（attachFieldsToBody: false，按需在路由里 await req.file()）
+  await app.register(multipart, { attachFieldsToBody: false });
+
+  // 插件（moz-extension:// / chrome-extension:// 源）与本地开发前端需要跨域访问 API；
+  // 自托管单用户场景：全放行 + 允许凭据。鉴权本身靠 Bearer token / same-origin cookie，CORS 不构成额外风险面。
+  await app.register(cors, { origin: true, credentials: true, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] });
+
+  // 生产模式托管前端构建产物（vite build 输出到 <repoRoot>/public）；目录缺失（纯开发）时跳过
+  const publicDir = deps.config.webRoot;
+  if (existsSync(join(publicDir, 'index.html'))) {
+    await app.register(fastifyStatic, { root: publicDir, prefix: '/', index: false });
+    // '/' 直接回 index.html（fastifyStatic 在 index:false 时对目录返回 403）
+    app.get('/', (_req, reply) => {
+      return (reply as unknown as { sendFile: (f: string) => unknown }).sendFile('index.html');
+    });
+  }
 
   // 写操作成功后广播事件，SSE 推给网页与插件（不需要每个路由各自 emit）
   app.addHook('onResponse', async (req, reply) => {
@@ -107,6 +140,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.addHook('onRequest', async (req) => {
+    // M10：静态资源不需要会话，跳过 sha256 + sessions 查库，避免静态文件请求打 DB
+    if (!req.url.startsWith('/api/')) return;
     const token = extractToken(req);
     req.sessionToken = token;
     req.session = token ? await auth.authenticate(token) : null;
@@ -142,10 +177,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   });
 
+  // 404：非 /api 的 GET 走 SPA（前端构建产物存在时），其余给结构化 404
   app.setNotFoundHandler((req, reply) => {
+    const serving = existsSync(join(deps.config.webRoot, 'index.html'));
+    if (serving && req.method === 'GET' && !req.url.startsWith('/api/')) {
+      return (reply as unknown as { sendFile: (f: string) => unknown }).sendFile('index.html');
+    }
+    // 回显前截断并过滤控制字符，避免超长/特殊字符进入响应体
+    const shown = req.url.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120);
     reply.code(404).send({
       ok: false,
-      error: { code: 'NOT_FOUND', message: '接口不存在: ' + req.method + ' ' + req.url },
+      error: { code: 'NOT_FOUND', message: '接口不存在: ' + req.method + ' ' + shown },
     });
   });
 
@@ -158,6 +200,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(settingRoutes);
   await app.register(iconRoutes);
   await app.register(syncRoutes);
+  await app.register(importExportRoutes);
+  await app.register(backupRoutes);
+  await app.register(extensionRoutes);
+  await app.register(toolsRoutes);
+  await app.register(addonDownloadRoutes);
 
   return app;
 }

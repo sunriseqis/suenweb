@@ -1,0 +1,15 @@
+#!/bin/bash
+# 卸载完成回调：兜底再停一次（stop 幂等）。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VAR_DIR="${TRIM_PKGVAR:-}"
+if [ -z "${VAR_DIR}" ]; then
+    PKG_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd)"
+    VAR_DIR="${PKG_ROOT}/var"
+fi
+case "${VAR_DIR}" in
+    ""|"/"|"/var"|"/usr"|"/tmp") LOG_FILE=/dev/null ;;
+    *) LOG_FILE="${VAR_DIR}/info.log" ;;
+esac
+echo "$(date '+%Y-%m-%d %H:%M:%S') - [uninstall_callback] 确认服务已停止" >> "${LOG_FILE}" 2>/dev/null
+"${SCRIPT_DIR}/main" stop >> "${LOG_FILE}" 2>&1
+exit 0

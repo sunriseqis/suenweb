@@ -3,6 +3,7 @@ import { buildApp } from './app.ts';
 import { loadConfig } from './config.ts';
 import { DataPool } from './data/proxy.ts';
 import { createLogger } from './infra/logger.ts';
+import { startBackupScheduler } from './infra/backupScheduler.ts';
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -23,6 +24,12 @@ logger.info(
   'SuenWeb 后端已启动',
 );
 
+const stopBackupScheduler = startBackupScheduler(
+  app.backup,
+  logger,
+  config.tz,
+);
+
 let closing = false;
 async function shutdown(signal: string): Promise<void> {
   if (closing) return;
@@ -34,6 +41,7 @@ async function shutdown(signal: string): Promise<void> {
   }, 10000);
   watchdog.unref();
   try {
+    stopBackupScheduler();
     await app.close();
     await db.close();
   } catch (err) {

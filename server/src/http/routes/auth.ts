@@ -40,6 +40,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     try {
       const session = await app.auth.login(body.password, body.device ?? deviceLabel(req));
       limiter.reset(key);
+      // 成功时也顺带清理过期记录，避免 hits Map 无界增长
+      limiter.cleanup();
       setSessionCookie(app, reply, session.token);
       return { ok: true, data: { token: session.token, expiresAt: session.expiresAt } };
     } catch (err) {

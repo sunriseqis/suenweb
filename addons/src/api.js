@@ -1,63 +1,41 @@
 // 与 SuenWeb 服务端通信的最小封装：所有请求都带 Bearer token
 const DEFAULTS = { baseUrl: '', token: '', device: 'firefox', groupId: null };
 
+/** 归一化服务端地址：无协议自动补 http://（否则 fetch 会当相对路径，必然 NetworkError） */
+export function normalizeBaseUrl(raw) {
+  let url = String(raw || '').trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+  try {
+    const parsed = new URL(url);
+    return parsed.origin + parsed.pathname.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+}
+
 export async function getConfig() {
   const stored = await browser.storage.local.get(DEFAULTS);
-  return { ...DEFAULTS, ...stored, baseUrl: String(stored.baseUrl || '').replace(/\/+$/, '') };
+  return { ...DEFAULTS, ...stored, baseUrl: normalizeBaseUrl(stored.baseUrl) };
+}
+
+/**
+ * Firefox MV3 的 host 权限是「用户授予」制：未授予时跨域 fetch 直接抛 NetworkError
+ * （请求根本发不出去，服务端日志里什么都没有）。这里在用户手势里主动申请。
+ */
+export async function ensureHostPermission(baseUrl) {
+  const origin = normalizeBaseUrl(baseUrl);
+  if (!origin) throw new Error('服务端地址不合法，请填成 http://IP:端口');
+  if (!browser.permissions || !browser.permissions.request) return true; // Android MV2：无 request API，host 权限安装即授予
+  // 桌面 Firefox：必须在用户手势的同步栈里发起（先 await 别的会丢失手势上下文）
+  try {
+    return await browser.permissions.request({ origins: [origin + '/*'] });
+  } catch {
+    // request 抛错（含 Android 不支持）：MV2 包 host 权限已在安装时授予，视为通过
+    return true;
+  }
 }
 
 export async function setConfig(patch) {
   await browser.storage.local.set(patch);
 }
-
-async function call(path, options = {}) {
-  const config = await getConfig();
-  if (!config.baseUrl) throw new Error('还没配置服务端地址');
-  const response = await fetch(config.baseUrl + path, {
-    ...options,
-    headers: {
-      ...(options.body ? { 'content-type': 'application/json' } : {}),
-      ...(config.token ? { authorization: 'Bearer ' + config.token } : {}),
-      ...(options.headers || {}),
-    },
-  });
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-  if (!payload || payload.ok !== true) {
-    const message = payload && payload.error ? payload.error.message : '请求失败（HTTP ' + response.status + '）';
-    const error = new Error(message);
-    error.code = payload && payload.error ? payload.error.code : 'HTTP_' + response.status;
-    error.details = payload && payload.error ? payload.error.details : undefined;
-    throw error;
-  }
-  return payload.data;
-}
-
-export async function login(password) {
-  const config = await getConfig();
-  if (!config.baseUrl) throw new Error('先在设置里填写服务端地址');
-  const response = await fetch(config.baseUrl + '/api/auth/login', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ password, device: config.device }),
-  });
-  const payload = await response.json().catch(() => null);
-  if (!payload || payload.ok !== true) {
-    throw new Error(payload && payload.error ? payload.error.message : '登录失败');
-  }
-  await setConfig({ token: payload.data.token });
-  return payload.data;
-}
-
-export const api = {
-  data: () => call('/api/data'),
-  createLink: (payload) => call('/api/links', { method: 'POST', body: JSON.stringify(payload) }),
-  pending: () => call('/api/sync/pending'),
-  ack: (ids, ok = true) => call('/api/sync/ack', { method: 'POST', body: JSON.stringify({ ids, ok }) }),
-  heartbeat: () => call('/api/sync/heartbeat', { method: 'POST', body: JSON.stringify({ device: 'firefox-extension' }) }),
-  status: () => call('/api/sync/status'),
-};

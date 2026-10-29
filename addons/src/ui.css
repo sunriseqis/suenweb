@@ -69,3 +69,61 @@ button:hover { filter: brightness(1.1); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 .status { margin: 0; min-height: 16px; color: var(--muted); font-size: 11px; }
 .status.error { color: #ff6b6b; }
+
+.status { white-space: pre-line; }
+
+/* 分组一键收藏 */
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+.group-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0;
+}
+.group-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.group-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.group-btn.last {
+  border-color: var(--accent);
+  background: rgba(27, 161, 226, 0.12);
+}
+.group-btn .g-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.group-btn .g-count {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+button.wide {
+  width: 100%;
+}
+
+/* hidden 属性必须赢过任何显式 display */
+[hidden] {
+  display: none !important;
+}

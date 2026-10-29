@@ -1,0 +1,50 @@
+{
+  "manifest_version": 2,
+  "name": "SuenWeb 快速收藏",
+  "version": "2.0.0",
+  "description": "把当前页面一键存进自建的 SuenWeb 书签库，并把服务端书签回写到本地浏览器。",
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "tabs",
+    "alarms",
+    "management",
+    "*://*/*"
+  ],
+  "background": {
+    "scripts": [
+      "src/background.js"
+    ]
+  },
+  "browser_action": {
+    "default_title": "收藏到 SuenWeb",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "sunriseqis@aliyun.com",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  }
+}

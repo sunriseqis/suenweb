@@ -1,0 +1,15 @@
+appname               = suenweb
+version               = 2.0.0
+display_name          = SuenWeb
+desc                  = 自托管个人书签服务：浏览器插件一键收藏、SSE 实时同步、加密备份与跨浏览器扩展清单还原
+platform              = x86
+os_min_version        = 1.1.0
+source                = thirdparty
+maintainer            = SuenWeb
+distributor           = SuenWeb
+desktop_uidir         = ui
+desktop_applaunchname = suenweb.Application
+service_port          = 8080
+checkport             = true
+ctl_stop              = true
+disable_authorization_path = true

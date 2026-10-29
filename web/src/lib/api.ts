@@ -103,9 +103,9 @@ export const api = {
   deleteGroup: (id: number) => request<{ deleted: number }>('/api/groups/' + id, { method: 'DELETE' }),
   reorderGroups: (ids: number[]) => request<{ groups: Group[] }>('/api/reorder/groups', { method: 'POST', ...json({ ids }) }),
 
-  createLink: (payload: { group_id: number; url: string; title?: string; on_duplicate?: DuplicatePolicy }) =>
+  createLink: (payload: { group_id: number; url: string; title?: string; icon?: string | null; icon_type?: 'auto' | 'url' | 'none'; on_duplicate?: DuplicatePolicy }) =>
     request<{ link: Link; merged: boolean; skipped?: boolean }>('/api/links', { method: 'POST', ...json(payload) }),
-  updateLink: (id: number, payload: { title?: string; url?: string; description?: string | null; icon?: string | null }) =>
+  updateLink: (id: number, payload: { title?: string; url?: string; description?: string | null; icon?: string | null; icon_type?: 'auto' | 'url' | 'none' }) =>
     request<{ link: Link; merged: boolean }>('/api/links/' + id, { method: 'PUT', ...json(payload) }),
   deleteLink: (id: number) => request<{ deleted: number }>('/api/links/' + id, { method: 'DELETE' }),
   moveLink: (id: number, groupId: number) =>
@@ -122,4 +122,73 @@ export const api = {
     ),
   forgetIgnore: (url_normalized: string, group_id: number) =>
     request<{ removed: number }>('/api/dedupe/ignores', { method: 'DELETE', ...json({ url_normalized, group_id }) }),
+
+  // ---- M4: 导入导出 + 备份 ----
+  importPreview: (html: string) =>
+    request<ImportPreview>('/api/import/preview', { method: 'POST', ...json({ html }) }),
+  importCommit: (html: string, crossGroup: 'allow' | 'skip' = 'allow') =>
+    request<ImportResult>('/api/import/commit', { method: 'POST', ...json({ html, cross_group: crossGroup }) }),
+  exportBookmarksUrl: '/api/export/bookmarks' as const,
+  configExport: (password: string) =>
+    request<{ format: string; exportedAt: string; groups: number; links: number; file: string }>('/api/config/export', { method: 'POST', ...json({ password }) }),
+  configImportCheck: (password: string, file: string) =>
+    request<{ needsConfirm: boolean; groups: number; links: number; exportedAt: string | null }>('/api/config/import', { method: 'POST', ...json({ password, file }) }),
+  configImportFromSnapshot: (password: string, snapshot: { groups: Array<{ name: string; links: Array<{ title: string; url: string }> }> }) =>
+    request<{ restored: { groupsCreated: number; groupsMerged: number; linksCreated: number; linksSkipped: number } }>('/api/config/restore-snapshot', { method: 'POST', ...json({ password, snapshot, confirm: true }) }),
+  configImport: (password: string, file: string) =>
+    request<{ restored: { groupsCreated: number; groupsMerged: number; linksCreated: number; linksSkipped: number } }>('/api/config/import', { method: 'POST', ...json({ password, file, confirm: true }) }),
+
+  backupStatus: () =>
+    request<BackupStatusInfo>('/api/backup/status'),
+  backupConfig: (payload: { url: string; username: string; password: string; keepCount: number; adminPassword: string }) =>
+    request<{ saved: boolean; ok: boolean; writable: boolean; error: string | null }>('/api/backup/config', { method: 'POST', ...json(payload) }),
+  backupTest: () =>
+    request<{ ok: boolean; writable: boolean; error: string | null }>('/api/backup/test'),
+  backupRun: (kind: 'auto' | 'manual' = 'manual') =>
+    request<{ file: string; size: number; rotated: number }>('/api/backup/run', { method: 'POST', ...json({ kind }) }),
+  backupList: () =>
+    request<{ backups: Array<{ name: string; size: number; lastModified: string | null }> }>('/api/backup/list'),
+  backupDownload: (name: string, password: string) =>
+    request<{ snapshot: { groups: Array<{ name: string; links: Array<{ title: string; url: string }> }>; exportedAt: string | null } }>('/api/backup/download', { method: 'POST', ...json({ name, password }) }),
+
+  // ---- M5: 扩展清单 ----
+  extensionList: () =>
+    request<ExtensionInventory>('/api/extensions'),
+  extensionDelete: (id: number) =>
+    request<{ removed: number }>('/api/extensions/' + id, { method: 'DELETE' }),
+
+  // ---- M6: 治理工具 ----
+  duplicates: () =>
+    request<{ duplicates: Array<{ url_normalized: string; occurrences: Array<{ id: number; group_id: number; title: string; url: string; group_name: string }> }>; total: number }>('/api/tools/duplicates'),
+  deleteDuplicates: (ids: number[]) =>
+    request<{ deleted: number }>('/api/tools/duplicates/delete', { method: 'POST', ...json({ keepIds: ids }) }),
+  checkLinks: (limit = 200) =>
+    request<{ checked: number; deadCount: number; dead: Array<{ id: number; title: string; url: string; group_name: string; ok: boolean; status: number | null }> }>('/api/tools/check-links', { method: 'POST', ...json({ limit }) }),
+  savedCheck: () =>
+    request<{ result: { checkedAt: string; dead: Array<{ id: number; title: string; url: string; group_name: string; status: number | null }> } | null }>('/api/tools/check-links'),
+  deleteDead: (ids: number[]) =>
+    request<{ deleted: number }>('/api/tools/dead-links/delete', { method: 'POST', ...json({ ids }) }),
+  iconRefresh: (domain: string) =>
+    request<{ purged: boolean; refetched: boolean; status?: string; reason?: string }>('/api/tools/icon-refresh', { method: 'POST', ...json({ domain }) }),
+
+  // ---- OPS-02: 插件自托管下载 ----
+  syncStatus: () =>
+    request<{ pending: number; synced: number; failed: number; lastHeartbeat: string | null; lastDevice: string; sseClients: number }>('/api/sync/status'),
+  addonList: () =>
+    request<{ available: boolean; files: string[]; hint?: string }>('/extension/download/list'),
 };
+export const ADDON_DOWNLOAD_BASE = '/extension/download/';
+
+export type ExtensionEntry = { id: number; ext_id: string; name: string; version: string; url: string | null };
+export type ExtensionInventory = { byBrowser: Record<string, ExtensionEntry[]>; total: number };
+
+export type ImportPreview = {
+  folders: Array<{ name: string; total: number; duplicates_in_file: number; new_links: number; existing_elsewhere: number }>;
+  grandTotal: number;
+  newTotal: number;
+  duplicateInFile: number;
+  existsAnywhere: number;
+  parseInvalid: number;
+};
+export type ImportResult = { groupsCreated: number; groupsMerged: number; linksCreated: number; linksSkipped: number };
+export type BackupStatusInfo = { configured: boolean; keepCount: number; lastRunAt: string | null; address: string };

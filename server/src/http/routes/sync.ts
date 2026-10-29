@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { badRequest } from '../../domain/errors.ts';
+import { extractToken } from '../plugins/auth.ts';
 
 const HEARTBEAT_KEY = 'sync.last_heartbeat';
 const DEVICE_KEY = 'sync.last_device';
@@ -60,7 +61,7 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
   /** 插件取待同步书签：按入队时间排序，一次最多 200 条 */
   app.get('/api/sync/pending', { preHandler: app.requireAuth }, async (req) => {
     const limitRaw = Number((req.query as { limit?: string }).limit ?? 200);
-    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 500) : 200;
+    const limit = Number.isFinite(limitRaw) ? Math.trunc(Math.min(Math.max(limitRaw, 1), 500)) : 200;
     const links = await app.db.all(
       "SELECT id, group_id, title, url FROM links WHERE sync_state = 'pending' ORDER BY id LIMIT " + limit,
     );
@@ -85,8 +86,12 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, data: { acked: body.ids.length, state: ok ? 'synced' : 'failed' } };
   });
 
-  /** SSE：网页与插件保持长连接，收到 links-changed 就刷新 */
-  app.get('/api/events/stream', async (req, reply) => {
+  /**
+   * SSE：网页与插件保持长连接，收到 links-changed 就刷新。
+   * M11：与页面一致的鉴权（会话 cookie 或 Bearer）。EventSource 不支持自定义 header，
+   * 插件走 URL query 传 token（?token=），extractToken 对 query 参数兜底解析。
+   */
+  app.get('/api/events/stream', { preHandler: app.requireAuth }, async (req, reply) => {
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache, no-transform',
@@ -96,14 +101,18 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     reply.raw.write(': connected' + String.fromCharCode(10, 10));
 
     const send = (event: string, payload: unknown): void => {
+      // M11：连接可能已在中途销毁，写之前检查
+      if (reply.raw.destroyed) return;
       reply.raw.write('event: ' + event + String.fromCharCode(10) + 'data: ' + JSON.stringify(payload) + String.fromCharCode(10, 10));
     };
-    const off = app.events.on('links-changed', (payload) => send('links-changed', payload));
+    const offLink = app.events.on('links-changed', (payload) => send('links-changed', payload));
+    const offGroup = app.events.on('groups-changed', (payload) => send('groups-changed', payload));
     const ping = setInterval(() => send('ping', { at: Date.now() }), 25000);
 
     const cleanup = (): void => {
       clearInterval(ping);
-      off();
+      offLink();
+      offGroup();
     };
     req.raw.on('close', cleanup);
     req.raw.on('error', cleanup);

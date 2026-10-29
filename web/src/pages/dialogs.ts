@@ -5,7 +5,10 @@ import { field } from '../ui/field.ts';
 import { openDialog, openDrawer, overlayActions, type OverlayHandle } from '../ui/overlay.ts';
 import { toast } from '../ui/toast.ts';
 
-export type LinkDraft = { group_id: number; url: string; title: string; description: string };
+/** 提交防重复：onClick 内先 disable 自己，finally（含异常）恢复 */
+
+
+export type LinkDraft = { group_id: number; url: string; title: string; description: string; icon?: string };
 
 export function openGroupDialog(options: {
   mode: 'create' | 'rename';
@@ -33,20 +36,26 @@ export function openGroupDialog(options: {
     label: mode === 'create' ? '建组' : '保存',
     iconName: 'check',
     variant: 'primary',
-    onClick: async () => {
-      const name = (nameField.input as HTMLInputElement).value.trim();
-      if (!name) {
-        toast('分组名不能为空', 'error');
-        return;
+    onClick: async (event) => {
+      const btn = event.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      try {
+        const name = (nameField.input as HTMLInputElement).value.trim();
+        if (!name) {
+          toast('分组名不能为空', 'error');
+          return;
+        }
+        const result = await onSubmit(name);
+        if (!result.ok) {
+          toast(result.error.message, 'error');
+          return;
+        }
+        if (result.data.merged) toast('已合并到同名分组', 'info');
+        handle.close();
+        await onDone();
+      } finally {
+        btn.disabled = false;
       }
-      const result = await onSubmit(name);
-      if (!result.ok) {
-        toast(result.error.message, 'error');
-        return;
-      }
-      if (result.data.merged) toast('已合并到同名分组', 'info');
-      handle.close();
-      await onDone();
     },
   });
 
@@ -71,9 +80,15 @@ export function openConfirmDialog(options: {
     label: confirmLabel,
     iconName: 'trash',
     variant: 'primary',
-    onClick: async () => {
-      await onConfirm();
-      handle.close();
+    onClick: async (event) => {
+      const btn = event.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      try {
+        await onConfirm();
+        handle.close();
+      } finally {
+        btn.disabled = false;
+      }
     },
   });
   const cancel = button({ label: '取消', variant: 'secondary', onClick: () => handle.close() });
@@ -176,8 +191,16 @@ export function openLinkDrawer(options: LinkDrawerOptions): OverlayHandle {
     rows: 3,
   });
 
+  const iconField = field({
+    label: '自定义图标 URL（留空自动抓取 favicon）',
+    type: 'url',
+    value: link && link.icon ? link.icon : '',
+    placeholder: 'https://example.com/logo.png',
+    index: 3,
+  });
+
   const groupSelect = el('select', {
-    class: 'w-full rounded-full border-4 border-quinary bg-[var(--c-panel)] px-6 py-3 text-base font-bold text-fg',
+    class: 'w-full border border-[var(--c-line)] bg-[var(--c-panel)] px-3 h-10 text-fg',
   });
   for (const group of groups) {
     const option = el('option', { value: String(group.id), text: group.name });
@@ -191,8 +214,12 @@ export function openLinkDrawer(options: LinkDrawerOptions): OverlayHandle {
     label: mode === 'create' ? '收藏' : '保存',
     iconName: 'check',
     variant: 'primary',
-    onClick: () => {
-      void run();
+    onClick: (event) => {
+      const btn = event.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      void run().finally(() => {
+        btn.disabled = false;
+      });
     },
   });
 
@@ -202,6 +229,7 @@ export function openLinkDrawer(options: LinkDrawerOptions): OverlayHandle {
       url: (urlField.input as HTMLInputElement).value.trim(),
       title: (titleField.input as HTMLInputElement).value.trim(),
       description: (descField.input as HTMLTextAreaElement).value.trim(),
+      icon: (iconField.input as HTMLInputElement).value.trim() || undefined,
     };
     if (!draft.url) {
       toast('网址不能为空', 'error');
@@ -236,6 +264,7 @@ export function openLinkDrawer(options: LinkDrawerOptions): OverlayHandle {
     urlField.wrapper,
     titleField.wrapper,
     descField.wrapper,
+    iconField.wrapper,
     groupWrap,
     overlayActions(
       remove

@@ -1,6 +1,6 @@
 {
   "name": "suenweb-addon",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "description": "SuenWeb 快速收藏浏览器扩展（Firefox 优先，Chrome/Edge 同源）",
   "scripts": {

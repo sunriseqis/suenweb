@@ -134,24 +134,36 @@ export class LinksRepo {
       if (policy === 'ignore') await this.rememberIgnore(normalized, groupId);
     }
 
-    const res = await this.db.run(
-      "INSERT INTO links (group_id, title, url, url_normalized, description, icon, icon_type, sort_order, sync_state) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM links WHERE group_id = ?), 'pending')",
-      [
-        groupId,
-        displayTitle(input.title, url),
-        url,
-        normalized,
-        toOptionalText(input.description),
-        toOptionalText(input.icon),
-        toIconType(input.icon_type),
-        groupId,
-      ],
-    );
-    return {
-      link: await this.requireById(res.lastInsertRowid),
-      merged: false,
-      cross_group_duplicate: Boolean(crossGroup),
-    };
+    // M6：check-then-insert 在并发下非原子，唯一索引冲突时回落到「已存在那条」语义
+    const params = [
+      groupId,
+      displayTitle(input.title, url),
+      url,
+      normalized,
+      toOptionalText(input.description),
+      toOptionalText(input.icon),
+      toIconType(input.icon_type),
+      groupId,
+    ];
+    const insertSql =
+      "INSERT INTO links (group_id, title, url, url_normalized, description, icon, icon_type, sort_order, sync_state) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 10 FROM links WHERE group_id = ?), 'pending')";
+    try {
+      const res = await this.db.run(insertSql, params);
+      return {
+        link: await this.requireById(res.lastInsertRowid),
+        merged: false,
+        cross_group_duplicate: Boolean(crossGroup),
+      };
+    } catch (err) {
+      // node:sqlite 冲突错误码被 worker 包装为 ERR_SQLITE_ERROR
+      const code = (err as { code?: string }).code;
+      const msg = (err as { message?: string }).message ?? '';
+      const isConstraint = code === 'SQLITE_CONSTRAINT' || code === 'ERR_SQLITE_ERROR' || msg.includes('UNIQUE constraint failed');
+      if (!isConstraint) throw err;
+      const existing = await this.findByUrl(groupId, normalized);
+      if (!existing) throw err;
+      return { link: existing, merged: true };
+    }
   }
 
   private async crossGroupConflict(normalized: string, groupId: number, existing: LinkRow): Promise<Error> {
@@ -204,7 +216,7 @@ export class LinksRepo {
       params.push(patch.icon_type);
     }
     if (sets.length === 0) return { link: current, merged: false };
-    if (patch.url !== undefined || patch.title !== undefined) sets.push('sync_state = ' + 'pending');
+    if (patch.url !== undefined || patch.title !== undefined) sets.push("sync_state = 'pending'");
     sets.push('updated_at = ' + NOW_SQL);
     params.push(id);
     await this.db.run('UPDATE links SET ' + sets.join(', ') + ' WHERE id = ?', params);

@@ -1,6 +1,6 @@
 {
   "name": "suenweb-web",
-  "version": "2.0.0-m2",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "check:dom": "node scripts/dom-check.mjs"
+    "check:dom": "node scripts/dom-check.mjs",
+    "check:ui": "node scripts/ui-check.mjs"
   },
   "dependencies": {
     "@fontsource/bungee": "^5.1.0",

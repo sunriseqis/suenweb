@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+# 卸载前回调：必须先停服务（残留进程会让重装后的 start 误判"已在运行"）。
+# 只停进程、不删数据：TRIM_PKGVAR/data 里是数据库与备份配置。
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VAR_DIR="${TRIM_PKGVAR:-}"
+if [ -z "${VAR_DIR}" ]; then
+    PKG_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd)"
+    VAR_DIR="${PKG_ROOT}/var"
+fi
+case "${VAR_DIR}" in
+    ""|"/"|"/var"|"/usr"|"/tmp") LOG_FILE=/dev/null ;;
+    *) LOG_FILE="${VAR_DIR}/info.log" ;;
+esac
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - [uninstall_init] 卸载前停止服务" >> "${LOG_FILE}" 2>/dev/null
+"${SCRIPT_DIR}/main" stop >> "${LOG_FILE}" 2>&1
+
+# 与 main 相同：反推配置目录并读取用户配置（改过端口的用户卸载时端口等待才用对端口）
+ETC_DIR="${TRIM_PKGETC:-}"
+if [ -z "${ETC_DIR}" ]; then
+    PKG_ROOT_ETC="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd)"
+    ETC_DIR="${PKG_ROOT_ETC}/etc"
+fi
+case "${ETC_DIR}" in
+    ""|"/"|"/etc") ETC_DIR="${VAR_DIR}" ;;
+esac
+if [ -r "${ETC_DIR}/.env" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "${ETC_DIR}/.env" 2>/dev/null || true
+    set +a
+fi
+
+PORT="${SUENWEB_PORT:-8080}"
+for _ in $(seq 1 20); do
+    if command -v timeout >/dev/null 2>&1; then
+        if ! timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/${PORT}" 2>/dev/null; then
+            break
+        fi
+    elif ! (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - [uninstall_init] 完成" >> "${LOG_FILE}" 2>/dev/null
+exit 0

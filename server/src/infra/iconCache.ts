@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile , rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isPrivateHost } from '../domain/isPrivateHost.ts';
 
 export type CachedIcon = { data: Buffer; type: string };
 export type IconLookup = { status: 'hit'; icon: CachedIcon } | { status: 'negative' } | { status: 'miss' };
@@ -9,8 +10,6 @@ const MAX_BYTES = 200 * 1024;
 const FETCH_TIMEOUT_MS = 3000;
 const HIT_TTL_MS = 30 * 24 * 3600 * 1000;
 const NEG_TTL_MS = 24 * 3600 * 1000;
-
-const inflight = new Map<string, Promise<IconLookup>>();
 
 function keyOf(origin: string): string {
   return createHash('sha1').update(origin).digest('hex');
@@ -34,6 +33,7 @@ function sniffType(buffer: Buffer, fallback: string): string {
  */
 export class IconCache {
   private readonly dir: string;
+  private readonly inflight = new Map<string, Promise<IconLookup>>();
 
   constructor(dataDir: string) {
     this.dir = join(dataDir, 'icons');
@@ -63,16 +63,28 @@ export class IconCache {
     return { status: 'miss' };
   }
 
+  /** TOOL-05：清掉某 origin 的正负缓存，下次请求即重抓 */
+  async purge(origin: string): Promise<void> {
+    const base = this.base(origin);
+    await Promise.all([
+      rm(base + '.json', { force: true }),
+      rm(base + '.neg', { force: true }),
+      rm(base, { force: true }),
+    ]).catch(() => {});
+  }
+
   async resolve(origin: string): Promise<IconLookup> {
-    const pending = inflight.get(origin);
+    const pending = this.inflight.get(origin);
     if (pending) return pending;
-    const task = this.doResolve(origin).finally(() => inflight.delete(origin));
-    inflight.set(origin, task);
+    const task = this.doResolve(origin).finally(() => this.inflight.delete(origin));
+    this.inflight.set(origin, task);
     return task;
   }
 
   private sourcesOf(origin: string): string[] {
     const host = origin.replace(/^https?:\/\//, '');
+    // M9 SSRF：私网地址不出网，直接走 DuckDuckGo 代理之外全拒
+    if (isPrivateHost(host)) return [];
     return [
       'https://' + host + '/favicon.ico',
       'https://' + host + '/apple-touch-icon.png',
@@ -101,6 +113,13 @@ export class IconCache {
   }
 
   private async tryFetch(url: string): Promise<CachedIcon | null> {
+    // M9 SSRF：逐源校验（含 DuckDuckGo 代理封装的 host 参数）
+    try {
+      const target = new URL(url);
+      if (target.hostname !== 'icons.duckduckgo.com' && isPrivateHost(target.hostname)) return null;
+    } catch {
+      return null;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {

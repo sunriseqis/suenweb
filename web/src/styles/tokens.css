@@ -40,6 +40,7 @@
   --c-accent-soft: rgba(27, 161, 226, 0.16);
   --c-accent-active: rgba(27, 161, 226, 0.3);
   --c-panel: #1f1f1f;
+  --c-overlay: rgba(0, 0, 0, 0.55);
 }
 
 /* 浅色：浅灰底 + 同色系深蓝 */
@@ -57,4 +58,5 @@
   --c-accent-soft: rgba(11, 111, 164, 0.1);
   --c-accent-active: rgba(11, 111, 164, 0.2);
   --c-panel: #ffffff;
+  --c-overlay: rgba(0, 0, 0, 0.45);
 }

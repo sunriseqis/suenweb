@@ -13,14 +13,19 @@
     </header>
     <main>
       <p id="pageTitle" class="title">读取当前页面…</p>
-      <p id="pageUrl" class="url"></p>
-      <label for="group">收藏到</label>
-      <select id="group"><option value="">未配置</option></select>
-      <div class="row">
-        <button id="save" class="primary">收藏</button>
-        <button id="sync" class="secondary">同步本地</button>
+      <p id="serverLine" class="url"></p>
+
+      <div id="loginBox" hidden>
+        <button id="goLogin" class="primary wide">去登录</button>
       </div>
-      <p id="status" class="status" role="status"></p>
+
+      <div id="errorBox" hidden>
+        <button id="retryBtn" class="secondary wide">重试</button>
+      </div>
+
+      <div id="groups" class="group-grid" hidden></div>
+
+      <p id="beat" class="status" role="status"></p>
     </main>
     <script src="popup.js" type="module"></script>
   </body>

@@ -1,0 +1,42 @@
+#!/bin/bash
+#
+# 安装后回调：fnOS 解压完成后调用。suenweb 的管理密码走 Web 首启引导（AUTH-01），
+# 无需向导建号；这里只持久化向导端口到 etc/.env 并拉起服务。
+
+set -o pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="${TRIM_APPDEST:-}"
+VAR_DIR="${TRIM_PKGVAR:-}"
+ETC_DIR="${TRIM_PKGETC:-}"
+
+if [ -z "${APP_DIR}" ]; then APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"; fi
+if [ -z "${VAR_DIR}" ]; then
+    PKG_ROOT="$(cd "${APP_DIR}/.." && pwd)"
+    VAR_DIR="${PKG_ROOT}/var"
+fi
+if [ -z "${ETC_DIR}" ]; then
+    PKG_ROOT_ETC="$(cd "${APP_DIR}/.." && pwd)"
+    ETC_DIR="${PKG_ROOT_ETC}/etc"
+fi
+mkdir -p "${ETC_DIR}" "${VAR_DIR}/data" 2>/dev/null
+
+LOG_FILE="${VAR_DIR}/info.log"
+log_msg() { echo "$(date '+%Y-%m-%d %H:%M:%S') - [install_callback] $1" >> "${LOG_FILE}" 2>/dev/null; }
+
+# 持久化向导端口（升级不覆盖：只在 .env 不存在时写入）
+if [ -n "${wizard_port:-}" ]; then
+    # 向导端口强制覆盖 .env（安装/升级时改端口是合法操作）
+    if [ -f "${ETC_DIR}/.env" ] && grep -q '^SUENWEB_PORT=' "${ETC_DIR}/.env"; then
+        sed -i "s/^SUENWEB_PORT=.*/SUENWEB_PORT=${wizard_port}/" "${ETC_DIR}/.env"
+    else
+        printf 'SUENWEB_PORT=%s\n' "${wizard_port}" > "${ETC_DIR}/.env"
+    fi
+    log_msg "向导端口 ${wizard_port} 已写入 ${ETC_DIR}/.env"
+fi
+
+if ! "${SCRIPT_DIR}/main" start >> "${LOG_FILE}" 2>&1; then
+    echo "[FATAL] 服务启动失败，请查看 info.log" >&2
+    log_msg "[FATAL] main start 失败（安装不阻断），请查看 info.log"
+fi
+log_msg "install_callback 完成"
+exit 0

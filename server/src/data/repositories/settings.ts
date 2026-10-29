@@ -20,6 +20,9 @@ export const PUBLIC_SETTING_KEYS = [
 export const WRITABLE_SETTING_KEYS = new Set(PUBLIC_SETTING_KEYS);
 
 const PUBLIC_SET = new Set(PUBLIC_SETTING_KEYS);
+// M15：内部键前缀黑名单（保持黑名单方案，改动最小）。新增内部键（口令哈希、令牌等）必须加以下前缀之一，
+// 否则会被 getAll 泄漏到响应里；新增前缀时同步更新此数组。
+const INTERNAL_KEY_PREFIXES = ['auth.', 'backup.', 'webdav.'] as const;
 const NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
 export class SettingsRepo {
@@ -38,7 +41,7 @@ export class SettingsRepo {
     const rows = await this.listRows();
     const out: Record<string, unknown> = {};
     for (const row of rows) {
-      if (row.key.startsWith('auth.') || row.key.startsWith('backup.') || row.key.startsWith('webdav.')) continue;
+      if (INTERNAL_KEY_PREFIXES.some((p) => row.key.startsWith(p))) continue;
       out[row.key] = parseValue(row.value);
     }
     return out;

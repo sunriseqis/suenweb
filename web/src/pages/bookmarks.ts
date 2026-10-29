@@ -1,6 +1,6 @@
 import type { GroupWithLinks, Link } from '../lib/api.ts';
 import { cn } from '../lib/cn.ts';
-import { append, el } from '../lib/dom.ts';
+import { append, el, safeHref } from '../lib/dom.ts';
 import { button } from '../ui/button.ts';
 import { icon } from '../ui/icons.ts';
 import { tile } from '../ui/surfaces.ts';
@@ -37,20 +37,68 @@ function hostOf(url: string): string {
   }
 }
 
-function faviconSpan(host: string, size: number, extra = ''): HTMLElement {
-  const node = el('span', {
-    class: 'pointer-events-none absolute bg-contain bg-center bg-no-repeat opacity-80 ' + extra,
-    'aria-hidden': 'true',
-  });
-  node.style.width = size + 'px';
-  node.style.height = size + 'px';
-  node.style.backgroundImage = 'url(/api/icon?domain=' + encodeURIComponent(host) + ')';
+type IconLink = { icon: string | null; icon_type: string };
+
+const isCustomIcon = (link: IconLink): boolean => link.icon_type === 'url' && Boolean(link.icon);
+
+/** 内联流图标：失败时隐藏自身（占位由外层容器决定） */
+function faviconInline(link: IconLink & { url: string }, _size: number): HTMLElement {
+  const host = hostOf(link.url);
+  const node = el('span', { class: 'block h-full w-full bg-contain bg-center bg-no-repeat', 'aria-hidden': 'true' });
+  if (isCustomIcon(link)) {
+    node.style.backgroundImage = 'url("' + (link.icon as string).replace(/"/g, '%22') + '")';
+    return node;
+  }
+  if (iconFailedHosts.has(host)) return node;
+  // 先 probe（new Image onload/onerror）确认图标存在，成功才赋 backgroundImage，避免双倍请求
+  const src = '/api/icon?domain=' + encodeURIComponent(host);
+  const probe = new Image();
+  probe.onload = () => {
+    node.style.backgroundImage = 'url("' + src.replace(/"/g, '%22') + '")';
+  };
+  probe.onerror = () => {
+    iconFailedHosts.add(host);
+    persistIconFailedHosts(iconFailedHosts);
+  };
+  probe.src = src;
   return node;
 }
 
+/** 会话级负缓存：404 的域名不再重复请求（减少 404 噪音）；刷新站点图标成功后清除 */
+const ICON_FAILED_KEY = 'sw.iconFailed';
+
+function loadIconFailedHosts(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(ICON_FAILED_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistIconFailedHosts(hosts: Set<string>): void {
+  try {
+    sessionStorage.setItem(ICON_FAILED_KEY, JSON.stringify([...hosts]));
+  } catch {
+    // 存储不可用时静默降级为仅内存缓存
+  }
+}
+
+const iconFailedHosts = loadIconFailedHosts();
+
+export function clearIconFailureCache(): void {
+  iconFailedHosts.clear();
+  try {
+    sessionStorage.removeItem(ICON_FAILED_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+
 function modeOf(group: GroupWithLinks): DisplayMode {
   const mode = group.display_mode;
-  if (mode === 'grid' || mode === 'list' || mode === 'icon') return mode;
+  if (mode === 'icon' || mode === 'grid') return mode;
   return group.type === 'fixed' ? 'grid' : 'icon';
 }
 
@@ -179,7 +227,6 @@ function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boo
     append(tools, [
       tinyAction(pinned ? '取消置顶' : '设为置顶', pinned ? 'arrow-down' : 'arrow-up', () => props.onTogglePin(group)),
       tinyAction('宽磁贴', 'grid', () => props.onDisplayMode(group, 'grid'), mode === 'grid'),
-      tinyAction('行磁贴', 'list', () => props.onDisplayMode(group, 'list'), mode === 'list'),
       tinyAction('方磁贴', 'bookmark', () => props.onDisplayMode(group, 'icon'), mode === 'icon'),
       pinned
         ? tinyAction(
@@ -203,14 +250,9 @@ function renderSection(group: GroupWithLinks, props: BookmarksProps, pinned: boo
   }
 
   if (mode === 'grid') {
-    const grid = el('div', { class: pinned ? 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]' : 'grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(232px,1fr))]' });
+    const grid = el('div', { class: pinned ? 'grid items-start gap-2 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]' : 'grid items-start gap-2 [grid-template-columns:repeat(auto-fill,minmax(232px,1fr))]' });
     links.forEach((link) => grid.appendChild(renderWideTile(link, props, links, editable)));
     if (editable) grid.appendChild(addTile('min-h-[104px]', () => props.onAddLink(group.id)));
-    section.appendChild(grid);
-  } else if (mode === 'list') {
-    const grid = el('div', { class: 'grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]' });
-    links.forEach((link) => grid.appendChild(renderRowTile(link, props, links, editable)));
-    if (editable) grid.appendChild(addTile('h-10', () => props.onAddLink(group.id)));
     section.appendChild(grid);
   } else {
     const grid = el('div', { class: 'grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(116px,1fr))]' });
@@ -276,17 +318,27 @@ function hoverTools(link: Link, props: BookmarksProps, withMove = false): HTMLEl
 }
 
 function renderWideTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'relative min-h-[104px] p-3.5' });
-  if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 13, 'right-2 top-2'));
-  wrap.append(
-    el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex h-full flex-col justify-between', title: link.title + ' · ' + link.url },
-      el('span', { class: 'line-clamp-2 text-[14px] font-semibold leading-snug text-fg', text: link.title }),
-      el('span', { class: 'mt-2 block truncate text-[11px] uppercase tracking-[0.06em] text-[var(--c-fg-soft)]', text: hostOf(link.url) }),
-    ),
+  const wrap = tile({ class: 'relative h-[96px] overflow-hidden p-3' });
+  const showIcon = props.fetchIcons || isCustomIcon(link);
+  const href = safeHref(link.url);
+  const inner = el(href ? 'a' : 'span', {
+    ...(href ? { href, target: '_blank', rel: 'noopener noreferrer' } : {}),
+    class: 'flex h-full items-stretch gap-2.5',
+    title: link.title + ' · ' + link.url,
+  });
+  if (showIcon) {
+    // 图标进内容流：左侧 28px 常驻方块，取不到时占位保持对齐
+    inner.appendChild(el('span', { class: 'relative mt-0.5 h-7 w-7 shrink-0' }, faviconInline(link, 28)));
+  }
+  const texts = el('span', { class: 'flex min-w-0 flex-1 flex-col' },
+    el('span', { class: 'line-clamp-2 text-[15px] font-semibold leading-snug text-fg', text: link.title }),
+    el('span', { class: 'mt-0.5 block truncate text-[11px] text-[var(--c-fg-soft)]', text: hostOf(link.url) }),
   );
   if (link.description) {
-    wrap.appendChild(el('p', { class: 'mt-1 line-clamp-1 text-[10px] text-[var(--c-fg-soft)]', text: link.description }));
+    texts.appendChild(el('span', { class: 'mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--c-fg-soft)]', text: link.description }));
   }
+  inner.appendChild(texts);
+  wrap.appendChild(inner);
   if (editable) {
     wrap.appendChild(hoverTools(link, props, true));
     dragify(wrap, link, siblings, props);
@@ -294,30 +346,20 @@ function renderWideTile(link: Link, props: BookmarksProps, siblings: Link[], edi
   return wrap;
 }
 
-function renderRowTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'relative flex h-10 items-center gap-2 px-2.5' });
-  if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 12, 'right-1.5 top-1.5'));
-  wrap.appendChild(
-    el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex min-w-0 flex-1 items-baseline gap-2', title: link.url },
-      el('span', { class: 'truncate text-[13px] text-fg', text: link.title }),
-      el('span', { class: 'shrink-0 truncate text-[10px] uppercase tracking-[0.04em] text-[var(--c-fg-soft)]', text: hostOf(link.url) }),
-    ),
-  );
-  if (editable) {
-    wrap.appendChild(hoverTools(link, props));
-    dragify(wrap, link, siblings, props);
-  }
-  return wrap;
-}
 
 function renderSquareTile(link: Link, props: BookmarksProps, siblings: Link[], editable: boolean): HTMLElement {
-  const wrap = tile({ class: 'relative flex aspect-square items-center justify-center p-1.5', square: true });
-  if (props.fetchIcons) wrap.appendChild(faviconSpan(hostOf(link.url), 12, 'right-1 top-1'));
-  wrap.appendChild(
-    el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer', class: 'flex h-full w-full items-center justify-center text-center', title: link.title + ' · ' + link.url },
-      el('span', { class: 'line-clamp-3 text-[12px] font-medium leading-snug text-fg', text: link.title }),
-    ),
+  const wrap = tile({ class: 'relative p-2', square: true });
+  const showIcon = props.fetchIcons || isCustomIcon(link);
+  const href2 = safeHref(link.url);
+  const link2 = el(href2 ? 'a' : 'span', {
+    ...(href2 ? { href: href2, target: '_blank', rel: 'noopener noreferrer' } : {}),
+    class: 'flex h-full w-full flex-col items-center justify-center gap-1.5 text-center',
+    title: link.title + ' · ' + link.url,
+  },
+    showIcon ? el('span', { class: 'relative h-6 w-6 shrink-0' }, faviconInline(link, 24)) : el('span', { class: 'h-6 w-6 shrink-0' }),
+    el('span', { class: 'line-clamp-3 text-[12px] font-medium leading-snug text-fg', text: link.title }),
   );
+  wrap.appendChild(link2);
   if (editable) {
     wrap.appendChild(hoverTools(link, props));
     dragify(wrap, link, siblings, props);

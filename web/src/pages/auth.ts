@@ -5,14 +5,13 @@ import { brandLogo } from '../ui/logo.ts';
 
 export type AuthProps = {
   mode: 'setup' | 'login';
-  busy: boolean;
   error: string | null;
-  onSubmit: (password: string) => void;
+  onSubmit: (password: string) => Promise<void> | void;
   onHome: () => void;
 };
 
 export function renderAuth(props: AuthProps): HTMLElement {
-  const { mode, busy, error } = props;
+  const { mode, error } = props;
   const root = el('div', { class: 'relative z-10 flex min-h-screen items-center justify-center bg-[var(--c-bg)] px-4 py-16' });
   const panel = el('div', { class: 'w-full max-w-sm border border-[var(--c-line)] bg-[var(--c-surface)]' });
   panel.appendChild(el('div', { class: 'h-0.5 w-full bg-accent', 'aria-hidden': 'true' }));
@@ -39,12 +38,18 @@ export function renderAuth(props: AuthProps): HTMLElement {
     autofocus: true,
   });
 
+  // busy 状态只作用于按钮本身，不进 store、不触发全量重绘（避免密码输入被清空）
   const submit = button({
-    label: busy ? '处理中' : mode === 'setup' ? '开始使用' : '进入',
+    label: mode === 'setup' ? '开始使用' : '进入',
     variant: 'primary',
-    disabled: busy,
     class: 'mt-4 w-full justify-center',
-    onClick: () => props.onSubmit((pw.input as HTMLInputElement).value),
+    onClick: () => {
+      if (submit.disabled) return;
+      submit.disabled = true;
+      void Promise.resolve(props.onSubmit((pw.input as HTMLInputElement).value)).finally(() => {
+        submit.disabled = false;
+      });
+    },
   });
 
   pw.input.addEventListener('keydown', (event) => {

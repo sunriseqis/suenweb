@@ -1,0 +1,68 @@
+name: 构建发行飞牛端
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '发布版本 Tag（如 v2.0.0，不填则读 server/package.json 版本）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release-fnos:
+    name: Build & Release fnOS FPK
+    runs-on: ubuntu-latest
+    env:
+      INPUT_TAG_NAME: ${{ github.event.inputs.tag_name }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install & Build Web
+        run: |
+          cd web && npm ci --no-audit --no-fund && npm run build && cd ..
+
+      - name: Build fnOS FPK Package
+        run: |
+          node scripts/build-fn.mjs
+          cd output
+          sha256sum *.fpk > checksums.txt
+          cd ..
+
+      - name: Prepare Release Assets & Tag
+        id: prep
+        run: |
+          RAW_VER=$(node -p "require('./server/package.json').version.match(/(\d+\.\d+\.\d+)/)[1]")
+          TAG="${INPUT_TAG_NAME}"
+          if [ -z "$TAG" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              TAG="${GITHUB_REF#refs/tags/}"
+            else
+              TAG="v${RAW_VER}"
+            fi
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${RAW_VER}" >> $GITHUB_OUTPUT
+
+      - name: Attach FPK to GitHub Release
+        # 版本保留 @v2：未做 pin SHA 供应链确认，确认后改为 commit SHA 引用
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.prep.outputs.tag }}
+          name: SuenWeb ${{ steps.prep.outputs.tag }}
+          files: |
+            output/*.fpk
+            output/checksums.txt
+          draft: false
+          prerelease: false

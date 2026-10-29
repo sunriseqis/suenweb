@@ -32,6 +32,7 @@ class WorkerClient {
   private readonly pending = new Map<number, Pending>();
   private seq = 0;
   private restarts = 0;
+  private stabilityTimer: NodeJS.Timeout | null = null;
   private closing = false;
   private readonly init: WorkerInit;
   private readonly onError: (e: Error) => void;
@@ -45,7 +46,11 @@ class WorkerClient {
   private spawn(): void {
     const worker = new Worker(WORKER_URL, { workerData: this.init });
     this.worker = worker;
-    worker.on('message', (msg: Reply) => {
+    worker.on('message', (msg: Reply & { type?: string }) => {
+      if (msg && (msg as { type?: string }).type === 'ready') {
+        this.scheduleStabilityReset();
+        return;
+      }
       if (!msg || typeof msg.id !== 'number') return;
       const p = this.pending.get(msg.id);
       if (!p) return;
@@ -70,6 +75,16 @@ class WorkerClient {
         this.onError(err);
       }
     });
+  }
+
+  /** M7：worker 正常运行满 60 秒后把 restarts 清零——偶发崩溃不应累积成永久放弃 */
+  private scheduleStabilityReset(): void {
+    if (this.stabilityTimer) clearTimeout(this.stabilityTimer);
+    this.stabilityTimer = setTimeout(() => {
+      this.restarts = 0;
+      this.stabilityTimer = null;
+    }, 60_000);
+    this.stabilityTimer.unref?.();
   }
 
   private failAll(err: Error): void {

@@ -3,7 +3,6 @@ export type Child = Node | string | number | null | undefined | false;
 export type Props = {
   class?: string;
   text?: string;
-  html?: string;
   dataset?: Record<string, string>;
   on?: Record<string, EventListener>;
   ref?: (node: HTMLElement) => void;
@@ -15,7 +14,6 @@ function applyProps(node: HTMLElement, props: Props): void {
     if (value === undefined || value === null || value === false) continue;
     if (key === 'class') node.className = String(value);
     else if (key === 'text') node.textContent = String(value);
-    else if (key === 'html') node.innerHTML = String(value);
     else if (key === 'dataset') Object.assign(node.dataset, value as Record<string, string>);
     else if (key === 'on') {
       for (const [event, handler] of Object.entries(value as Record<string, EventListener>)) {
@@ -36,6 +34,16 @@ export function el(tag: string, props: Props = {}, ...children: Child[]): HTMLEl
   applyProps(node, props);
   append(node, children);
   return node;
+}
+
+/** 仅放行 http/https 的绝对 URL；其它（含 javascript: 等）返回 null */
+export function safeHref(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }
 
 export function append(parent: Node, children: Child[]): void {
@@ -59,6 +67,6 @@ export function svg(viewBox: string, props: Props & { inner: string }): SVGSVGEl
     if (key === 'class') node.setAttribute('class', String(value));
     else node.setAttribute(key, value === true ? '' : String(value));
   }
-  node.innerHTML = props.inner;
+  node.innerHTML = props.inner; // 仅静态内容：inner 只来自源码内置的 SVG 片段（icons.ts/logo.ts），不接收用户输入
   return node;
 }

@@ -1,0 +1,6 @@
+#!/bin/bash
+# 升级前回调：替换文件前必须停掉旧进程（否则旧代码驻留内存、升级形同虚设）。
+# 失败不阻断升级（exit 0）—— 升级失败比"停不掉"更严重。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"${SCRIPT_DIR}/main" stop >> /dev/null 2>&1 || true
+exit 0

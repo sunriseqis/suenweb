@@ -1,6 +1,26 @@
 # 项目记忆（长期，跨会话必读）
 
-最后更新：M1 完成 + v1.6 去重/密码口径 + M2 前端（设计系统已落地）。本文件只写「不该被重新讨论」的东西。
+最后更新：v2.0.0 收口（版本统一、文档按实现回写、fpk 与 CI 已验证）。历史：M7 基本完成（含 fnOS 原生包工程）；D-1/D-2/D-3 全部关闭。fn 打包所有坑照搬 SuenMusic 审计结论（.bin 软链死链/TRIM 硬闸/升级停进程/守护残留/.env 放 etc）（操作日志不做 / 插件自托管分发 / 图标刷新 / 反向删除同步不做）。本文件只写「不该被重新讨论」的东西。
+
+## 〇-2、M4 关键实现决策（2026-10-27）
+
+| 项 | 决策 |
+|---|---|
+| 备份文件格式 | SWB1：魔数 SWB1 + salt(16) + iv(12) + AES-256-GCM 密文 + tag(16)；密钥 PBKDF2-SHA256 120k 迭代 |
+| 两套加密口径 | ① 配置导出/导入（.swb1 交给用户保管）：密钥=管理密码派生（IMP-06 契约）② WebDAV 自动备份：密钥=服务端随机 32 字节存 settings，下载还原需验管理密码（BAK-07 口令门槛）。原因：服务端只有 scrypt 哈希，无法用管理密码明文做每日任务的加密钥 |
+| 轮转范围 | 只轮转 suenweb-backup-auto-*，manual 备份永不自动删 |
+| 导入语义 | HTML 解析层合并同名文件夹；跨组重复 allow/skip 两档；整批事务提交 |
+| 内部设置键 | webdav.* 与 backup.* 与 auth.* 同级，getAll() 一律过滤，绝不外发 |
+
+## 〇、v1.7 增量裁决（2026-10-23 旧版对比后）
+
+| 项 | 决策 |
+|---|---|
+| 操作日志 | 不做（单用户自部署，无审计需求） |
+| 插件分发 | 服务端自托管下载 + 开发者模式加载为主；AMO 正式签名仅发版时人工一次，不做自动签名回传流水线 |
+| 图标手动刷新 | 提供（写接口清缓存并重抓，登录才可用） |
+| WebDAV 备份 | 仅服务端做（裁决 9 不变），插件侧直备不保留 |
+| 反向删除同步 | 不做：插件只新增（服务端→浏览器单向）；删除只在 Web 前端操作，浏览器书签不回删 |
 
 ## 一、项目铁律
 
@@ -27,7 +47,11 @@
 | 服务端备份 | 配了 WebDAV 才每日自动加密上传，没配就不做；保留份数按设置轮转 |
 | 分组重名 | 归一化（trim + 空白折叠 + 大小写不敏感 + NFKC）后唯一，重名自动合并（改名撞名也合并，链接随之迁移，重复 URL 丢弃） |
 | 链接去重 | url_normalized：协议主机小写、去默认端口、去尾斜杠、去跟踪参数（utm_*、fbclid 等）、丢 hash、query 排序；**同组重复静默合并**；**跨组重复返回 409，由前端弹窗让用户放行**（on_duplicate=allow/ignore/skip）；用户选 ignore 写入 dedupe_ignores，同一 (URL, 分组) 不再提示，可撤销 |
-| 浏览器 | Firefox 为主（MV3 事件页），Chrome/Edge 同步支持；不做 MV2 |
+| 插件交互 | **点图标即用**：未登录点图标开设置页；已登录点图标弹分组网格，点组即收藏并关闭。设置页两态（未登录=地址+密码+登录/测试；已登录=地址+登出/插件备份/插件还原+首页开关）。**没有任何右键菜单**，故无 contextMenus / notifications 权限 |
+| 设置页 | 设置与数据合并为 `#/settings` 两 Tab（通用/数据）+ 8 卡片；**所有输入框进弹窗**，页面只有按钮、开关、只读列表；胶囊「数据」入口已取消 |
+| 端口策略 | **fnOS 端口必须支持自定义**（产品方向）：安装/升级向导 wizard_port 强制覆盖 etc/.env；main/upgrade/uninstall 全链路读 .env 取真实端口；manifest.service_port 是静态默认值（fnOS 限制，用户改端口后 checkport 可能判异常——已知平台限制） |
+| 版本 | 全项目统一 **2.0.0**：server / web / addons（含两份 manifest）/ fn manifest |
+| 浏览器 | Firefox 为主（**MV2 包**，host 权限写 permissions 安装即授予），Chrome/Edge 用 MV3 包；双包由 addons/scripts/pack.mjs 产出。Firefox MV3 的 host 权限是用户 opt-in，会导致「权限显示已授予但请求被拦」，故 Firefox 侧用 MV2 |
 | 外观个性化 | 背景/壁纸/字体的个性化选项仍推迟 P3；但**视觉风格本身**按上面第 3 行采用 Maximalism/Dopamine，深浅两套主题随 M2 一起交付 |
 | 前端设计系统 | **Metro / 磁贴**（docs/design/DESIGN-SYSTEM.md v2）：0 圆角 + 1px 线 + 无阴影渐变，**全站单一强调色**，磁贴三尺寸；强调色只表达可交互/选中/当前。v1 的 Maximalism 已存档为 DESIGN-SYSTEM-dopamine.md，不再执行 |
 | 前端技术 | Vite + TS + Tailwind v4 + 原生 DOM 渲染函数 + 类名变体表；不引 React/shadcn |
@@ -35,6 +59,7 @@
 | 字体 | Outfit + DM Sans + Bungee 自托管 woff2（仅拉丁子集，@fontsource）；中文回退系统黑体，中文标题禁用三层文字阴影 |
 | 图标 | 内联 SVG symbol 精灵（Lucide 图形），零运行时依赖、离线可用；禁止 emoji 装饰 |
 | AI | 全部移除，无 /api/ai/*、无 llm_* 配置 |
+| 搜索引擎 | 内置 5 个：Google / Bing / DuckDuckGo / Brave / Startpage。Qwant（跳转异常）与 Mojeek（反爬墙「automated queries」）经真机验证不可用，已移除不再回加 |
 
 ## 三、接口与数据约定（M1 已落地，改要同步文档）
 

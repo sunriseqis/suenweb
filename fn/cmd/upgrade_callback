@@ -1,0 +1,61 @@
+#!/bin/bash
+# 升级后回调：拉起新版本并确认 /api/health 响应，版本号写入 info.log。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="${TRIM_APPDEST:-}"
+VAR_DIR="${TRIM_PKGVAR:-}"
+if [ -z "${APP_DIR}" ]; then APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"; fi
+if [ -z "${VAR_DIR}" ]; then
+    PKG_ROOT="$(cd "${APP_DIR}/.." && pwd)"
+    VAR_DIR="${PKG_ROOT}/var"
+fi
+LOG_FILE="${VAR_DIR}/info.log"
+log_msg() { echo "$(date '+%Y-%m-%d %H:%M:%S') - [upgrade_callback] $1" >> "${LOG_FILE}" 2>/dev/null; }
+
+# 与 main 相同：反推配置目录并读取用户配置（改过端口的用户升级后健康检查才用对端口）
+ETC_DIR="${TRIM_PKGETC:-}"
+if [ -z "${ETC_DIR}" ]; then
+    PKG_ROOT_ETC="$(cd "${APP_DIR}/.." 2>/dev/null && pwd)"
+    ETC_DIR="${PKG_ROOT_ETC}/etc"
+fi
+case "${ETC_DIR}" in
+    ""|"/"|"/etc") ETC_DIR="${VAR_DIR}" ;;
+esac
+for envf in "${ETC_DIR}/.env"; do
+    if [ -r "${envf}" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        . "${envf}" 2>/dev/null || true
+        set +a
+        break
+    fi
+done
+
+# 升级时向导端口以最新为准（用户可能在升级向导里改了端口）
+. "${ETC_DIR}/.env" 2>/dev/null || true
+# 升级向导传入的端口强制覆盖 .env（用户升级时改端口是合法操作）
+if [ -n "${wizard_port:-}" ]; then
+    if [ -f "${ETC_DIR}/.env" ] && grep -q '^SUENWEB_PORT=' "${ETC_DIR}/.env"; then
+        sed -i "s/^SUENWEB_PORT=.*/SUENWEB_PORT=${wizard_port}/" "${ETC_DIR}/.env"
+    else
+        printf 'SUENWEB_PORT=%s\n' "${wizard_port}" > "${ETC_DIR}/.env"
+    fi
+    log_msg "升级向导端口 ${wizard_port} 已写入 ${ETC_DIR}/.env"
+fi
+. "${ETC_DIR}/.env" 2>/dev/null || true
+PORT="${SUENWEB_PORT:-8080}"
+"${SCRIPT_DIR}/main" start >> "${LOG_FILE}" 2>&1
+
+for _ in $(seq 1 15); do
+    if command -v curl >/dev/null 2>&1; then
+        BODY="$(curl -sf "http://127.0.0.1:${PORT}/api/health" 2>/dev/null)"
+        if [ -n "${BODY}" ]; then
+            log_msg "健康检查通过：${BODY}"
+            exit 0
+        fi
+    else
+        (exec 3<>/dev/tcp/127.0.0.1/${PORT}) 2>/dev/null && { exec 3<&- 2>/dev/null; log_msg "端口 ${PORT} 已监听"; exit 0; }
+    fi
+    sleep 2
+done
+log_msg "[WARN] 升级后 30 秒内健康检查未通过，请查看日志"
+exit 0

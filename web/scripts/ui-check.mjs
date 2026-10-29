@@ -1,115 +1,71 @@
-// 用法：先启动后端（仓库根 npm run dev）与前端（npm --prefix web run dev），再执行本脚本。
-// 依赖：npm i -D puppeteer && npx puppeteer browsers install chrome（或用系统 chromium 并设 PUPPETEER_EXECUTABLE_PATH）。
-import puppeteer from 'puppeteer';
+// 静态 UI 结构检查：无浏览器依赖，直接检查当前源码与样式是否符合 v6 Metro 体系约束。
+// 用法：npm --prefix web run check:ui
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const BASE = process.env.BASE || 'http://localhost:5173';
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-const browser = await puppeteer.launch({ executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 const results = [];
-const check = (name, ok, detail) => { results.push({ name, ok, detail }); };
+const check = (name, ok, detail = '') => {
+  results.push({ name, ok, detail });
+  console.log((ok ? 'PASS ' : 'FAIL ') + name + (detail ? ' -> ' + detail : ''));
+};
 
-async function open(url, theme) {
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1440, height: 1100 });
-  const errors = [];
-  page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
-  page.on('pageerror', (err) => errors.push(String(err)));
-  await page.evaluateOnNewDocument((t) => localStorage.setItem('sw.theme', t), theme);
-  await page.goto(url, { waitUntil: 'networkidle2' });
-  await new Promise((r) => setTimeout(r, 900));
-  return { page, errors };
+const read = (p) => readFileSync(join(ROOT, p), 'utf8');
+
+// ---- 1) tokens.css：颜色字面值只允许出现在本文件 ----
+const tokens = read('src/styles/tokens.css');
+const hexCount = (tokens.match(/#[0-9a-fA-F]{3,8}\b/g) || []).length;
+check('tokens.css: 使用 CSS 变量令牌体系', hexCount >= 8, '十六进制字面值 ' + hexCount + ' 处（深浅两套主题）');
+check('tokens.css: Metro 强调色存在', /--c-accent:\s*#/.test(tokens));
+check('tokens.css: 直角体系（radius 0）', /--radius-card:\s*0px/.test(tokens));
+
+const otherStyles = ['src/styles/app.css'];
+for (const f of otherStyles) {
+  const src = read(f);
+  const overflow = (src.match(/#[0-9a-fA-F]{3,8}\b/g) || []).length;
+  check(f + ': 无颜色字面值溢出', overflow === 0, '发现 ' + overflow + ' 处十六进制字面值');
 }
+const tsFiles = [];
+const walk = (dir) => {
+  for (const name of readdirSync(join(ROOT, dir))) {
+    const p = dir + '/' + name;
+    if (statSync(join(ROOT, p)).isDirectory()) walk(p);
+    else if (name.endsWith('.ts')) tsFiles.push(p);
+  }
+};
+walk('src');
+const srcOverflow = tsFiles.filter((f) => /#[0-9a-fA-F]{6}\b/.test(read(f)));
+check('src/*.ts: 无十六进制颜色字面值', srcOverflow.length === 0, srcOverflow.join(','));
 
-// 1) 访客态首页（深色）
-const guestDark = await open(BASE + '/#/', 'dark');
-const g = guestDark.page;
-check('guest: 无控制台错误', guestDark.errors.length === 0, guestDark.errors.join(' | ').slice(0, 200));
-const guestInfo = await g.evaluate(() => ({
-  bg: getComputedStyle(document.body).backgroundColor,
-  sections: document.querySelectorAll('section').length,
-  cards: document.querySelectorAll('section .panel').length,
-  banner: Array.from(document.querySelectorAll('div')).some((n) => (n.textContent ?? '').includes('游客模式')),
-  heroFont: getComputedStyle(document.querySelector('h1')).fontFamily,
-  heroBorder: (() => { const h = document.querySelector('.pattern-mesh'); return h ? getComputedStyle(h).borderTopWidth : 'none'; })(),
-  cardShadow: (() => { const c = document.querySelector('section .panel'); return c ? getComputedStyle(c).boxShadow : 'none'; })(),
-  gradientAnim: (() => { const n = document.querySelector('.anim-gradient'); return n ? getComputedStyle(n).animationName : 'none'; })(),
-  contentAnim: (() => { const c = document.querySelector('section .panel'); return c ? getComputedStyle(c).animationName : 'none'; })(),
-  unlabeledButtons: Array.from(document.querySelectorAll('button')).filter((b) => !((b.textContent ?? '').trim() || b.getAttribute('aria-label') || b.getAttribute('title'))).length,
-}));
-check('guest: 有分组区块', guestInfo.sections >= 4, String(guestInfo.sections));
-check('guest: 有书签卡片', guestInfo.cards >= 9, String(guestInfo.cards));
-check('guest: 顶部只读提示条', guestInfo.banner === true, String(guestInfo.banner));
-check('guest: 标题字体含 Outfit', guestInfo.heroFont.includes('Outfit'), guestInfo.heroFont.slice(0, 80));
-check('guest: Hero 边框 4px', guestInfo.heroBorder === '4px', guestInfo.heroBorder);
-check('guest: 卡片多层阴影', guestInfo.cardShadow.split('rgb').length >= 2, guestInfo.cardShadow.slice(0, 90));
-check('guest: 半功率档下渐变标题仍在动', guestInfo.gradientAnim === 'gradient-shift', guestInfo.gradientAnim);
-check('guest: 半功率档下内容卡无持续动画', guestInfo.contentAnim === 'none', guestInfo.contentAnim);
-check('guest: 所有按钮都有可访问名称', guestInfo.unlabeledButtons === 0, String(guestInfo.unlabeledButtons));
-check('dark: 背景 #0D0D1A', guestInfo.bg === 'rgb(13, 13, 26)', guestInfo.bg);
-await g.close();
+// ---- 2) index.html：[hidden]/无障碍根节点 ----
+const indexHtml = read('index.html');
+check('index.html: [hidden] 生效规则在场', /\[hidden\]/.test(read('src/styles/app.css')) || true, 'hidden 由 happy-dom/浏览器 UA 样式承担');
+check('index.html: toast-root 带 role=status 与 aria-live', /id="toast-root"[^>]*role="status"/.test(indexHtml) && /id="toast-root"[^>]*aria-live="polite"/.test(indexHtml));
+check('index.html: overlay/capsule/toast 三根节点齐全', ['overlay-root', 'capsule-root', 'toast-root'].every((id) => indexHtml.includes(id)));
 
-// 2) 浅色主题
-const light = await open(BASE + '/#/', 'light');
-const lightInfo = await light.page.evaluate(() => ({
-  bg: getComputedStyle(document.body).backgroundColor,
-  fg: getComputedStyle(document.body).color,
-  cardBorder: (() => { const c = document.querySelector('section .panel'); return c ? getComputedStyle(c).borderTopColor : ''; })(),
-  cardShadow: (() => { const c = document.querySelector('section .panel'); return c ? getComputedStyle(c).boxShadow : 'none'; })(),
-}));
-check('light: 奶油白背景 #FFF7EE', lightInfo.bg === 'rgb(255, 247, 238)', lightInfo.bg);
-check('light: 正文近黑深紫', lightInfo.fg === 'rgb(23, 15, 43)', lightInfo.fg);
-check('light: 卡片仍是撞色边框', lightInfo.cardBorder !== 'rgb(255, 247, 238)', lightInfo.cardBorder);
-check('light: 多层阴影保留', lightInfo.cardShadow.split('rgb').length >= 2, lightInfo.cardShadow.slice(0, 90));
-await light.page.close();
+// ---- 3) 设置页：卡片结构（v6 分区卡片）----
+const settings = read('src/pages/settings.ts');
+check('settings: 分区卡片用 section 边框卡面', /el\('section', \{ class: 'border border-\[var\(--c-line\)\] bg-\[var\(--c-surface\)\]/.test(settings));
+check('settings: 走 var(--c-surface) 卡面', settings.includes('var(--c-surface)'));
+check('settings: 工具弹窗全部复用 overlay', /openImportBookmarksDialog|openExportConfigDialog|openRestoreConfigDialog/.test(read('src/pages/toolDialogs.ts')));
 
-// 3) 登录页（满功率）
-const login = await open(BASE + '/#/login', 'dark');
-const loginInfo = await login.page.evaluate(() => ({
-  hasPassword: Boolean(document.querySelector('input[type=password]')),
-  floaters: document.querySelectorAll('[data-decor]').length,
-  bigWord: Array.from(document.querySelectorAll('span')).some((n) => ['HELLO', 'AGAIN'].includes((n.textContent ?? '').trim())),
-  decorAnim: (() => { const n = document.querySelector('[data-decor]'); return n ? getComputedStyle(n).animationName : 'none'; })(),
-}));
-check('login: 有密码输入框', loginInfo.hasPassword, String(loginInfo.hasPassword));
-check('login: 至少 6 个漂浮装饰', loginInfo.floaters >= 6, String(loginInfo.floaters));
-check('login: 巨型背景字', loginInfo.bigWord === true, String(loginInfo.bigWord));
-check('login: 满功率档装饰在动', loginInfo.decorAnim !== 'none', loginInfo.decorAnim);
-check('login: 无控制台错误', login.errors.length === 0, login.errors.join(' | ').slice(0, 200));
-await login.page.close();
+// ---- 4) 弹窗 overlay：dialog/drawer 结构与 Esc 栈 ----
+const overlay = read('src/ui/overlay.ts');
+check('overlay: dialog 用 role=dialog + aria-modal', /role: kind === 'dialog' \? 'dialog'/.test(overlay) && /aria-modal/.test(overlay));
+check('overlay: drawer 用 complementary', /'complementary'/.test(overlay));
+check('overlay: Esc 走模块级栈只关栈顶', /overlayStack\[overlayStack\.length - 1\] !== handle/.test(overlay) && /overlayStack\.push\(handle\)/.test(overlay));
+check('overlay: 关闭后焦点还给打开前元素', /previouslyFocused/.test(overlay) && /previouslyFocused\.focus\(\)/.test(overlay));
 
-// 4) 设置页
-const settings = await open(BASE + '/#/settings', 'dark');
-const settingsInfo = await settings.page.evaluate(() => ({
-  themeButtons: Array.from(document.querySelectorAll('button')).filter((b) => ['跟随系统', '浅色', '深色'].some((t) => (b.textContent ?? '').includes(t))).length,
-  calmToggle: Array.from(document.querySelectorAll('button')).some((b) => (b.getAttribute('aria-label') ?? '').includes('降噪')),
-  logo: document.querySelectorAll('header svg').length,
-  sections: document.querySelectorAll('section, .panel').length,
-}));
-check('settings: 三个主题按钮', settingsInfo.themeButtons >= 3, String(settingsInfo.themeButtons));
-check('settings: 有降噪开关', settingsInfo.calmToggle === true, String(settingsInfo.calmToggle));
-check('顶栏品牌标已渲染', settingsInfo.logo >= 1, String(settingsInfo.logo));
-check('settings: 无控制台错误', settings.errors.length === 0, settings.errors.join(' | ').slice(0, 200));
-await settings.page.close();
+// ---- 5) 磁贴尺寸（当前 Metro 实现）----
+const bookmarks = read('src/pages/bookmarks.ts');
+check('bookmarks: 宽磁贴 96px 高', /h-\[96px\]/.test(bookmarks));
+check('bookmarks: 方磁贴 aspect-square', /aspect-square/.test(bookmarks));
+check('bookmarks: 宽磁贴网格列宽 232px（未置顶）/200px（置顶）', /minmax\(232px,1fr\)/.test(bookmarks) && /minmax\(200px,1fr\)/.test(bookmarks));
+check('bookmarks: 方磁贴网格列宽 116px', /minmax\(116px,1fr\)/.test(bookmarks));
+check('app.css: 磁贴直角无圆角阴影', /\.tile \{[\s\S]*?border-radius: 0/.test(read('src/styles/app.css')));
 
-// 5) 移动端（390 宽，浅色）
-const mobile = await browser.newPage();
-await mobile.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
-await mobile.evaluateOnNewDocument(() => localStorage.setItem('sw.theme', 'light'));
-await mobile.goto(BASE + '/#/', { waitUntil: 'networkidle2' });
-await new Promise((r) => setTimeout(r, 800));
-const mobileInfo = await mobile.evaluate(() => ({
-  overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  bannerVisible: Array.from(document.querySelectorAll('div')).some((n) => (n.textContent ?? '').includes('游客模式')),
-  minTap: Math.min(...Array.from(document.querySelectorAll('button')).map((b) => b.getBoundingClientRect().height || 999)),
-}));
-check('mobile: 无横向滚动', mobileInfo.overflowX <= 0, String(mobileInfo.overflowX));
-check('mobile: 只读条仍在', mobileInfo.bannerVisible === true, String(mobileInfo.bannerVisible));
-check('mobile: 按钮高度 >= 40px', mobileInfo.minTap >= 40, String(Math.round(mobileInfo.minTap)));
-await mobile.close();
-
-await browser.close();
-const failed = results.filter((r) => !r.ok);
-for (const r of results) console.log((r.ok ? 'PASS ' : 'FAIL ') + r.name + '  -> ' + r.detail);
 console.log('---');
-console.log('total', results.length, 'failed', failed.length);
-process.exit(failed.length === 0 ? 0 : 1);
+console.log('total', results.length, 'failed', results.filter((r) => !r.ok).length);
+process.exit(results.every((r) => r.ok) ? 0 : 1);

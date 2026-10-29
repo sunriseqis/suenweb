@@ -1,31 +1,6 @@
 import { cn } from '../lib/cn.ts';
 import { append, el, type Child } from '../lib/dom.ts';
 
-export type Accent = { key: string; border: string; text: string; bg: string; soft: string; ring: string; cssVar: string };
-
-/** Metro 只有一种强调色；保留这个结构是为了让组件不必关心配色 */
-const ACCENT: Accent = {
-  key: 'accent',
-  border: 'border-[var(--c-line)]',
-  text: 'text-[var(--c-accent)]',
-  bg: 'bg-accent',
-  soft: 'bg-[var(--c-accent-soft)]',
-  ring: 'ring-accent',
-  cssVar: 'var(--c-accent)',
-};
-
-export function accentAt(_index = 0): Accent {
-  return ACCENT;
-}
-
-export function clashBorder(_index = 0): string {
-  return 'border-[var(--c-line)]';
-}
-
-export function shadowVars(_index = 0): string {
-  return '';
-}
-
 export type TileOptions = {
   class?: string;
   as?: string;

@@ -193,3 +193,16 @@ html, body {
   overflow-y: auto;
   overflow-x: hidden;
 }
+
+/* Toast 容器：固定右下角，浮在最上层 */
+#toast-root {
+  position: fixed;
+  right: 1rem;
+  bottom: 5.5rem;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+  pointer-events: none;
+}

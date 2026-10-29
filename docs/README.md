@@ -26,7 +26,7 @@
 | server/ | 后端：Fastify 5 + node:sqlite（worker 内），零原生依赖 |
 | web/ | 前端：Vite + TS + 原生 DOM |
 | fn/ | 飞牛 fnOS 原生应用包（非 Docker 转包） |
-| docker/ | 容器化部署 |
+| docker/ | 容器化部署（Dockerfile 定稿 + compose + 部署指南 README.md） |
 | addons/ | 浏览器插件（Firefox 优先） |
 | docs/ | 文档：摘要、需求、架构、memory、plan、design |
 

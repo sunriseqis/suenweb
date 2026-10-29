@@ -12,6 +12,12 @@ export function createStore<T extends object>(initial: T): Store<T> {
   return {
     get: () => state,
     set: (patch) => {
+      // 浅比较：patch 与当前 state 逐键全等则跳过合并与通知
+      let changed = false;
+      for (const key of Object.keys(patch) as (keyof T)[]) {
+        if (!Object.is(state[key], patch[key])) { changed = true; break; }
+      }
+      if (!changed) return;
       state = { ...state, ...patch };
       for (const listener of listeners) listener(state);
     },

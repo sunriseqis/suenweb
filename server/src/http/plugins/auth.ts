@@ -2,7 +2,7 @@ import type { FastifyRequest } from 'fastify';
 
 export const SESSION_COOKIE = 'sw_session';
 
-/** 浏览器走 Cookie，插件走 Authorization: Bearer <token> */
+/** 浏览器走 Cookie，插件走 Authorization: Bearer <token>；SSE（EventSource 不支持 header）允许 ?token= 查询参数兜底 */
 export function extractToken(req: FastifyRequest): string | null {
   const fromCookie = req.cookies ? req.cookies[SESSION_COOKIE] : undefined;
   if (fromCookie) return fromCookie;
@@ -11,6 +11,9 @@ export function extractToken(req: FastifyRequest): string | null {
     const token = header.slice(7).trim();
     return token || null;
   }
+  // M11：仅 SSE 场景使用；EventSource 无法带 header，token 只能走 URL query
+  const query = (req.query ?? {}) as { token?: string };
+  if (typeof query.token === 'string' && query.token) return query.token;
   return null;
 }
 

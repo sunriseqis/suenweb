@@ -16,6 +16,9 @@ const { el } = await import('../src/lib/dom.ts');
 const { mountCapsule } = await import('../src/ui/capsule.ts');
 const { renderBookmarks } = await import('../src/pages/bookmarks.ts');
 const { ENGINES, searchUrl, getEngineId } = await import('../src/ui/websearch.ts');
+const { createStore } = await import('../src/lib/store.ts');
+
+
 
 const hits = [];
 const failures = [];
@@ -27,6 +30,18 @@ const expect = (name, ok, detail = '') => {
 const probe = el('button', { onClick: () => hits.push('el-onClick') });
 probe.click();
 expect('el() 的 onClick 能触发', hits.includes('el-onClick'));
+
+// M4: 连续两次 set 相同值只通知一次（浅比较跳过）
+{
+  const store = createStore({ n: 0 });
+  let renders = 0;
+  store.subscribe(() => renders++);
+  store.set({ n: 1 });
+  store.set({ n: 1 });
+  expect('store.set 相同值只通知一次', renders === 1, 'renders=' + renders);
+  store.set({ n: 2 });
+  expect('store.set 变化值仍会通知', renders === 2, 'renders=' + renders);
+}
 
 mountCapsule([
   { key: 'edit', label: '编辑模式', iconName: 'lock', onClick: () => hits.push('capsule-edit') },
@@ -71,15 +86,30 @@ for (const key of ['togglePin', 'displayMode', 'addLink', 'editGroup', 'deleteGr
 }
 
 
-expect('搜索引擎不少于 7 个', ENGINES.length >= 7, String(ENGINES.length));
+expect('搜索引擎不少于 5 个', ENGINES.length >= 5, String(ENGINES.length));
 expect('默认引擎是 Google', getEngineId() === 'google', getEngineId());
 expect('URL 模板正确编码', searchUrl('a b', 'duckduckgo') === 'https://duckduckgo.com/?q=a%20b', searchUrl('a b', 'duckduckgo'));
-expect('含隐私型引擎', ['brave', 'startpage', 'mojeek', 'qwant'].every((id) => ENGINES.some((e) => e.id === id)));
+expect('含隐私型引擎', ['duckduckgo', 'brave', 'startpage'].every((id) => ENGINES.some((e) => e.id === id)));
 const engineSelect = page.querySelector('select[aria-label="搜索引擎"]');
 expect('页面渲染出引擎选择器', Boolean(engineSelect), engineSelect ? String(engineSelect.options.length) : 'missing');
 const tabButton = page.querySelector('[role=tab]');
 tabButton.click();
 expect('tab 切换可点击', pageHits.includes('tab:2'), pageHits.join(','));
+
+// S8: javascript: 协议的书签不得渲染成可点击的 a 标签（safeHref 白名单）
+const badLink = { ...link, id: 99, group_id: 1, title: 'XSS', url: 'javascript:alert(1)', url_normalized: 'javascript:alert(1)' };
+const unsafePage = renderBookmarks({
+  groups: [{ ...group, links: [badLink] }, { ...tabGroup, links: [{ ...badLink, id: 100, group_id: 2 }] }],
+  authed: true, editing: false, fetchIcons: false, activeTabId: null,
+  onTab: () => {}, onAddLink: () => {}, onEditLink: () => {}, onDeleteLink: () => {},
+  onMoveLink: () => {}, onReorder: () => {}, onAddGroup: () => {}, onEditGroup: () => {},
+  onDeleteGroup: () => {}, onTogglePin: () => {}, onDisplayMode: () => {}, onLayoutMode: () => {}, onLogin: () => {},
+});
+document.body.appendChild(unsafePage);
+const unsafeAnchors = Array.from(unsafePage.querySelectorAll('a[href="javascript:alert(1)"]'));
+expect('javascript: 协议渲染为不可点击 span', unsafeAnchors.length === 0 && unsafePage.querySelectorAll('span[title]').length >= 2,
+  'a 标签数: ' + unsafeAnchors.length);
+unsafePage.remove();
 
 console.log('---');
 console.log('failed', failures.length);

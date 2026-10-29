@@ -1,0 +1,348 @@
+#!/bin/bash
+#
+# SuenWeb fnOS 套件控制脚本（start / stop / status）。
+# 结构照搬 SuenMusic 实证版本：密钥无关（suenweb 无 JWT）、守护 + PID 双校验、日志轮转、TRIM_* 反推与硬闸。
+#
+set -o pipefail
+
+SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")"
+CMD_DIR="$(cd "$(dirname "${SELF_PATH}")" 2>/dev/null && pwd)"
+
+APP_DIR="${TRIM_APPDEST:-}"
+VAR_DIR="${TRIM_PKGVAR:-}"
+
+if [ -z "${APP_DIR}" ]; then
+    APP_DIR="$(cd "${CMD_DIR}/.." 2>/dev/null && pwd)"
+fi
+if [ -z "${VAR_DIR}" ]; then
+    PKG_ROOT="$(cd "${APP_DIR}/.." 2>/dev/null && pwd)"
+    VAR_DIR="${PKG_ROOT}/var"
+fi
+case "${VAR_DIR}" in
+    ""|"/"|"/var"|"/usr"|"/tmp")
+        echo "[FATAL] 数据目录解析异常：TRIM_PKGVAR='${TRIM_PKGVAR:-<空>}' → '${VAR_DIR}'" >&2
+        echo "        拒绝在根分区写入。请通过应用中心启动，或显式设置 TRIM_PKGVAR。" >&2
+        exit 1
+        ;;
+esac
+case "${APP_DIR}" in
+    ""|"/")
+        echo "[FATAL] 安装目录解析异常：TRIM_APPDEST='${TRIM_APPDEST:-<空>}'" >&2
+        exit 1
+        ;;
+esac
+
+DATA_DIR="${VAR_DIR}/data"
+
+ETC_DIR="${TRIM_PKGETC:-}"
+if [ -z "${ETC_DIR}" ]; then
+    PKG_ROOT_ETC="$(cd "${APP_DIR}/.." 2>/dev/null && pwd)"
+    ETC_DIR="${PKG_ROOT_ETC}/etc"
+fi
+ETC_FALLBACK=0
+case "${ETC_DIR}" in
+    ""|"/"|"/etc") ETC_DIR="${VAR_DIR}"; ETC_FALLBACK=1 ;;
+esac
+mkdir -p "${ETC_DIR}" 2>/dev/null || true
+
+LOG_FILE="${VAR_DIR}/info.log"
+PID_FILE="${VAR_DIR}/app.pid"
+CHILD_PID_FILE="${VAR_DIR}/app.child.pid"
+STOP_FLAG="${VAR_DIR}/stop.flag"
+LOCK_FILE="${VAR_DIR}/app.lock"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null || {
+    echo "[FATAL] 无法创建数据目录：${DATA_DIR}" >&2
+    exit 1
+}
+
+# 用户可配置项：统一走 etc/.env（升级不覆盖）
+# .env 由用户手写，值含空格/特殊字符会破坏解析——单用户自部署风险自担
+if [ -r "${ETC_DIR}/.env" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "${ETC_DIR}/.env" 2>/dev/null || true
+    set +a
+fi
+
+PORT="${SUENWEB_PORT:-8080}"
+SELF="${SELF_PATH}"
+export TZ="${TZ:-Asia/Shanghai}"
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
+}
+
+if [ "${ETC_FALLBACK}" = "1" ]; then
+    log_msg "[WARN] 配置目录异常，回退到 var/，用户配置升级会被覆盖"
+fi
+
+ensure_env_template() {
+    local tmpl="${ETC_DIR}/env.example"
+    [ -f "${tmpl}" ] && return 0
+    cat > "${tmpl}" <<'ENV_TMPL'
+# SuenWeb（fnOS 套件）用户配置 —— 复制为 .env 后生效：
+#   cp env.example .env && vi .env && ./cmd/main stop && ./cmd/main start
+#
+# SUENWEB_HOST=0.0.0.0
+# SUENWEB_PORT=8080
+# SUENWEB_LOG_LEVEL=info
+# SUENWEB_SESSION_TTL_DAYS=30
+# SUENWEB_TRUST_PROXY=false
+ENV_TMPL
+    log_msg "已写出配置模板：${tmpl}（复制为 .env 后可覆盖默认值）"
+}
+
+proc_start_time() {
+    local pid="$1"
+    [ -r "/proc/${pid}/stat" ] || return 1
+    sed 's/^[^)]*) //' "/proc/${pid}/stat" 2>/dev/null | awk '{print $20}'
+}
+
+check_process() {
+    local pid="$1" expect="${2:-}"
+    [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null || return 1
+    if [ -n "${expect}" ] && [ "${expect}" != "0" ]; then
+        local actual
+        actual="$(proc_start_time "${pid}")"
+        [ "${actual}" = "${expect}" ] || return 1
+    fi
+    return 0
+}
+
+port_open() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/${PORT}" 2>/dev/null && return 0
+        return 1
+    fi
+    (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null || return 1
+    return 0
+}
+
+read_pid_file() {
+    PID_REC_PID=""
+    PID_REC_START=""
+    [ -r "${PID_FILE}" ] || return 1
+    read -r PID_REC_PID PID_REC_START < "${PID_FILE}" || true
+    PID_REC_PID="$(echo "${PID_REC_PID}" | tr -d '[:space:]')"
+    PID_REC_START="$(echo "${PID_REC_START}" | tr -d '[:space:]')"
+    [ -n "${PID_REC_PID}" ] || return 1
+    return 0
+}
+
+status_process() {
+    if read_pid_file; then
+        if check_process "${PID_REC_PID}" "${PID_REC_START}"; then
+            return 0
+        fi
+        log_msg "清理陈旧 PID 文件（pid=${PID_REC_PID}）"
+        rm -f "${PID_FILE}" "${CHILD_PID_FILE}"
+    fi
+    port_open && return 0
+    return 1
+}
+
+find_node() {
+    if [ -x "${APP_DIR}/bin/node" ]; then
+        echo "${APP_DIR}/bin/node"
+    elif command -v node >/dev/null 2>&1; then
+        command -v node
+    else
+        echo ""
+    fi
+}
+
+rotate_log() {
+    local max=$((8 * 1024 * 1024))
+    [ -f "${LOG_FILE}" ] || return 0
+    local size
+    size="$(wc -c < "${LOG_FILE}" 2>/dev/null || echo 0)"
+    [ "${size}" -gt "${max}" ] 2>/dev/null || return 0
+    mv -f "${LOG_FILE}" "${LOG_FILE}.1" 2>/dev/null
+    log_msg "日志超过 8MB，已轮转为 info.log.1"
+}
+
+supervise() {
+    local child=""
+    cleanup() {
+        if [ -n "${child}" ]; then
+            log_msg "收到停止信号，正在停止服务进程 (pid=${child})..."
+            kill -TERM "${child}" 2>/dev/null
+            local n=0
+            while check_process "${child}" && [ "${n}" -lt 10 ]; do
+                sleep 1
+                n=$((n + 1))
+            done
+            check_process "${child}" && kill -KILL "${child}" 2>/dev/null
+        fi
+        rm -f "${PID_FILE}" "${CHILD_PID_FILE}"
+        log_msg "守护进程退出"
+        exit 0
+    }
+    trap cleanup TERM INT
+    cd "${APP_DIR}/server" || exit 1
+
+    NODE_BIN="$(find_node)"
+    if [ -z "${NODE_BIN}" ]; then
+        log_msg "[ERROR] 守护模式找不到 Node.js，放弃启动"
+        rm -f "${PID_FILE}"
+        exit 1
+    fi
+
+    while :; do
+        [ -f "${STOP_FLAG}" ] && break
+        rotate_log
+        "${NODE_BIN}" --experimental-strip-types --disable-warning=ExperimentalWarning src/server.ts >> "${LOG_FILE}" 2>&1 &
+        child=$!
+        printf '%s' "${child}" > "${CHILD_PID_FILE}"
+        log_msg "服务进程已启动 (pid=${child})"
+        wait "${child}"
+        local rc=$?
+        child=""
+        rm -f "${CHILD_PID_FILE}"
+        [ -f "${STOP_FLAG}" ] && break
+        log_msg "服务进程退出 (code=${rc})，5 秒后自动重启"
+        sleep 5
+    done
+    rm -f "${PID_FILE}"
+    log_msg "守护循环结束"
+    exit 0
+}
+
+start_process() {
+    if status_process; then
+        log_msg "SuenWeb 已在运行，忽略本次启动"
+        return 0
+    fi
+
+    log_msg "正在启动 SuenWeb..."
+    log_msg "安装目录=${APP_DIR}  数据目录=${DATA_DIR}  配置目录=${ETC_DIR}"
+    mkdir -p "${DATA_DIR}"
+    rm -f "${STOP_FLAG}"
+
+    NODE_BIN="$(find_node)"
+    if [ -z "${NODE_BIN}" ]; then
+        log_msg "[ERROR] 找不到 Node.js：既没有包内 ${APP_DIR}/bin/node，也没有系统 node"
+        return 1
+    fi
+    export NODE_BIN
+    log_msg "Node 运行时：${NODE_BIN}"
+
+    ensure_env_template
+
+    export NODE_ENV="${NODE_ENV:-production}"
+    export HOST="${SUENWEB_HOST:-0.0.0.0}"
+    export PORT="${PORT}"
+    export DATA_DIR="${DATA_DIR}"
+    export WEB_ROOT="${APP_DIR}/web/dist"
+    export LOG_LEVEL="${SUENWEB_LOG_LEVEL:-info}"
+    export SESSION_TTL_DAYS="${SUENWEB_SESSION_TTL_DAYS:-30}"
+    # 直连形态不采信 X-Forwarded-For（登录限速不可被绕过）
+    # suenweb 目前不读 TRUST_PROXY；保留注释提示将来加反代时需要补。
+    nohup "${SELF}" __supervise 9>&- >> "${LOG_FILE}" 2>&1 &
+    local supervisor=$!
+    local started
+    started="$(proc_start_time "${supervisor}")"
+    printf '%s %s' "${supervisor}" "${started:-0}" > "${PID_FILE}"
+    log_msg "守护进程已拉起 (pid=${supervisor})"
+
+    sleep 2
+    if check_process "${supervisor}" "${started:-0}" || port_open; then
+        log_msg "启动成功，端口 ${PORT} 可用"
+        return 0
+    fi
+    log_msg "[ERROR] 启动失败：守护进程未能存活，请查看 ${LOG_FILE}"
+    rm -f "${PID_FILE}"
+    return 1
+}
+
+stop_process() {
+    log_msg "正在停止 SuenWeb..."
+    : > "${STOP_FLAG}"
+
+    local stopped=0
+    if read_pid_file; then
+        if check_process "${PID_REC_PID}" "${PID_REC_START}"; then
+            log_msg "向守护进程 ${PID_REC_PID} 发送 TERM"
+            kill -TERM "${PID_REC_PID}" 2>/dev/null
+            local n=0
+            while check_process "${PID_REC_PID}" "${PID_REC_START}" && [ "${n}" -lt 15 ]; do
+                sleep 1
+                n=$((n + 1))
+            done
+            if check_process "${PID_REC_PID}" "${PID_REC_START}"; then
+                log_msg "守护进程未响应 TERM，改为 KILL ${PID_REC_PID}"
+                kill -KILL "${PID_REC_PID}" 2>/dev/null
+            fi
+            stopped=1
+        else
+            log_msg "PID 文件记录的进程已不存在（pid=${PID_REC_PID}），跳过"
+        fi
+    fi
+
+    if [ -r "${CHILD_PID_FILE}" ]; then
+        local child
+        child="$(head -n 1 "${CHILD_PID_FILE}" | tr -d '[:space:]')"
+        if check_process "${child}"; then
+            log_msg "补收子进程 (pid=${child})"
+            kill -TERM "${child}" 2>/dev/null
+            sleep 2
+            check_process "${child}" && kill -KILL "${child}" 2>/dev/null
+        fi
+    fi
+
+    rm -f "${PID_FILE}" "${CHILD_PID_FILE}"
+
+    if port_open; then
+        log_msg "[WARN] 端口 ${PORT} 仍在监听 —— 保留 stop.flag 以免自动重启；请手动确认残留进程"
+        return 1
+    fi
+    rm -f "${STOP_FLAG}"
+    [ "${stopped}" = "1" ] && log_msg "已停止"
+    return 0
+}
+
+# 双实例竞态防护：start/stop 控制流持 flock 独占锁（fd 9）。
+# 锁只在控制进程内存续：__supervise 分支入口关闭继承的 fd 9，且 start_process 内
+# nohup 拉起守护进程时也显式 9>&-，守护进程本身不持锁；锁随控制进程退出自动释放。
+acquire_lock() {
+    mkdir -p "${VAR_DIR}" 2>/dev/null || true
+    exec 9>"${LOCK_FILE}" || {
+        echo "[FATAL] 无法打开锁文件：${LOCK_FILE}" >&2
+        exit 1
+    }
+    if ! flock -n 9; then
+        echo "[FATAL] 另一个 start/stop 正在进行（锁：${LOCK_FILE}），请稍后重试" >&2
+        exit 1
+    fi
+}
+
+case $1 in
+start)
+    acquire_lock
+    start_process
+    exit $?
+    ;;
+stop)
+    acquire_lock
+    stop_process
+    exit $?
+    ;;
+status)
+    if status_process; then
+        exit 0
+    else
+        exit 3
+    fi
+    ;;
+__supervise)
+    # 守护进程不持锁：关闭从控制进程继承的 fd 9
+    exec 9>&- 2>/dev/null
+    supervise
+    exit $?
+    ;;
+*)
+    echo "Usage: $0 {start|stop|status}"
+    exit 1
+    ;;
+esac

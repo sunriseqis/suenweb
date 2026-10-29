@@ -3,6 +3,7 @@
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ACCENT = [0x1b, 0xa1, 0xe2];
 const WHITE = [0xff, 0xff, 0xff];
@@ -88,7 +89,7 @@ function makePng(size) {
   ]);
 }
 
-const dir = new URL('../icons/', import.meta.url).pathname;
+const dir = fileURLToPath(new URL('../icons/', import.meta.url));
 for (const size of [16, 32, 48, 96, 128]) {
   const file = join(dir, 'icon-' + size + '.png');
   writeFileSync(file, makePng(size));

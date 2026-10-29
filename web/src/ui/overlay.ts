@@ -16,6 +16,14 @@ type OverlayOptions = {
   onClose?: () => void;
 };
 
+/** 模块级 overlay 栈：Esc 只关栈顶，嵌套（drawer 上开 dialog）不会穿透关闭底层 */
+const overlayStack: OverlayHandle[] = [];
+
+function removeFromStack(handle: OverlayHandle): void {
+  const i = overlayStack.indexOf(handle);
+  if (i >= 0) overlayStack.splice(i, 1);
+}
+
 function frame(kind: 'dialog' | 'drawer', options: OverlayOptions): OverlayHandle {
   const root = document.getElementById('overlay-root');
   if (!root) throw new Error('缺少 overlay-root');
@@ -48,7 +56,7 @@ function frame(kind: 'dialog' | 'drawer', options: OverlayOptions): OverlayHandl
     el('div', { class: 'flex-1 overflow-y-auto px-5 py-4' }, body),
   ]);
 
-  const backdrop = el('div', { class: 'fixed inset-0 z-40 flex bg-black/55' });
+  const backdrop = el('div', { class: 'fixed inset-0 z-40 flex bg-[var(--c-overlay)]' });
   const backdropInner = el('div', {
     class: kind === 'dialog'
       ? 'flex min-h-full w-full items-center justify-center p-4'
@@ -57,28 +65,37 @@ function frame(kind: 'dialog' | 'drawer', options: OverlayOptions): OverlayHandl
   backdropInner.appendChild(panel);
   backdrop.appendChild(backdropInner);
 
+  const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   let closed = false;
+  let handle: OverlayHandle;
   const close = (): void => {
     if (closed) return;
     closed = true;
+    removeFromStack(handle);
     document.removeEventListener('keydown', onKey);
     backdrop.remove();
     document.body.style.overflow = previousOverflow;
+    if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
     if (onClose) onClose();
   };
   const onKey = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') close();
+    if (event.key !== 'Escape') return;
+    // 只关栈顶：嵌套场景（drawer 上开 dialog）时 Esc 关最上层，底层保持打开
+    if (overlayStack[overlayStack.length - 1] !== handle) return;
+    close();
   };
   backdrop.addEventListener('click', (event) => {
     if (event.target === backdrop || event.target === backdropInner) close();
   });
   document.addEventListener('keydown', onKey);
+  handle = { close, panel, body, element: backdrop };
+  overlayStack.push(handle);
   root.appendChild(backdrop);
 
   const focusable = panel.querySelector<HTMLElement>('input, textarea, button');
   if (focusable) queueMicrotask(() => focusable.focus());
 
-  return { close, panel, body, element: backdrop };
+  return handle;
 }
 
 export function openDialog(options: OverlayOptions): OverlayHandle {

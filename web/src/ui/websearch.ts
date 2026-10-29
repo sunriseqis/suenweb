@@ -2,7 +2,7 @@ import { cn } from '../lib/cn.ts';
 import { el } from '../lib/dom.ts';
 import { icon } from './icons.ts';
 
-export type EngineId = 'google' | 'bing' | 'duckduckgo' | 'brave' | 'startpage' | 'mojeek' | 'qwant';
+export type EngineId = 'google' | 'bing' | 'duckduckgo' | 'brave' | 'startpage';
 
 export type Engine = {
   id: EngineId;
@@ -17,8 +17,6 @@ export const ENGINES: Engine[] = [
   { id: 'duckduckgo', name: 'DuckDuckGo', template: 'https://duckduckgo.com/?q=%s', note: '不追踪、不建画像' },
   { id: 'brave', name: 'Brave', template: 'https://search.brave.com/search?q=%s', note: '独立索引，默认不做画像' },
   { id: 'startpage', name: 'Startpage', template: 'https://www.startpage.com/sp/search?query=%s', note: 'Google 结果 + 匿名代理' },
-  { id: 'mojeek', name: 'Mojeek', template: 'https://www.mojeek.com/search?q=%s', note: '独立索引，无追踪' },
-  { id: 'qwant', name: 'Qwant', template: 'https://www.qwant.com/?q=%s', note: '欧盟，不追踪' },
 ];
 
 const KEY = 'sw.engine';
