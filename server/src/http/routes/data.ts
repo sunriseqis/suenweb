@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { LinkRow } from '../../data/repositories/links.ts';
 
 export async function dataRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/data', async () => {
+  app.get('/api/data', { preHandler: app.requireAuth }, async () => {
     const [groups, links, settings] = await Promise.all([
       app.repos.groups.list(),
       app.repos.links.listAll(),
@@ -19,7 +19,7 @@ export async function dataRoutes(app: FastifyInstance): Promise<void> {
       data: {
         groups: groups.map((group) => ({ ...group, links: buckets.get(group.id) ?? [] })),
         settings,
-        meta: { groupCount: groups.length, linkCount: links.length, mode: 'public' },
+        meta: { groupCount: groups.length, linkCount: links.length, mode: 'private' },
       },
     };
   });

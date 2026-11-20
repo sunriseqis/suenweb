@@ -3,6 +3,14 @@ import { ensureHostPermission, normalizeBaseUrl } from './api.js';
 
 const browser = globalThis.browser ?? globalThis.chrome;
 
+// P2-1: 动态识别当前浏览器，避免 device 硬编码 'firefox-extension'
+function currentBrowser() {
+  const ua = navigator.userAgent || '';
+  if (/firefox/i.test(ua)) return 'firefox';
+  if (/edg\//i.test(ua)) return 'edge';
+  return 'chrome';
+}
+
 const loginForm = document.getElementById('loginForm');
 const accountBox = document.getElementById('accountBox');
 const baseUrlInput = document.getElementById('baseUrl');
@@ -21,9 +29,16 @@ function setStatus(text, isError = false) {
   statusNode.className = isError ? 'status error' : 'status';
 }
 
+// P2-3: sendMessage 加 15s 超时，避免后台长期不返回时 popup/options 永远挂起
 async function send(message) {
-  const reply = await browser.runtime.sendMessage(message);
-  if (!reply || reply.ok !== true) throw new Error(reply && reply.error ? reply.error : '操作失败');
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('后台响应超时')), 15000));
+  const reply = await Promise.race([browser.runtime.sendMessage(message), timeout]);
+  if (!reply || reply.ok !== true) {
+    const error = new Error(reply && reply.error ? reply.error : '操作失败');
+    error.code = reply && reply.code ? reply.code : undefined;
+    error.details = reply && reply.details ? reply.details : undefined;
+    throw error;
+  }
   return reply.data;
 }
 
@@ -91,7 +106,7 @@ loginBtn.addEventListener('click', async () => {
       response = await fetch(baseUrl + '/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ password, device: 'firefox-extension' }),
+        body: JSON.stringify({ password, device: currentBrowser() + '-extension' }),
       });
     } catch (error) {
       setStatus('连不上 ' + baseUrl + '（' + (error && error.message ? error.message : 'NetworkError') + '）', true);

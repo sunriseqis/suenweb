@@ -123,12 +123,32 @@ export class IconCache {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-        redirect: 'follow',
-        headers: { accept: 'image/*', 'user-agent': 'SuenWeb/2.0 (+icon-cache)' },
-      });
-      if (!response.ok) return null;
+      // P1-1 SSRF：redirect manual 逐跳校验 Location，防止 30x 跳进内网
+      const MAX_REDIRECTS = 3;
+      let currentUrl = url;
+      let response: Response | null = null;
+      for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+        response = await fetch(currentUrl, {
+          signal: controller.signal,
+          redirect: 'manual',
+          headers: { accept: 'image/*', 'user-agent': 'SuenWeb/2.0 (+icon-cache)' },
+        }).catch(() => null);
+        if (!response) return null;
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location');
+          if (!location) return null;
+          try {
+            const next = new URL(location, currentUrl);
+            if (next.hostname !== 'icons.duckduckgo.com' && isPrivateHost(next.hostname)) return null;
+            currentUrl = next.href;
+          } catch {
+            return null;
+          }
+          continue;
+        }
+        break;
+      }
+      if (!response || !response.ok) return null;
       const headerType = (response.headers.get('content-type') ?? '').toLowerCase();
       if (headerType.includes('text/html') || headerType.includes('text/plain')) return null;
       const buffer = Buffer.from(await response.arrayBuffer());

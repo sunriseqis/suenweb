@@ -5,6 +5,15 @@ import { normalizeUrl } from '../../domain/normalize.ts';
 
 const DOMAIN = /^[a-z0-9.-]+(:[0-9]{1,5})?$/i;
 
+/** P2-7：dead-links 批量删除的 ids 上限，防超大数组 DoS */
+const deadLinksDeleteBody = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ids: { type: 'array', maxItems: 5000, items: { type: 'integer', minimum: 1 } },
+  },
+};
+
 export async function toolsRoutes(app: FastifyInstance): Promise<void> {
   /** TOOL-02：重复链接聚类检测（全库按归一化 URL 分组，跨组重复才列出） */
   app.get('/api/tools/duplicates', { preHandler: app.requireAuth }, async () => {
@@ -103,12 +112,44 @@ export async function toolsRoutes(app: FastifyInstance): Promise<void> {
           }
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 6000);
-          const response = await fetch(link.url, { signal: controller.signal, redirect: 'follow', method: 'GET', headers: { 'user-agent': 'SuenWeb/2.0 (+link-check)' } });
-          clearTimeout(timer);
-          status = response.status;
-          ok = response.status < 400;
-          // M14：消费完 body 再进下一条，避免连接/流悬挂
-          await response.body?.cancel().catch(() => {});
+          try {
+            // P1-1 SSRF：redirect manual 逐跳校验 Location，防止 30x 跳进内网
+            const MAX_REDIRECTS = 3;
+            let currentUrl = link.url;
+            let response: Response | null = null;
+            for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+              response = await fetch(currentUrl, {
+                method: 'GET',
+                redirect: 'manual',
+                signal: controller.signal,
+                headers: { 'user-agent': 'SuenWeb/2.0 (+link-check)' },
+              }).catch(() => null);
+              if (!response) break;
+              if (response.status >= 300 && response.status < 400) {
+                const location = response.headers.get('location');
+                if (!location) break;
+                // 校验重定向目标
+                try {
+                  const next = new URL(location, currentUrl);
+                  if (isPrivateHost(next.hostname)) { response = null; break; }
+                  currentUrl = next.href;
+                } catch { response = null; break; }
+                continue;
+              }
+              break;
+            }
+            if (response) {
+              status = response.status;
+              ok = response.status < 400;
+              // M14：消费完 body 再进下一条，避免连接/流悬挂
+              await response.body?.cancel().catch(() => {});
+            } else {
+              ok = false;
+              status = null;
+            }
+          } finally {
+            clearTimeout(timer);
+          }
         } catch {
           ok = false;
         }
@@ -127,8 +168,8 @@ export async function toolsRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, data: { result: saved } };
   });
 
-  /** TOOL-03：删除失效项 */
-  app.post('/api/tools/dead-links/delete', { preHandler: app.requireAuth }, async (req) => {
+  /** TOOL-03：删除失效项（P2-7：ids 上限 5000） */
+  app.post('/api/tools/dead-links/delete', { preHandler: app.requireAuth, schema: { body: deadLinksDeleteBody } }, async (req) => {
     const body = (req.body ?? {}) as { ids?: number[] };
     const ids = (body.ids ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
     if (ids.length === 0) throw badRequest('IDS_REQUIRED', 'ids 不能为空');

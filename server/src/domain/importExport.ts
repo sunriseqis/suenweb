@@ -1,4 +1,5 @@
 import type { DataPool } from '../data/proxy.ts';
+import { badRequest } from './errors.ts';
 import { displayName, displayTitle, normalizeNameKey, normalizeUrl } from './normalize.ts';
 
 export type ImportFolder = { name: string; items: Array<{ title: string; url: string }> };
@@ -10,8 +11,24 @@ export type ImportPreview = {
   existsAnywhere: number;
 };
 
+// P1-7：导入数量上限，防超大书签文件拖垮解析与批写
+const MAX_IMPORT_FOLDERS = 5000;
+const MAX_IMPORT_LINKS = 100000;
+
+/** P1-7：导入入口统一数量闸门（previewImport / commitImport / restoreFullSnapshot 共用） */
+function assertImportLimits(folders: ImportFolder[]): void {
+  if (folders.length > MAX_IMPORT_FOLDERS) {
+    throw badRequest('IMPORT_TOO_LARGE', '导入的文件夹数量超过上限（' + MAX_IMPORT_FOLDERS + '）');
+  }
+  const totalLinks = folders.reduce((sum, f) => sum + (f.items?.length ?? 0), 0);
+  if (totalLinks > MAX_IMPORT_LINKS) {
+    throw badRequest('IMPORT_TOO_LARGE', '导入的书签数量超过上限（' + MAX_IMPORT_LINKS + '）');
+  }
+}
+
 /** 导入预览（IMP-01）：不入库，只统计 */
 export async function previewImport(db: DataPool, folders: ImportFolder[]): Promise<ImportPreview> {
+  assertImportLimits(folders);
   const existing = new Set<string>(
     (await db.all<{ url_normalized: string }>('SELECT DISTINCT url_normalized FROM links')).map((r: { url_normalized: string }) => r.url_normalized),
   );
@@ -70,6 +87,7 @@ export async function commitImport(
   crossGroupPolicy: 'allow' | 'skip' = 'allow',
   presetStatements?: Array<{ sql: string; params?: unknown[] }>,
 ): Promise<ImportResult> {
+  assertImportLimits(folders);
   const inTransaction = presetStatements !== undefined;
   // 事务模式（快照恢复）下 DELETE 已排在 batch 首位：库内旧链接在重建时视为已清空，
   // 不能再用旧表数据做「已存在」判定（否则全部被误判为重复而跳过）

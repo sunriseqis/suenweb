@@ -20,6 +20,8 @@ export const PUBLIC_SETTING_KEYS = [
 export const WRITABLE_SETTING_KEYS = new Set(PUBLIC_SETTING_KEYS);
 
 const PUBLIC_SET = new Set(PUBLIC_SETTING_KEYS);
+// P1-6：布尔语义键，写入时强校验类型，防止字符串/数字污染前端开关判断
+const BOOLEAN_KEYS = new Set(['ui.fetch_icons', 'ui.show_icons']);
 // M15：内部键前缀黑名单（保持黑名单方案，改动最小）。新增内部键（口令哈希、令牌等）必须加以下前缀之一，
 // 否则会被 getAll 泄漏到响应里；新增前缀时同步更新此数组。
 const INTERNAL_KEY_PREFIXES = ['auth.', 'backup.', 'webdav.'] as const;
@@ -80,6 +82,10 @@ export class SettingsRepo {
     const keys = Object.keys(patch);
     for (const key of keys) {
       if (!WRITABLE_SETTING_KEYS.has(key)) throw badRequest('SETTING_NOT_WRITABLE', '不可写的设置项: ' + key);
+      // P1-6：布尔键类型校验
+      if (BOOLEAN_KEYS.has(key) && typeof patch[key] !== 'boolean') {
+        throw badRequest('INVALID_SETTING_VALUE', '设置项 ' + key + ' 必须是布尔值');
+      }
     }
     const statements = keys.map((key) => ({
       sql:
@@ -87,6 +93,17 @@ export class SettingsRepo {
       params: [key, JSON.stringify(patch[key] ?? null)],
     }));
     if (statements.length > 0) await this.db.batch(statements);
+  }
+
+  /** 原子写入：仅当 key 不存在时写入，返回是否成功写入 */
+  async setIfAbsent(key: string, value: unknown): Promise<boolean> {
+    if (!key || key.length > 64) throw badRequest('INVALID_SETTING_KEY', '设置键不合法');
+    const encoded = JSON.stringify(value === undefined ? null : value);
+    const result = await this.db.run(
+      "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+      [key, encoded],
+    );
+    return result.changes > 0;
   }
 
   async remove(key: string): Promise<void> {

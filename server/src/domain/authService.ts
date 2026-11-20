@@ -38,10 +38,11 @@ export class AuthService {
   }
 
   async setup(password: unknown, device: string | null): Promise<IssuedSession> {
-    if (await this.isInitialized()) throw conflict('ALREADY_INITIALIZED', '已完成初始化，请直接登录');
     const normalized = assertPassword(password);
     const hash = await hashPassword(normalized);
-    await this.settings.set(ADMIN_HASH_KEY, hash);
+    // 原子写入：仅当不存在时写入，避免并发双写
+    const result = await this.settings.setIfAbsent(ADMIN_HASH_KEY, hash);
+    if (!result) throw conflict('ALREADY_INITIALIZED', '已完成初始化，请直接登录');
     await this.settings.set(ADMIN_INIT_KEY, new Date().toISOString());
     return this.issue(device);
   }

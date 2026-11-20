@@ -80,7 +80,7 @@ test('导入接口：预览/提交/导出/访客 401', async (t) => {
   assert.equal(commit.statusCode, 200);
   assert.equal(parse(commit).data.groupsCreated, 2);
 
-  const data = await h.app.inject({ method: 'GET', url: '/api/data' });
+  const data = await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) });
   const groups = parse(data).data.groups;
   assert.equal(groups.length, 2);
 
@@ -129,7 +129,7 @@ test('加密配置导出/导入：SWB1 往返、密码错误拒绝、确认后�
   const restored = parse(imp).data.restored;
   assert.ok(restored.linksCreated >= 3);
 
-  const after = await h.app.inject({ method: 'GET', url: '/api/data' });
+  const after = await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) });
   const names = parse(after).data.groups.map((g: { name: string }) => g.name).sort();
   assert.deepEqual(names, ['娱乐', '开发']);
 
@@ -137,7 +137,7 @@ test('加密配置导出/导入：SWB1 往返、密码错误拒绝、确认后�
   const wrongFile = Buffer.from(await encryptBackup('other-password', JSON.stringify({ version: 1, groups: [] }))).toString('base64');
   const wrong = await h.app.inject({ method: 'POST', url: '/api/config/import', payload: { password, file: wrongFile, confirm: true }, headers: bearer(token) });
   assert.equal(parse(wrong).error.code, 'WRONG_PASSWORD');
-  const stillOk = await h.app.inject({ method: 'GET', url: '/api/data' });
+  const stillOk = await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) });
   assert.equal(parse(stillOk).data.groups.length, 2, '密码错误不得改数据');
 });
 
@@ -146,7 +146,7 @@ test('快照恢复原子性：batch 中途非法 INSERT 失败后库内数据保
   t.after(() => h.close());
   const token = await setupAdmin(h.app);
   await h.app.inject({ method: 'POST', url: '/api/import/commit', payload: { html: SAMPLE_HTML }, headers: bearer(token) });
-  const before = await h.app.inject({ method: 'GET', url: '/api/data' });
+  const before = await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) });
   const beforeData = JSON.parse(before.body).data;
 
   // preset 语句末尾拼一条必然失败的 INSERT（violates groups.name_key UNIQUE，把已有 key 重复插入）
@@ -162,7 +162,7 @@ test('快照恢复原子性：batch 中途非法 INSERT 失败后库内数据保
   );
 
   // 失败后库内数据必须与失败前完全一致（事务整体回滚）
-  const after = await h.app.inject({ method: 'GET', url: '/api/data' });
+  const after = await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) });
   const afterData = JSON.parse(after.body).data;
   assert.deepEqual(afterData.groups, beforeData.groups);
   assert.deepEqual(afterData.links, beforeData.links);

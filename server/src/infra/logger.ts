@@ -8,6 +8,7 @@ const REDACT_PATHS = [
   '*.password',
   '*.currentPassword',
   '*.newPassword',
+  'req.url', // 脱敏 URL（含 query token）
 ];
 
 export function createLogger(level = 'info'): Logger {
@@ -16,5 +17,13 @@ export function createLogger(level = 'info'): Logger {
     base: { svc: 'suenweb' },
     timestamp: pino.stdTimeFunctions.isoTime,
     redact: { paths: REDACT_PATHS, censor: '[redacted]' },
+    serializers: {
+      // 只保留 path，不带 query（SSE token 在 query 里，避免进日志）
+      req: (req: { method?: string; url?: string; ip?: string }) => ({
+        method: req.method,
+        url: req.url ? req.url.split('?')[0] : req.url,
+        remoteAddress: req.ip,
+      }),
+    },
   });
 }

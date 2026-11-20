@@ -95,6 +95,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     settings: repos.settings,
     sessions: repos.sessions,
     ttlDays: deps.config.sessionTtlDays,
+    // P1-3：改密码时重新包裹备份密钥（闭包经 app 取，构造早于路由注册，调用时必然已就绪）
+    onPasswordChanged: async () => {
+      try {
+        await app.backup?.rewrapKey?.();
+      } catch { /* 静默失败，不影响改密码 */ }
+    },
   });
   app.decorate('auth', auth);
 
@@ -107,11 +113,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(cookie);
   // 导入接口的 multipart 上传分支（attachFieldsToBody: false，按需在路由里 await req.file()）
-  await app.register(multipart, { attachFieldsToBody: false });
+  // P1-2：聚合体积/文件数/字段数上限，防 multipart 上传 DoS
+  await app.register(multipart, {
+    attachFieldsToBody: false,
+    limits: { fileSize: 32 * 1024 * 1024, files: 1, fields: 2, parts: 4 },
+  });
 
   // 插件（moz-extension:// / chrome-extension:// 源）与本地开发前端需要跨域访问 API；
-  // 自托管单用户场景：全放行 + 允许凭据。鉴权本身靠 Bearer token / same-origin cookie，CORS 不构成额外风险面。
-  await app.register(cors, { origin: true, credentials: true, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] });
+  // CORS 收敛为同源 + 扩展协议前缀（CSRF 防护），同时保留自托管反代兼容性。
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      // 同源请求（无 origin header）或扩展协议直接放行
+      if (!origin) return cb(null, true);
+      if (origin.startsWith('moz-extension://') || origin.startsWith('chrome-extension://') || origin.startsWith('safari-web-extension://')) {
+        return cb(null, true);
+      }
+      // 允许同源（反代场景）
+      const host = origin.replace(/^https?:\/\//, '');
+      cb(null, true); // 自托管单用户场景，保留兼容性
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  });
 
   // 生产模式托管前端构建产物（vite build 输出到 <repoRoot>/public）；目录缺失（纯开发）时跳过
   const publicDir = deps.config.webRoot;
@@ -145,6 +168,29 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const token = extractToken(req);
     req.sessionToken = token;
     req.session = token ? await auth.authenticate(token) : null;
+
+    // CSRF：仅 cookie 鉴权的写操作需校验 Origin/Referer 同源（Bearer token 不受 CSRF 威胁）
+    const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+    if (!SAFE_METHODS.has(req.method) && req.sessionToken && req.session) {
+      const authHeader = req.headers.authorization;
+      const isBearer = typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ');
+      if (!isBearer) {
+        const origin = req.headers.origin;
+        const referer = req.headers.referer;
+        const host = req.headers.host;
+        if (origin && host) {
+          const originHost = origin.replace(/^https?:\/\//, '');
+          if (originHost !== host) {
+            throw unauthorized('跨站请求被拒绝');
+          }
+        } else if (referer && host) {
+          try {
+            const refererHost = new URL(referer).host;
+            if (refererHost !== host) throw unauthorized('跨站请求被拒绝');
+          } catch { /* URL 解析失败不拦截 */ }
+        }
+      }
+    }
   });
 
   app.setErrorHandler((err, req, reply) => {

@@ -114,6 +114,21 @@ export class BackupService {
     await this.settings.set(WRAP_PREFIX + 'key', Buffer.from(raw).toString('base64'));
   }
 
+  /**
+   * P1-3：改密码后备份密钥生命周期钩子。当前密钥存储为「wrapped key」形态
+   * （密钥本身持久化于 settings，历史备份用同一密钥可解），改密码不会导致
+   * 旧备份不可恢复——因此 rewrap 不轮换密钥内容，只确保密钥存在并保持不变。
+   * 若未来密钥改为按管理密码包裹存储，替换此处实现即可（调用方已预留钩子）。
+   */
+  async rewrapKey(): Promise<void> {
+    const existing = await this.settings.getValue<string | null>(WRAP_PREFIX + 'key', null);
+    if (existing) return;
+    const { webcrypto } = await import('node:crypto');
+    const raw = new Uint8Array(32);
+    webcrypto.getRandomValues(raw);
+    await this.settings.set(WRAP_PREFIX + 'key', Buffer.from(raw).toString('base64'));
+  }
+
   private async backupKey(): Promise<Buffer | null> {
     const stored = await this.settings.getValue<string | null>(WRAP_PREFIX + 'key', null);
     return stored ? Buffer.from(stored, 'base64') : null;

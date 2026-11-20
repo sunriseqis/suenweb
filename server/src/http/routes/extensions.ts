@@ -2,11 +2,35 @@ import type { FastifyInstance } from 'fastify';
 import { badRequest, notFound } from '../../domain/errors.ts';
 import type { ExtensionsRepo } from '../../data/repositories/extensions.ts';
 
+/** P2-12：POST body 结构校验（此前完全无 schema，任意形状直进 replace） */
+const extensionsBody = {
+  type: 'object',
+  required: ['extensions'],
+  additionalProperties: false,
+  properties: {
+    browser: { type: 'string', maxLength: 20 },
+    extensions: {
+      type: 'array',
+      maxItems: 500,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ext_id: { type: 'string', maxLength: 100 },
+          name: { type: 'string', maxLength: 200 },
+          version: { type: 'string', maxLength: 50 },
+          url: { type: 'string', maxLength: 500 },
+        },
+      },
+    },
+  },
+};
+
 export async function extensionRoutes(app: FastifyInstance): Promise<void> {
   const repo = (): ExtensionsRepo => app.repos.extensions;
 
   /** EXT-01：插件上报（按浏览器全量替换） */
-  app.post('/api/extensions', { preHandler: app.requireAuth }, async (req) => {
+  app.post('/api/extensions', { preHandler: app.requireAuth, schema: { body: extensionsBody } }, async (req) => {
     const body = (req.body ?? {}) as { browser?: string; extensions?: Array<{ ext_id?: unknown; name?: unknown; version?: unknown; url?: unknown }> };
     if (!Array.isArray(body.extensions)) throw badRequest('INVALID_EXTENSIONS', 'extensions 必须是数组');
     const result = await repo().replace(body.browser, body.extensions);

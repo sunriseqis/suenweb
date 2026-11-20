@@ -27,8 +27,9 @@ export type GroupInput = {
 
 const NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 const GROUP_TYPES = new Set(['fixed', 'tab']);
-const DISPLAY_MODES = new Set(['grid', 'list', 'icon']);
-const LAYOUT_MODES = new Set(['single', 'multi']);
+// P2-5：导出给路由 schema 复用，避免两处枚举漂移（create 时 'auto' 不属于合法持久值）
+export const DISPLAY_MODES = new Set(['grid', 'list', 'icon']);
+export const LAYOUT_MODES = new Set(['single', 'multi']);
 
 export class GroupsRepo {
   private readonly db: DataPool;

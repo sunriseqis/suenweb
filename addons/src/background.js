@@ -20,6 +20,12 @@ function connectEvents() {
     eventSource = new EventSource(cfg.baseUrl + '/api/events/stream?token=' + encodeURIComponent(cfg.token), {
       // EventSource 不支持自定义 header；服务端 M11 起要求鉴权，token 走 URL query 兜底。
       // 这里仅作为「有变化」信号，取数仍走带 token 的 fetch。
+      //
+      // P2-6 TODO: token 出现在 URL query 会被服务端 access log、代理、浏览器历史记录到，
+      // 存在泄露风险。需要服务端配合改用 fetch + ReadableStream 的流式响应（fetch 支持自定义
+      // Authorization header，且能读 SSE 字节流），届时本处的 EventSource 一并替换为 fetch 流。
+      // 服务端改动前，这里保持现状——note：当前 baseUrl 默认 http://，token 本就明文过网，
+      // query 形式只是再增加了一处记录面，不是新增泄露渠道。
     });
     eventSource.onopen = () => {
       // 重连成功后退避计数归零，避免一次故障后永远用最大间隔重连
@@ -32,7 +38,8 @@ function connectEvents() {
       disconnectEvents();
       const delay = Math.min(1000 * 2 ** retryCount, MAX_BACKOFF_MS);
       retryCount += 1;
-      setTimeout(connectEvents, delay);
+      // P1-13: 用 alarm 而非 setTimeout，跨 SW 生命周期存活
+      browser.alarms.create('suenweb-sse-reconnect', { when: Date.now() + delay });
     };
     })
     .catch(() => {});
@@ -110,10 +117,19 @@ async function setBadge(count) {
 
 let syncing = false;
 
+// P2-8: 原 32 位 DJB2 哈希易碰撞，可能误判「清单未变」导致漏报；
+// 改用双 32 位组合（64 位）+ 全局盐，降低碰撞概率同时不依赖 crypto.subtle 的异步 API。
+const HASH_SALT = 'suenweb-ext-manifest-v2';
 function simpleHash(text) {
-  let h = 5381;
-  for (let i = 0; i < text.length; i += 1) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
-  return String(h);
+  const input = HASH_SALT + '\u0000' + text;
+  let h1 = 5381;
+  let h2 = 52711;
+  for (let i = 0; i < input.length; i += 1) {
+    const c = input.charCodeAt(i);
+    h1 = ((h1 << 5) + h1 + c) >>> 0;
+    h2 = (((h2 << 5) + h2) ^ c) >>> 0;
+  }
+  return String(h1) + String(h2); // 64 位组合
 }
 
 async function syncPending() {
@@ -129,12 +145,15 @@ async function syncPending() {
   // 避免 ack 失败后下一轮重复创建。
   const existingUrls = new Set();
   try {
-    const tree = await browser.bookmarks.getTree();
-    const walk = (node) => {
-      if (node.url) existingUrls.add(node.url);
-      for (const child of node.children || []) walk(child);
+    // P0-L: 只遍历 SuenWeb 子树，不扫描全书签树
+    const walkSuenweb = async (parentId) => {
+      const children = await browser.bookmarks.getChildren(parentId);
+      for (const node of children) {
+        if (node.url) existingUrls.add(node.url);
+        if (!node.url) await walkSuenweb(node.id);
+      }
     };
-    for (const node of tree) walk(node);
+    await walkSuenweb(rootId);
   } catch {
     // 读不到书签树时不做幂等判断，按原逻辑创建
   }
@@ -161,8 +180,14 @@ async function syncPending() {
     }
   }
 
-  if (okIds.length > 0) await call(cfg, '/api/sync/ack', { method: 'POST', body: JSON.stringify({ ids: okIds, ok: true }) });
-  if (badIds.length > 0) await call(cfg, '/api/sync/ack', { method: 'POST', body: JSON.stringify({ ids: badIds, ok: false }) });
+  // P0-I: ack 分片，避免超 500 条被 schema 拒绝
+  const ACK_CHUNK = 400;
+  for (let i = 0; i < okIds.length; i += ACK_CHUNK) {
+    await call(cfg, '/api/sync/ack', { method: 'POST', body: JSON.stringify({ ids: okIds.slice(i, i + ACK_CHUNK), ok: true }) });
+  }
+  for (let i = 0; i < badIds.length; i += ACK_CHUNK) {
+    await call(cfg, '/api/sync/ack', { method: 'POST', body: JSON.stringify({ ids: badIds.slice(i, i + ACK_CHUNK), ok: false }) });
+  }
   await refreshBadge();
   // 顺手上报扩展清单：清单内容与上次一致时跳过（静默失败，不影响主同步）
   try {
@@ -196,6 +221,10 @@ async function saveLink(target, groupId, onDuplicate) {
     method: 'POST',
     body: JSON.stringify({ group_id: groupId, url, title: (target && target.title) || url, on_duplicate: onDuplicate }),
   });
+  // P0-G: merged/skipped 分支——服务端未新建，跳过 bookmarks.create，不发 ack
+  if (created.merged || created.skipped) {
+    return { ...created.link, group_name: groupNameForReturn, merged: Boolean(created.merged), skipped: Boolean(created.skipped) };
+  }
   // 服务端 /api/links 已成功；此后 /api/data 或 bookmarks.create 若失败，链接只存在
   // 于服务端。失败时主动调一次 syncPending()，下一轮会把该 pending 链接补写进浏览器，
   // 避免本机书签树永久缺失。闭环：服务端有 → sync/pending 仍返回它 → syncPending 补建书签 → ack。
@@ -205,8 +234,12 @@ async function saveLink(target, groupId, onDuplicate) {
     const group = (data.groups || []).find((item) => item.id === created.link.group_id);
     groupNameForReturn = group ? group.name : '未分组';
     const folderId = await ensureFolder(rootId, group ? group.name : '未分组');
-    // 只有真正写进浏览器后才 ack（SYNC-02 契约）
-    await browser.bookmarks.create({ parentId: folderId, title: created.link.title, url: created.link.url });
+    // P0-H: URL 查重，避免重复创建（仅在 SuenWeb 子树下查重）
+    const existing = await browser.bookmarks.search({ url: created.link.url }).catch(() => []);
+    const alreadyInSuenweb = existing.some((node) => node.parentId === folderId || node.parentId === rootId);
+    if (!alreadyInSuenweb) {
+      await browser.bookmarks.create({ parentId: folderId, title: created.link.title, url: created.link.url });
+    }
     await call(cfg, '/api/sync/ack', { method: 'POST', body: JSON.stringify({ ids: [created.link.id], ok: true }) });
   } catch (error) {
     void syncPending().catch(() => {});
@@ -222,7 +255,10 @@ async function syncPopupAvailability() {
   const cfg = await getConfig();
   const configured = Boolean(cfg.baseUrl && cfg.token);
   try {
-    await action.setPopup({ popup: configured ? 'src/popup.html' : '' });
+    // P2-4: 从 manifest 动态读取 popup 路径，避免硬编码 'src/popup.html' 在重命名/移位后失效
+    const manifest = browser.runtime.getManifest();
+    const popupPath = manifest.action?.default_popup || manifest.browser_action?.default_popup || 'src/popup.html';
+    await action.setPopup({ popup: configured ? popupPath : '' });
   } catch {
     // setPopup 不可用时保持 manifest 默认
   }
@@ -235,7 +271,7 @@ async function refreshBadge() {
     const status = await call(cfg, '/api/sync/status');
     await setBadge(status.pending || 0);
   } catch {
-    await setBadge(0);
+    await setBadge('!'); // 显示错误标记，而非清零误导用户
   }
 }
 
@@ -261,11 +297,19 @@ browser.runtime.onStartup.addListener(() => {
 browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === SYNC_ALARM) {
     syncPending().catch(() => {});
-    // MV3 SW 休眠后 EventSource 已随进程销毁，alarm 周期里重连 SSE
     connectEvents();
     getConfig()
       .then((cfg) => call(cfg, '/api/sync/heartbeat', { method: 'POST', body: JSON.stringify({ device: currentBrowser() + '-extension' }) }))
       .catch(() => {});
+  }
+  // P1-13: SSE 重连 alarm
+  if (alarm.name === 'suenweb-sse-reconnect') {
+    connectEvents();
+  }
+  // P1-13: REDIRECT_LOCK 清理 alarm
+  if (alarm.name.startsWith('suenweb-redirect-lock-')) {
+    const tabId = parseInt(alarm.name.slice('suenweb-redirect-lock-'.length), 10);
+    REDIRECT_LOCK.delete(tabId);
   }
 });
 
@@ -297,7 +341,8 @@ async function handleNewTab(tab) {
     if (REDIRECT_LOCK.has(tab.id)) return;
     REDIRECT_LOCK.add(tab.id);
     await browser.tabs.update(tab.id, { url: stored.baseUrl.replace(/\/+$/, '') + '/' });
-    setTimeout(() => REDIRECT_LOCK.delete(tab.id), 2000);
+    // P1-13: 用 alarm 清理锁，跨 SW 生命周期存活
+    browser.alarms.create('suenweb-redirect-lock-' + tab.id, { when: Date.now() + 2000 });
   } catch {}
 }
 
@@ -362,6 +407,9 @@ async function reportExtensions() {
 
 const RESTORE_MAX_TABS = 10;
 
+// P2-2: entry.url 来自服务端，不能直接信任——只允许打开官方商店域名，否则回退到 storeUrlFor
+const STORE_DOMAINS = ['addons.mozilla.org', 'chromewebstore.google.com', 'microsoftedge.microsoft.com'];
+
 async function restoreExtensions() {
   const cfg = await getConfig();
   if (!cfg.baseUrl || !cfg.token) throw new Error('先在扩展设置里登录 SuenWeb');
@@ -385,9 +433,14 @@ async function restoreExtensions() {
     let safeUrl = null;
     try {
       const parsed = new URL(url);
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') safeUrl = parsed.href;
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        // P2-2: 只允许商店域名，防止服务端被污染后指向钓鱼站
+        const isStoreDomain = STORE_DOMAINS.some((d) => parsed.hostname === d || parsed.hostname.endsWith('.' + d));
+        if (isStoreDomain) safeUrl = parsed.href;
+        else safeUrl = storeUrlFor(entry); // 回退到商店搜索链接
+      }
     } catch {
-      safeUrl = null;
+      safeUrl = storeUrlFor(entry);
     }
     if (!safeUrl) continue;
     try {
@@ -399,11 +452,46 @@ async function restoreExtensions() {
   return { total: mine.length, installed, opened, skipped: missing.length - opened };
 }
 
+// ---- 书签 API 错误中文化 ----
+// Chromium 的书签错误是写死的英文，原样弹到弹窗里用户看不懂；这里统一翻译，未收录的保留原文。
+// P2-5: 原实现用 raw.includes(pattern) 精确匹配，对英文原文的标点/大小写/空白极其脆弱
+// （例如 "Can't modify the root bookmark folders." vs "Cannot modify the root bookmark folders"）。
+// 这里对 pattern 与 error message 都做「去标点 + 折叠空白 + 小写」归一化后再匹配，鲁棒得多。
+const BOOKMARK_ERRORS = [
+  ["Can't modify the root bookmark folders.", '浏览器不允许修改根书签目录（书签栏/其他书签/移动端书签本身不能改名、移动或删除）'],
+  ['Bookmark editing is disabled.', '浏览器已禁用书签编辑（可能由企业策略控制）'],
+  ["Can't modify managed bookmarks.", '该书签由企业策略托管，不能修改'],
+  ["Can't find bookmark for id.", '书签已不存在，可能被删除或移动了'],
+  ["Can't find parent bookmark for id.", '找不到要写入的书签文件夹，可能已被删除'],
+  ["Can't remove non-empty folder (use recursive to force).", '该文件夹不是空的，不能直接删除'],
+  ['Bookmark id is invalid.', '书签 ID 无效'],
+  ['Index out of bounds.', '书签插入位置超出范围'],
+  ["Parameter 'parentId' does not specify a folder.", '目标位置不是书签文件夹'],
+  ['Invalid URL.', '网址无效，无法收藏'],
+  ["Can't set URL of a bookmark folder.", '不能给书签文件夹设置网址'],
+  ["Can't move a folder to itself or its descendant.", '不能把文件夹移动到它自己或它的子文件夹里'],
+];
+
+function friendlyBookmarkError(error) {
+  const raw = error && typeof error.message === 'string' ? error.message : String(error || '');
+  const normalize = (s) => s.toLowerCase().replace(/[.\s]+/g, ' ').trim();
+  const normalized = normalize(raw);
+  const hit = BOOKMARK_ERRORS.find(([pattern]) => normalized.includes(normalize(pattern)));
+  return hit ? hit[1] : raw;
+}
+
 browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const done = (promise) => {
     promise
       .then((value) => sendResponse({ ok: true, data: value }))
-      .catch((error) => sendResponse({ ok: false, error: error.message, code: error.code, details: error.details }));
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: friendlyBookmarkError(error),
+          code: error && error.code,
+          details: error && error.details,
+        });
+      });
     return true;
   };
   if (message && message.type === 'capture') {

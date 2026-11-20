@@ -13,14 +13,12 @@ test('健康检查', async () => {
   }
 });
 
-test('访客只读：GET /api/data 可读，写操作 401', async () => {
+test('访客只读：GET /api/data 需登录，写操作 401', async () => {
   const h = await createHarness();
   try {
+    // P0-A：/api/data 现在需要鉴权，访客不再能读到分组/链接数据
     const read = await h.app.inject({ method: 'GET', url: '/api/data' });
-    assert.equal(read.statusCode, 200);
-    const data = parse(read).data;
-    assert.deepEqual(data.groups, []);
-    assert.equal(data.meta.linkCount, 0);
+    assert.equal(read.statusCode, 401);
     const write = await h.app.inject({ method: 'POST', url: '/api/groups', payload: { name: 'x' } });
     assert.equal(write.statusCode, 401);
     assert.equal(parse(write).error.code, 'UNAUTHENTICATED');
@@ -87,7 +85,7 @@ test('分组：重名自动合并、空名拒绝', async () => {
     assert.equal(parse(dup).data.group.id, parse(first).data.group.id);
     const empty = await h.app.inject({ method: 'POST', url: '/api/groups', headers: bearer(token), payload: { name: '   ' } });
     assert.equal(empty.statusCode, 400);
-    const data = await h.app.inject({ method: 'GET', url: '/api/data' });
+    const data = await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) });
     assert.equal(parse(data).data.meta.groupCount, 1);
   } finally {
     await h.close();
@@ -141,7 +139,7 @@ test('链接去重：同组静默去重，跨组默认弹窗(409) / allow 放行
     assert.equal(parse(skipped).data.skipped, true);
     assert.equal(parse(skipped).data.link.id, parse(l1).data.link.id);
 
-    const data = parse(await h.app.inject({ method: 'GET', url: '/api/data' })).data;
+    const data = parse(await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) })).data;
     assert.equal(data.meta.groupCount, 3);
     assert.equal(data.meta.linkCount, 2);
   } finally {
@@ -200,7 +198,7 @@ test('分组改名为已存在名称时合并（链接随之迁移）', async ()
     assert.equal(merged.statusCode, 200);
     assert.equal(parse(merged).data.merged, true);
     assert.equal(parse(merged).data.group.id, keep.id);
-    const data = await h.app.inject({ method: 'GET', url: '/api/data' });
+    const data = await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) });
     const groups = parse(data).data.groups;
     assert.equal(groups.length, 1);
     assert.equal(groups[0].links.length, 1);
@@ -217,7 +215,7 @@ test('删除分组级联删除链接', async () => {
     await h.app.inject({ method: 'POST', url: '/api/links', headers: bearer(token), payload: { group_id: g.id, url: 'https://x.example.com' } });
     const del = await h.app.inject({ method: 'DELETE', url: '/api/groups/' + g.id, headers: bearer(token) });
     assert.equal(del.statusCode, 200);
-    const data = parse(await h.app.inject({ method: 'GET', url: '/api/data' })).data;
+    const data = parse(await h.app.inject({ method: 'GET', url: '/api/data', headers: bearer(token) })).data;
     assert.equal(data.meta.groupCount, 0);
     assert.equal(data.meta.linkCount, 0);
   } finally {
@@ -248,15 +246,18 @@ test('改密码：其他会话失效，新密码可登录', async () => {
   }
 });
 
-test('设置：公开读、需登录写、内部键不可写', async () => {
+test('设置：需登录读写、内部键不可写', async () => {
   const h = await createHarness();
   try {
     const token = await setupAdmin(h.app);
+    // P0-A：GET /api/settings 现在也需要鉴权
+    const guestRead = await h.app.inject({ method: 'GET', url: '/api/settings' });
+    assert.equal(guestRead.statusCode, 401);
     const denied = await h.app.inject({ method: 'PUT', url: '/api/settings', payload: { 'ui.theme': 'dark' } });
     assert.equal(denied.statusCode, 401);
     const ok = await h.app.inject({ method: 'PUT', url: '/api/settings', headers: bearer(token), payload: { 'ui.theme': 'dark', 'site.title': '我的书签' } });
     assert.equal(ok.statusCode, 200);
-    const pub = parse(await h.app.inject({ method: 'GET', url: '/api/settings' })).data.settings;
+    const pub = parse(await h.app.inject({ method: 'GET', url: '/api/settings', headers: bearer(token) })).data.settings;
     assert.equal(pub['ui.theme'], 'dark');
     const internal = await h.app.inject({ method: 'PUT', url: '/api/settings', headers: bearer(token), payload: { 'auth.password_hash': 'x' } });
     assert.equal(internal.statusCode, 400);

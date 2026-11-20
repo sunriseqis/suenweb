@@ -41,26 +41,52 @@ type IconLink = { icon: string | null; icon_type: string };
 
 const isCustomIcon = (link: IconLink): boolean => link.icon_type === 'url' && Boolean(link.icon);
 
+/** 仅允许 http(s) 图标 URL，拒绝 javascript: 等危险协议 */
+function isSafeIconSrc(src: string): boolean {
+  return /^https?:\/\//i.test(src);
+}
+
+/** 用 <img> 元素展示图标（彻底避免 CSS url() 注入）；失败时移除自身 */
+function appendIconImg(node: HTMLElement, src: string): void {
+  if (!isSafeIconSrc(src)) return;
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = '';
+  img.style.cssText = 'width:100%;height:100%;object-fit:contain;pointer-events:none;';
+  img.onerror = () => {
+    img.onerror = null;
+    img.onload = null;
+    img.remove();
+  };
+  node.textContent = '';
+  node.appendChild(img);
+}
+
 /** 内联流图标：失败时隐藏自身（占位由外层容器决定） */
 function faviconInline(link: IconLink & { url: string }, _size: number): HTMLElement {
   const host = hostOf(link.url);
-  const node = el('span', { class: 'block h-full w-full bg-contain bg-center bg-no-repeat', 'aria-hidden': 'true' });
+  const node = el('span', { class: 'block h-full w-full', 'aria-hidden': 'true' });
   if (isCustomIcon(link)) {
-    node.style.backgroundImage = 'url("' + (link.icon as string).replace(/"/g, '%22') + '")';
+    appendIconImg(node, link.icon as string);
     return node;
   }
   if (iconFailedHosts.has(host)) return node;
-  // 先 probe（new Image onload/onerror）确认图标存在，成功才赋 backgroundImage，避免双倍请求
+  // P1-9：用 fetch + AbortController 探测（method HEAD），避免 new Image() 闭包长期持有已脱离 DOM 的节点引用
   const src = '/api/icon?domain=' + encodeURIComponent(host);
-  const probe = new Image();
-  probe.onload = () => {
-    node.style.backgroundImage = 'url("' + src.replace(/"/g, '%22') + '")';
-  };
-  probe.onerror = () => {
-    iconFailedHosts.add(host);
-    persistIconFailedHosts(iconFailedHosts);
-  };
-  probe.src = src;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  fetch(src, { signal: controller.signal, method: 'HEAD' })
+    .then((res) => {
+      clearTimeout(timeout);
+      if (res.ok && node.isConnected) {
+        appendIconImg(node, src);
+      }
+    })
+    .catch(() => {
+      clearTimeout(timeout);
+      iconFailedHosts.add(host);
+      persistIconFailedHosts(iconFailedHosts);
+    });
   return node;
 }
 
@@ -299,6 +325,7 @@ function dragify(node: HTMLElement, link: Link, siblings: Link[], props: Bookmar
     if (!fromId || fromId === link.id) return;
     const ids = siblings.map((item) => item.id).filter((id) => id !== fromId);
     const targetIndex = ids.indexOf(link.id);
+    if (targetIndex < 0) return; // 边界检查：目标不在同组列表中，放弃本次拖拽
     ids.splice(targetIndex, 0, fromId);
     props.onReorder(link.group_id, ids);
   });

@@ -170,44 +170,52 @@ export function renderSettings(props: SettingsProps): HTMLElement {
 
     const pluginStatus = el('div', { class: 'space-y-0.5 text-[12px] text-fg' });
     void (async () => {
-      if (!props.authed) {
-        pluginStatus.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '登录后显示插件同步状态。' }));
-        return;
+      try {
+        if (!props.authed) {
+          pluginStatus.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '登录后显示插件同步状态。' }));
+          return;
+        }
+        const status = await api.syncStatus();
+        pluginStatus.textContent = '';
+        if (!status.ok) {
+          pluginStatus.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '读取失败：' + status.error.message }));
+          return;
+        }
+        const s = status.data;
+        const last = s.lastHeartbeat ? new Date(s.lastHeartbeat).toLocaleString() : '从未';
+        const online = s.lastHeartbeat ? Date.now() - new Date(s.lastHeartbeat).getTime() < 11 * 60 * 1000 : false;
+        pluginStatus.appendChild(el('p', { class: 'text-[12px]', text: '上次心跳 ' + last + ' · 待同步 ' + s.pending + ' · 失败 ' + s.failed + ' · ' + (online ? '在线' : '离线') }));
+      } catch (error) {
+        console.warn('[settings] 插件同步状态加载失败:', error);
       }
-      const status = await api.syncStatus();
-      pluginStatus.textContent = '';
-      if (!status.ok) {
-        pluginStatus.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '读取失败：' + status.error.message }));
-        return;
-      }
-      const s = status.data;
-      const last = s.lastHeartbeat ? new Date(s.lastHeartbeat).toLocaleString() : '从未';
-      const online = s.lastHeartbeat ? Date.now() - new Date(s.lastHeartbeat).getTime() < 11 * 60 * 1000 : false;
-      pluginStatus.appendChild(el('p', { class: 'text-[12px]', text: '上次心跳 ' + last + ' · 待同步 ' + s.pending + ' · 失败 ' + s.failed + ' · ' + (online ? '在线' : '离线') }));
     })();
 
     const addonBox = el('div', { class: 'space-y-1 text-[12px] text-fg' });
     void (async () => {
-      const result = await api.addonList();
-      addonBox.textContent = '';
-      if (!result.ok || !result.data.available) {
-        addonBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: (result.ok ? result.data.hint : result.error.message) ?? '服务端还没有插件包构建产物。' }));
-        return;
+      try {
+        const result = await api.addonList();
+        addonBox.textContent = '';
+        if (!result.ok || !result.data.available) {
+          addonBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: (result.ok ? result.data.hint : result.error.message) ?? '服务端还没有插件包构建产物。' }));
+          return;
+        }
+        const names = el('div', { class: 'flex flex-wrap gap-1.5' });
+        for (const file of result.data.files) {
+          names.appendChild(
+            el('a', {
+              href: ADDON_DOWNLOAD_BASE + encodeURIComponent(file),
+              class: 'border border-[var(--c-line)] bg-[var(--c-bg)] px-2.5 py-1 text-[11px] text-fg hover:border-[var(--c-accent)] hover:text-[var(--c-accent)]',
+              text: file.endsWith('.xpi')
+                ? (file.includes('-signed') ? 'Firefox 签名版 (.xpi)' : 'Firefox 调试版 (.xpi)')
+                : file.endsWith('.crx') ? 'Chrome (.crx)' : 'Chrome/Edge 加载包 (.zip)',
+            }),
+          );
+        }
+        addonBox.appendChild(names);
+        addonBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: 'Firefox 装 .xpi（MV2 包，站点权限安装即授予）；Chrome/Edge 解压 .zip 后开发者模式「加载已解压」；装后在插件设置里填本站地址并登录。' }));
+      } catch (error) {
+        console.warn('[settings] 插件包列表加载失败:', error);
       }
-      const names = el('div', { class: 'flex flex-wrap gap-1.5' });
-      for (const file of result.data.files) {
-        names.appendChild(
-          el('a', {
-            href: ADDON_DOWNLOAD_BASE + file,
-            class: 'border border-[var(--c-line)] bg-[var(--c-bg)] px-2.5 py-1 text-[11px] text-fg hover:border-[var(--c-accent)] hover:text-[var(--c-accent)]',
-            text: file.endsWith('.xpi')
-              ? (file.includes('-signed') ? 'Firefox 签名版 (.xpi)' : 'Firefox 调试版 (.xpi)')
-              : file.endsWith('.crx') ? 'Chrome (.crx)' : 'Chrome/Edge 加载包 (.zip)',
-          }),
-        );
-      }
-      addonBox.appendChild(names);
-      addonBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: 'Firefox 装 .xpi（MV2 包，站点权限安装即授予）；Chrome/Edge 解压 .zip 后开发者模式「加载已解压」；装后在插件设置里填本站地址并登录。' }));
     })();
 
     const extBox = el('div', { class: 'space-y-2 text-[12px] text-fg' });
@@ -223,21 +231,23 @@ export function renderSettings(props: SettingsProps): HTMLElement {
       return 'https://chromewebstore.google.com/detail/' + id;
     }
     void (async () => {
-      if (!props.authed) {
-        extBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '登录后显示已备份的扩展清单。' }));
-        return;
-      }
-      const result = await api.extensionList();
-      extBox.textContent = '';
-      if (!result.ok) { extBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '读取失败：' + result.error.message })); return; }
-      const inv = result.data;
-      if (inv.total === 0) {
-        extBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '还没有清单。装好插件后等一次自动同步，或在插件设置里点「备份扩展清单」。' }));
-        return;
-      }
-      for (const browser of Object.keys(inv.byBrowser).sort()) {
-        const entries = inv.byBrowser[browser];
-        extBox.appendChild(el('p', { class: 'text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-fg-soft)]', text: BROWSER_NAMES[browser] + '（' + entries.length + '）' }));
+      try {
+        if (!props.authed) {
+          extBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '登录后显示已备份的扩展清单。' }));
+          return;
+        }
+        const result = await api.extensionList();
+        extBox.textContent = '';
+        if (!result.ok) { extBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '读取失败：' + result.error.message })); return; }
+        const inv = result.data;
+        if (inv.total === 0) {
+          extBox.appendChild(el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '还没有清单。装好插件后等一次自动同步，或在插件设置里点「备份扩展清单」。' }));
+          return;
+        }
+        for (const browser of Object.keys(inv.byBrowser).sort()) {
+          const entries = inv.byBrowser[browser];
+          const browserName = BROWSER_NAMES[browser] ?? browser;
+          extBox.appendChild(el('p', { class: 'text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-fg-soft)]', text: browserName + '（' + entries.length + '）' }));
         for (const entry of entries) {
           const line = el('div', { class: 'flex flex-wrap items-center justify-between gap-2 border-l-2 border-[var(--c-line-strong)] pl-2' });
           line.appendChild(el('p', { class: 'min-w-0 truncate text-[12px] text-fg', text: entry.name + (entry.version ? ' · ' + entry.version : '') }));
@@ -259,6 +269,9 @@ export function renderSettings(props: SettingsProps): HTMLElement {
           }));
           extBox.appendChild(line);
         }
+        }
+      } catch (error) {
+        console.warn('[settings] 扩展清单加载失败:', error);
       }
     })();
 
@@ -322,13 +335,17 @@ export function renderSettings(props: SettingsProps): HTMLElement {
     // ---------- 卡片 ④ 备份 ----------
     const statusLine = el('p', { class: 'text-[12px] text-fg' });
     void (async () => {
-      const status = await api.backupStatus();
-      statusLine.textContent = '';
-      if (!status.ok) { statusLine.textContent = '读取备份状态失败：' + status.error.message; return; }
-      const s = status.data;
-      statusLine.textContent = s.configured
-        ? '已配置 ' + s.address + ' · 保留 ' + s.keepCount + ' 份 · 上次备份 ' + (s.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : '从未')
-        : '未配置 WebDAV：不执行任何自动备份';
+      try {
+        const status = await api.backupStatus();
+        statusLine.textContent = '';
+        if (!status.ok) { statusLine.textContent = '读取备份状态失败：' + status.error.message; return; }
+        const s = status.data;
+        statusLine.textContent = s.configured
+          ? '已配置 ' + s.address + ' · 保留 ' + s.keepCount + ' 份 · 上次备份 ' + (s.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : '从未')
+          : '未配置 WebDAV：不执行任何自动备份';
+      } catch (error) {
+        console.warn('[settings] 备份状态加载失败:', error);
+      }
     })();
 
     async function uploadBackup(): Promise<void> {

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { badRequest } from '../../domain/errors.ts';
 
 export async function settingRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/settings', async () => {
+  app.get('/api/settings', { preHandler: app.requireAuth }, async () => {
     const settings = await app.repos.settings.getPublic();
     return { ok: true, data: { settings } };
   });

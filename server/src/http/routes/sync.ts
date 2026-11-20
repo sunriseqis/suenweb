@@ -23,6 +23,15 @@ const heartbeatBody = {
   },
 };
 
+/** P0-F：failed → pending 恢复通道。ids 可选，不传则全部 failed 重新入队 */
+const retryBody = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ids: { type: 'array', maxItems: 500, items: { type: 'integer', minimum: 1 } }, // 可选，不传则全部
+  },
+};
+
 export async function syncRoutes(app: FastifyInstance): Promise<void> {
   /** 插件心跳：记录设备与时间，顺手返回待同步数量 */
   app.post('/api/sync/heartbeat', { preHandler: app.requireAuth, schema: { body: heartbeatBody } }, async (req) => {
@@ -58,14 +67,33 @@ export async function syncRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  /** 插件取待同步书签：按入队时间排序，一次最多 200 条 */
+  /** 插件取待同步书签：按入队时间排序，一次最多 200 条；?include_failed=1 时把 failed 一并下发 */
   app.get('/api/sync/pending', { preHandler: app.requireAuth }, async (req) => {
     const limitRaw = Number((req.query as { limit?: string }).limit ?? 200);
     const limit = Number.isFinite(limitRaw) ? Math.trunc(Math.min(Math.max(limitRaw, 1), 500)) : 200;
+    const includeFailed = (req.query as { include_failed?: string }).include_failed === '1';
+    const stateFilter = includeFailed ? "'pending', 'failed'" : "'pending'";
     const links = await app.db.all(
-      "SELECT id, group_id, title, url FROM links WHERE sync_state = 'pending' ORDER BY id LIMIT " + limit,
+      "SELECT id, group_id, title, url FROM links WHERE sync_state IN (" + stateFilter + ") ORDER BY id LIMIT " + limit,
     );
     return { ok: true, data: { links } };
+  });
+
+  /** P0-F：failed 恢复通道——重新入队为 pending（ids 可选，不传则全部） */
+  app.post('/api/sync/retry', { preHandler: app.requireAuth, schema: { body: retryBody } }, async (req) => {
+    const body = (req.body ?? {}) as { ids?: number[] };
+    let result;
+    if (Array.isArray(body.ids) && body.ids.length > 0) {
+      const placeholders = body.ids.map(() => '?').join(',');
+      result = await app.db.run(
+        "UPDATE links SET sync_state = 'pending' WHERE sync_state = 'failed' AND id IN (" + placeholders + ")",
+        body.ids,
+      );
+    } else {
+      result = await app.db.run("UPDATE links SET sync_state = 'pending' WHERE sync_state = 'failed'");
+    }
+    app.events.emit('links-changed', { reason: 'retry', count: result.changes });
+    return { ok: true, data: { retried: result.changes } };
   });
 
   /** 插件回执：只有真正写进浏览器书签后才允许调用（失败也要回报 ok=false） */

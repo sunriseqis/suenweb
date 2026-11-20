@@ -1,10 +1,12 @@
 services:
   suenweb:
     container_name: suenweb
+    # 本地构建：docker compose up -d --build
+    # 使用 GHCR 镜像：image: ghcr.io/sunriseqis/suenweb:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: suenweb:2.0.0
+    image: ghcr.io/sunriseqis/suenweb:latest
     restart: unless-stopped
     ports:
       - '8080:8080'

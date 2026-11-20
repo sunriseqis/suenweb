@@ -25,7 +25,7 @@ export function toast(message: string, kind: ToastKind = 'info'): void {
   node.style.opacity = '0';
   root.appendChild(node);
   requestAnimationFrame(() => {
-    node.style.opacity = '1';
+    if (node.isConnected) node.style.opacity = '1';
   });
   setTimeout(() => {
     node.style.opacity = '0';

@@ -46,7 +46,13 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     const password = String(body.password ?? '');
     if (!name) throw badRequest('BACKUP_NAME_REQUIRED', '缺少备份文件名');
     const text = await svc().fetchDecrypted(name, password);
-    const snapshot = JSON.parse(text) as object;
+    // P2-6：坏 JSON 不 500，给结构化 CORRUPT_BACKUP
+    let snapshot;
+    try {
+      snapshot = JSON.parse(text);
+    } catch {
+      throw badRequest('CORRUPT_BACKUP', '备份文件已损坏');
+    }
     return { ok: true, data: { snapshot } };
   });
 }

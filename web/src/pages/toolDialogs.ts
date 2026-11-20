@@ -132,7 +132,14 @@ export function openRestoreConfigDialog(done: Done, fail: Fail): void {
           const file = picker.files?.[0];
           const password = (pw.input as HTMLInputElement).value;
           if (!file || !password) { fail('选择 .swb1 文件并输入管理密码'); return; }
-          const fileB64 = await readBase64(file);
+          const loadingEl = el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '正在处理文件...' });
+          handle.body.appendChild(loadingEl);
+          let fileB64: string;
+          try {
+            fileB64 = await readBase64(file);
+          } finally {
+            loadingEl.remove();
+          }
           const check = await api.configImportCheck(password, fileB64);
           if (!check.ok) { fail(check.error.message); return; }
           const info = check.data;
@@ -285,7 +292,14 @@ export function openRestoreBackupDialog(done: Done, fail: Fail, onChanged: () =>
           const password = (pw.input as HTMLInputElement).value;
           if (!selected) { fail('先在列表里选中一份备份'); return; }
           if (!password) { fail('输入管理密码'); return; }
-          const dl = await api.backupDownload(selected, password);
+          const loadingEl = el('p', { class: 'text-[11px] text-[var(--c-fg-soft)]', text: '正在处理文件...' });
+          handle.body.appendChild(loadingEl);
+          let dl: Awaited<ReturnType<typeof api.backupDownload>>;
+          try {
+            dl = await api.backupDownload(selected, password);
+          } finally {
+            loadingEl.remove();
+          }
           if (!dl.ok) { fail(dl.error.message); return; }
           const snap = dl.data.snapshot;
           const total = snap.groups.reduce((sum, g) => sum + g.links.length, 0);

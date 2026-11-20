@@ -55,25 +55,49 @@ export type DuplicateDetails = {
 
 export type DuplicatePolicy = 'prompt' | 'allow' | 'ignore' | 'skip';
 
+/** 与后端 LinksRepo.CreateResult 对应的创建结果（POST /api/links） */
+export type CreateResult = {
+  link: Link;
+  merged: boolean;
+  skipped?: boolean;
+  cross_group_duplicate?: boolean;
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResult<T>> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30s 超时
   let response: Response;
   try {
     response = await fetch(path, {
       credentials: 'same-origin',
       ...init,
+      signal: controller.signal,
       headers: {
         ...(init.body ? { 'content-type': 'application/json' } : {}),
         ...(init.headers ?? {}),
       },
     });
-  } catch {
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      return { ok: false, error: { code: 'TIMEOUT', message: '请求超时，请重试' } };
+    }
     return { ok: false, error: { code: 'NETWORK_ERROR', message: '网络不可用，请检查服务端是否已启动' } };
+  } finally {
+    clearTimeout(timeout);
   }
   let payload: unknown = null;
   try {
     payload = await response.json();
   } catch {
-    payload = null;
+    // JSON 解析失败：保留原始错误文本，便于定位服务端异常
+    const text = await response.text().catch(() => '');
+    return {
+      ok: false,
+      error: {
+        code: 'HTTP_' + response.status,
+        message: '请求失败（HTTP ' + response.status + '）' + (text ? '：' + text.slice(0, 100) : ''),
+      },
+    };
   }
   if (payload && typeof payload === 'object' && 'ok' in payload) {
     return payload as ApiResult<T>;
@@ -104,7 +128,7 @@ export const api = {
   reorderGroups: (ids: number[]) => request<{ groups: Group[] }>('/api/reorder/groups', { method: 'POST', ...json({ ids }) }),
 
   createLink: (payload: { group_id: number; url: string; title?: string; icon?: string | null; icon_type?: 'auto' | 'url' | 'none'; on_duplicate?: DuplicatePolicy }) =>
-    request<{ link: Link; merged: boolean; skipped?: boolean }>('/api/links', { method: 'POST', ...json(payload) }),
+    request<CreateResult>('/api/links', { method: 'POST', ...json(payload) }),
   updateLink: (id: number, payload: { title?: string; url?: string; description?: string | null; icon?: string | null; icon_type?: 'auto' | 'url' | 'none' }) =>
     request<{ link: Link; merged: boolean }>('/api/links/' + id, { method: 'PUT', ...json(payload) }),
   deleteLink: (id: number) => request<{ deleted: number }>('/api/links/' + id, { method: 'DELETE' }),

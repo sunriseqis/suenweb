@@ -40,3 +40,17 @@ Firefox 永久安装需要签名（AMO）或开发者版关闭签名校验；临
 
 - 图标同时提供 SVG 源（icons/icon.svg）与 16/32/48/96/128 PNG（icons/icon-*.png），由 scripts/make-icons.mjs 生成，Chrome 与 Firefox 都能用。
 - 只做单向回写（服务端 → 浏览器），浏览器里手动删改不会同步回服务端。
+
+## 数据收集声明（Firefox / AMO）
+
+Firefox 要求扩展在 `manifest_firefox.json` 里声明 `data_collection_permissions`。
+本扩展**默认不收集任何数据**，所以 `required: ["none"]`。
+但「扩展备份/还原」功能会把浏览器内安装的扩展清单（扩展 id、名称、版本）上报到用户自建的
+SuenWeb 服务端（`/api/extensions`），用于换机后一键还原。按 Mozilla 的数据分类属于
+`technicalAndInteraction`（技术与交互数据，非个人可识别信息）。
+
+- Mozilla 规定 `technicalAndInteraction` **只能是 optional**，不能进 `required`（避免在安装弹窗里
+  强制用户同意）。因此这里声明为 `"required": ["none"], "optional": ["technicalAndInteraction"]`。
+- 实际采集发生在用户显式点击「扩展备份」按钮时（`syncPending` 也会顺手上报一次，但仅在配置
+  了服务端地址与 token 后）；用户可在 `about:addons → 权限与数据` 里随时关掉该可选项。
+- 服务端是用户自建的 SuenWeb 实例，数据不流向第三方。

@@ -1,4 +1,7 @@
 // 与 SuenWeb 服务端通信的最小封装：所有请求都带 Bearer token
+// P2-7: api.js 缺 browser/chrome 回退，Chrome MV3 只有 chrome.*，Firefox 有 browser.*。
+// 统一从 globalThis 取一个，后续所有调用走这个变量。
+const browser = globalThis.browser ?? globalThis.chrome;
 const DEFAULTS = { baseUrl: '', token: '', device: 'firefox', groupId: null };
 
 /** 归一化服务端地址：无协议自动补 http://（否则 fetch 会当相对路径，必然 NetworkError） */

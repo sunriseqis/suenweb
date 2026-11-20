@@ -14,6 +14,28 @@ type Snapshot = {
   groups: Array<{ name: string; links: Array<{ title: string; url: string; description?: string | null; created_at?: string }> }>;
 };
 
+/** P1-4：snapshot 结构校验——逐字段类型/长度约束，坏数据抛 CORRUPT_BACKUP 而不是 500 */
+function validateSnapshot(snapshot: unknown): { groups: Array<{ name: string; items: Array<{ title: string; url: string }> }> } {
+  if (!snapshot || typeof snapshot !== 'object') throw badRequest('CORRUPT_BACKUP', '备份内容无法识别');
+  const s = snapshot as { groups?: unknown };
+  if (!Array.isArray(s.groups)) throw badRequest('CORRUPT_BACKUP', '备份内容无法识别');
+  const groups = s.groups.slice(0, 10000).map((g) => {
+    const group = (g ?? {}) as { name?: unknown; links?: unknown };
+    const links = Array.isArray(group.links) ? group.links : [];
+    return {
+      name: typeof group.name === 'string' ? group.name.slice(0, 200) : '未命名',
+      items: links.slice(0, 50000).map((l) => {
+        const link = (l ?? {}) as { title?: unknown; url?: unknown };
+        return {
+          title: typeof link.title === 'string' ? link.title.slice(0, 500) : '',
+          url: typeof link.url === 'string' ? link.url.slice(0, 2000) : '',
+        };
+      }),
+    };
+  });
+  return { groups };
+}
+
 export async function importExportRoutes(app: FastifyInstance): Promise<void> {
   const adminPasswordHash = async (): Promise<string | null> => {
     const { ADMIN_HASH_KEY } = await import('../../domain/authService.ts');
@@ -63,13 +85,15 @@ export async function importExportRoutes(app: FastifyInstance): Promise<void> {
     const password = String(body.password ?? '');
     const hash = await adminPasswordHash();
     if (!(await verifyPassword(password, hash))) throw badRequest('WRONG_PASSWORD', '密码不正确');
-    const snapshot = body.snapshot;
-    if (!snapshot || !Array.isArray(snapshot.groups)) throw badRequest('CORRUPT_BACKUP', '备份内容无法识别');
+    // P1-4：结构校验后的快照（截断/类型安全），替代直接使用 body.snapshot
+    const validated = validateSnapshot(body.snapshot);
     if (body.confirm !== true) {
-      const total = snapshot.groups.reduce((sum, g) => sum + (g.links?.length ?? 0), 0);
-      return { ok: true, data: { needsConfirm: true, groups: snapshot.groups.length, links: total } };
+      // 不回显 groups/links 计数，避免泄漏备份结构信息
+      return { ok: true, data: { needsConfirm: true } };
     }
-    const result = await restoreFullSnapshot(app.db, { groups: snapshot.groups.map((g) => ({ name: g.name, items: (g.links ?? []).map((l) => ({ title: l.title, url: l.url })) })) });
+    await app.repos.settings.set('backup.last_restore_at', new Date().toISOString());
+    const result = await restoreFullSnapshot(app.db, validated);
+    await app.repos.settings.set('backup.last_restore_at', new Date().toISOString());
     app.events.emit('groups-changed', { url: '/api/config/restore-snapshot', method: 'POST' });
     app.events.emit('links-changed', { url: '/api/config/restore-snapshot', method: 'POST' });
     return { ok: true, data: { restored: result } };
@@ -141,19 +165,21 @@ export async function importExportRoutes(app: FastifyInstance): Promise<void> {
       throw badRequest(code === 'WRONG_PASSWORD' ? 'WRONG_PASSWORD' : 'CORRUPT_BACKUP', '密码不正确或备份文件已损坏');
     }
     if (!snapshot || !Array.isArray(snapshot.groups)) throw badRequest('CORRUPT_BACKUP', '备份内容无法识别');
+    // P1-4：结构校验后的快照（截断/类型安全），替代直接使用解析结果
+    const validated = validateSnapshot(snapshot);
     if (body.confirm !== true) {
-      const total = snapshot.groups.reduce((sum, g) => sum + (g.links?.length ?? 0), 0);
+      // 不回显 groups/links 计数，避免泄漏备份结构信息
       return {
         ok: true,
         data: {
           needsConfirm: true,
-          groups: snapshot.groups.length,
-          links: total,
           exportedAt: snapshot.exportedAt ?? null,
         },
       };
     }
-    const result = await restoreFullSnapshot(app.db, { groups: snapshot.groups.map((g) => ({ name: g.name, items: (g.links ?? []).map((l) => ({ title: l.title, url: l.url })) })) });
+    await app.repos.settings.set('backup.last_restore_at', new Date().toISOString());
+    const result = await restoreFullSnapshot(app.db, validated);
+    await app.repos.settings.set('backup.last_restore_at', new Date().toISOString());
     app.events.emit('groups-changed', { url: '/api/config/import', method: 'POST' });
     app.events.emit('links-changed', { url: '/api/config/import', method: 'POST' });
     return { ok: true, data: { restored: result } };

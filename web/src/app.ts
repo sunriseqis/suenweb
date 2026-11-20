@@ -23,6 +23,7 @@ const VERSION = '2.0.0-m3';
 
 let live: LiveHandle | null = null;
 let liveRefreshQueued = false;
+let liveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 type Route = '#/' | '#/login' | '#/setup' | '#/settings';
 
@@ -35,7 +36,6 @@ type AppState = {
   tabGroupId: number | null;
   groups: GroupWithLinks[];
   query: string;
-  activeGroupId: number | null;
   view: 'grid' | 'list';
   authError: string | null;
   ignores: IgnoreRow[];
@@ -52,7 +52,6 @@ const store = createStore<AppState>({
   tabGroupId: null,
   groups: [],
   query: '',
-  activeGroupId: null,
   view: 'grid',
   authError: null,
   ignores: [],
@@ -102,14 +101,20 @@ async function refresh(options?: { silent?: boolean }): Promise<void> {
     else store.set({ loadError: status.error.message });
     return;
   }
+  const groups = data.data.groups;
   store.set({
-    groups: data.data.groups,
+    groups,
     initialized: status.data.initialized,
     authed: status.data.authenticated,
     fetchIcons: (data.data.settings as Record<string, unknown>)['ui.fetch_icons'] === true,
     editing: status.data.authenticated ? store.get().editing : false,
     loadError: null,
   });
+  // P2-1: tabGroupId 指向的分组可能已被删除/合并，随 groups 变化重置
+  const groupIds = new Set((groups || []).map((g) => g.id));
+  if (store.get().tabGroupId && !groupIds.has(store.get().tabGroupId as number)) {
+    store.set({ tabGroupId: null });
+  }
   if (!status.data.initialized && currentRoute() === '#/') go('#/setup');
   if (status.data.authenticated) {
     void loadIgnores();
@@ -129,8 +134,12 @@ async function loadIgnores(): Promise<void> {
 function queueLiveRefresh(): void {
   if (liveRefreshQueued) return;
   liveRefreshQueued = true;
-  setTimeout(() => {
+  const gen = refreshGeneration; // 记录当前代数：用户写操作会递增 generation
+  liveRefreshTimer = setTimeout(() => {
     liveRefreshQueued = false;
+    liveRefreshTimer = null;
+    // 只在代数未变化时刷新，避免覆盖用户写操作后的最新结果
+    if (gen !== refreshGeneration) return;
     // S12: SSE 触发的刷新失败时静默降级，不覆盖用户当前视图
     void refresh({ silent: true });
   }, 500);
@@ -210,12 +219,19 @@ async function submitAuth(password: string): Promise<void> {
     await refresh();
     toast(state.initialized ? '登录成功' : '管理密码已设置', 'success');
     go('#/');
-  } catch {
-    // 网络异常等：静默，按钮由 auth.ts 恢复
+  } catch (error) {
+    console.warn('[submitAuth] 网络异常:', error);
+    store.set({ authError: '网络异常，请稍后重试' });
   }
 }
 
 async function afterMutation(result: { ok: boolean; error?: { message: string } }, successText: string): Promise<void> {
+  // 取消排队的 SSE 静默刷新，避免其覆盖用户写操作结果
+  if (liveRefreshTimer) {
+    clearTimeout(liveRefreshTimer);
+    liveRefreshTimer = null;
+    liveRefreshQueued = false;
+  }
   if (!result.ok) {
     toast(result.error ? result.error.message : '操作失败', 'error');
     return;

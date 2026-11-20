@@ -9,8 +9,10 @@ const beatNode = document.getElementById('beat');
 
 let lastGroupId = null;
 
+// P2-3: sendMessage 加 15s 超时，避免后台长期不返回时 popup/options 永远挂起
 async function send(message) {
-  const reply = await browser.runtime.sendMessage(message);
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('后台响应超时')), 15000));
+  const reply = await Promise.race([browser.runtime.sendMessage(message), timeout]);
   if (!reply || reply.ok !== true) {
     const error = new Error(reply && reply.error ? reply.error : '操作失败');
     error.code = reply && reply.code ? reply.code : undefined;

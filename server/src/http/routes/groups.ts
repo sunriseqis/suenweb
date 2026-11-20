@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { GroupInput } from '../../data/repositories/groups.ts';
+// P2-5：复用 repo 的合法枚举，避免 schema 与存储校验两处漂移
+import { DISPLAY_MODES, LAYOUT_MODES } from '../../data/repositories/groups.ts';
 
 const groupBody = {
   type: 'object',
@@ -8,8 +10,8 @@ const groupBody = {
     name: { type: 'string', maxLength: 40 },
     icon: { type: ['string', 'null'], maxLength: 500 },
     type: { type: 'string', enum: ['fixed', 'tab'] },
-    display_mode: { type: 'string', enum: ['grid', 'list', 'icon'] },
-    layout_mode: { type: 'string', enum: ['single', 'multi', 'auto'] },
+    display_mode: { type: 'string', enum: [...DISPLAY_MODES] },
+    layout_mode: { type: 'string', enum: [...LAYOUT_MODES] },
   },
 };
 
