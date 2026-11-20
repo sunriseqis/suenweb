@@ -89,16 +89,34 @@ let refreshGeneration = 0;
 
 async function refresh(options?: { silent?: boolean }): Promise<void> {
   const generation = ++refreshGeneration;
-  const [data, status] = await Promise.all([api.data(), api.authStatus()]);
-  if (generation !== refreshGeneration) return; // 已有更新的 refresh 发出，丢弃过期响应
-  if (!data.ok) {
-    if (options?.silent) console.warn('[refresh] live 通道刷新失败（静默降级）:', data.error.message);
-    else store.set({ loadError: data.error.message });
-    return;
-  }
+  // 先获取认证状态，未登录时跳过 /api/data（P0-A 加了鉴权，游客会 401）
+  const status = await api.authStatus();
+  if (generation !== refreshGeneration) return;
   if (!status.ok) {
     if (options?.silent) console.warn('[refresh] live 通道刷新失败（静默降级）:', status.error.message);
     else store.set({ loadError: status.error.message });
+    return;
+  }
+  // 未登录或未初始化时只更新状态，不请求需要鉴权的 /api/data
+  if (!status.data.authenticated) {
+    store.set({
+      initialized: status.data.initialized,
+      authed: false,
+      groups: [],
+      loadError: null,
+    });
+    if (!status.data.initialized && currentRoute() === '#/') go('#/setup');
+    else if (status.data.initialized && currentRoute() === '#/') go('#/login');
+    stopLive();
+    store.set({ ignores: [] });
+    return;
+  }
+  // 已登录：获取数据
+  const data = await api.data();
+  if (generation !== refreshGeneration) return;
+  if (!data.ok) {
+    if (options?.silent) console.warn('[refresh] live 通道刷新失败（静默降级）:', data.error.message);
+    else store.set({ loadError: data.error.message });
     return;
   }
   const groups = data.data.groups;
