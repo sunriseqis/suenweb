@@ -9,7 +9,7 @@ import {
   watchSystemTheme,
 } from './lib/theme.ts';
 import { renderAuth } from './pages/auth.ts';
-import { renderBookmarks, type DisplayMode } from './pages/bookmarks.ts';
+import { renderBookmarks, clearIconFailureCache, type DisplayMode } from './pages/bookmarks.ts';
 import { openConfirmDialog, openGroupDialog, openLinkDrawer, type LinkDraft } from './pages/dialogs.ts';
 import { renderSettings, type IgnoreRow, type SettingsTab } from './pages/settings.ts';
 import { button } from './ui/button.ts';
@@ -365,6 +365,7 @@ function render(): void {
             toast('登录后才能修改图标抓取', 'error');
             return;
           }
+          clearIconFailureCache(); // 清除图标负缓存，开关切换后重新探测
           await afterMutation(await api.updateSettings({ 'ui.fetch_icons': value }), value ? '已开启站点图标' : '已关闭站点图标');
         },
         onChangePassword: async (currentPassword, next) => {

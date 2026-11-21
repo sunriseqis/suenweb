@@ -71,11 +71,11 @@ function faviconInline(link: IconLink & { url: string }, _size: number): HTMLEle
     return node;
   }
   if (iconFailedHosts.has(host)) return node;
-  // P1-9：用 fetch + AbortController 探测（method HEAD），避免 new Image() 闭包长期持有已脱离 DOM 的节点引用
+  // P1-9：用 fetch + AbortController 探测（GET），避免 new Image() 闭包长期持有已脱离 DOM 的节点引用
   const src = '/api/icon?domain=' + encodeURIComponent(host);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
-  fetch(src, { signal: controller.signal, method: 'HEAD' })
+  fetch(src, { signal: controller.signal, method: 'GET' })
     .then((res) => {
       clearTimeout(timeout);
       if (res.ok && node.isConnected) {
