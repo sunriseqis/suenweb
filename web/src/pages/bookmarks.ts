@@ -62,7 +62,18 @@ function appendIconImg(node: HTMLElement, src: string): void {
   node.appendChild(img);
 }
 
-/** 内联流图标：失败时隐藏自身（占位由外层容器决定） */
+/** 生成字母头像 SVG（图标抓取失败时的降级占位） */
+function letterAvatar(host: string): string {
+  const letter = (host || '?').charAt(0).toUpperCase();
+  // 用域名 hash 生成稳定颜色
+  let hash = 0;
+  for (let i = 0; i < host.length; i++) hash = ((hash << 5) - hash + host.charCodeAt(i)) | 0;
+  const hue = Math.abs(hash) % 360;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="hsl(' + hue + ',45%,55%)"/><text x="32" y="42" font-size="32" font-family="system-ui,sans-serif" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="middle">' + letter + '</text></svg>';
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+
+/** 内联流图标：失败时降级为字母头像 */
 function faviconInline(link: IconLink & { url: string }, _size: number): HTMLElement {
   const host = hostOf(link.url);
   const node = el('span', { class: 'block h-full w-full', 'aria-hidden': 'true' });
@@ -70,8 +81,11 @@ function faviconInline(link: IconLink & { url: string }, _size: number): HTMLEle
     appendIconImg(node, link.icon as string);
     return node;
   }
-  if (iconFailedHosts.has(host)) return node;
-  // P1-9：用 fetch + AbortController 探测（GET），避免 new Image() 闭包长期持有已脱离 DOM 的节点引用
+  if (iconFailedHosts.has(host)) {
+    // 已知失败：直接用字母头像降级
+    appendIconImg(node, letterAvatar(host));
+    return node;
+  }
   const src = '/api/icon?domain=' + encodeURIComponent(host);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
@@ -80,12 +94,18 @@ function faviconInline(link: IconLink & { url: string }, _size: number): HTMLEle
       clearTimeout(timeout);
       if (res.ok && node.isConnected) {
         appendIconImg(node, src);
+      } else {
+        // 抓取失败：降级为字母头像
+        iconFailedHosts.add(host);
+        persistIconFailedHosts(iconFailedHosts);
+        if (node.isConnected) appendIconImg(node, letterAvatar(host));
       }
     })
     .catch(() => {
       clearTimeout(timeout);
       iconFailedHosts.add(host);
       persistIconFailedHosts(iconFailedHosts);
+      if (node.isConnected) appendIconImg(node, letterAvatar(host));
     });
   return node;
 }
