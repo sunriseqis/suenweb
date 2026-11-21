@@ -178,7 +178,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const origin = req.headers.origin;
         const referer = req.headers.referer;
         const host = req.headers.host;
-        if (origin && host) {
+        // 扩展协议（chrome-extension://、moz-extension://）放行，插件跨域请求
+        const isExtensionOrigin = typeof origin === 'string' &&
+          (origin.startsWith('chrome-extension://') || origin.startsWith('moz-extension://') || origin.startsWith('safari-web-extension://'));
+        if (isExtensionOrigin) {
+          // 扩展来源，跳过同源校验
+        } else if (origin && host) {
           const originHost = origin.replace(/^https?:\/\//, '');
           if (originHost !== host) {
             throw unauthorized('跨站请求被拒绝');
