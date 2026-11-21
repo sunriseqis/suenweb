@@ -88,11 +88,26 @@ async function call(cfg, path, options = {}) {
   return payload.data;
 }
 
+// 解析「可写入」的顶层文件夹，指向「其他书签」。
+// Chrome/Edge 根节点 id="0" 不可写，往它下面 create 会报 "Can't modify the root bookmark folders."
+// 旧实现用 /other|unfiled/i 匹配 node.id，只有 Firefox 的 unfiled_____ 能命中；Chrome/Edge 的 id 是纯数字。
+const OTHER_FOLDER_TITLE = /other\s*bookmarks?|unfiled|weitere\s*lesezeichen|autres\s*marqueurs|其他书签|その他/i;
+
 async function rootParentId() {
   const tree = await browser.bookmarks.getTree();
-  const root = tree[0];
-  const other = (root.children || []).find((node) => /other|unfiled/i.test(node.id));
-  return other ? other.id : root.id;
+  const root = (tree && tree[0]) || {};
+  const children = (root.children || []).filter((node) => node && node.id !== root.id);
+  const target =
+    children.find((node) => node.folderType === 'other') || // Chrome 新版语义字段
+    children.find((node) => /^unfiled/i.test(node.id)) || // Firefox: unfiled_____
+    children.find((node) => node.id === '2') || // Chromium 固定 id：其他书签
+    children.find((node) => OTHER_FOLDER_TITLE.test(node.title || '')) || // 标题兜底（多语言）
+    children[1] || // 位序兜底（书签栏, 其他书签, 移动端书签）
+    children[0];
+  if (!target || target.id === root.id) {
+    throw new Error('找不到可写入的浏览器书签文件夹（其他书签），请在浏览器书签管理器里检查');
+  }
+  return target.id;
 }
 
 async function ensureFolder(parentId, title) {
