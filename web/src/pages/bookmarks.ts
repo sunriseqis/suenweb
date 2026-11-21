@@ -41,9 +41,9 @@ type IconLink = { icon: string | null; icon_type: string };
 
 const isCustomIcon = (link: IconLink): boolean => link.icon_type === 'url' && Boolean(link.icon);
 
-/** 仅允许 http(s) 图标 URL，拒绝 javascript: 等危险协议 */
+/** 仅允许 http(s) 与 data:image 图标 URL，拒绝 javascript: 等危险协议 */
 function isSafeIconSrc(src: string): boolean {
-  return /^https?:\/\//i.test(src);
+  return /^https?:\/\//i.test(src) || /^data:image\//i.test(src);
 }
 
 /** 用 <img> 元素展示图标（彻底避免 CSS url() 注入）；失败时移除自身 */
