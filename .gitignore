@@ -34,3 +34,6 @@ fn/*.fpk
 .vscode/
 *.swp
 output/
+
+# 测试数据
+server/data/
