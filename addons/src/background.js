@@ -90,27 +90,35 @@ async function call(cfg, path, options = {}) {
 
 // 解析「可写入」的顶层文件夹，指向「其他书签」。
 // Chrome/Edge 根节点 id="0" 不可写，往它下面 create 会报 "Can't modify the root bookmark folders."
-// 旧实现用 /other|unfiled/i 匹配 node.id，只有 Firefox 的 unfiled_____ 能命中；Chrome/Edge 的 id 是纯数字。
 const OTHER_FOLDER_TITLE = /other\s*bookmarks?|unfiled|weitere\s*lesezeichen|autres\s*marqueurs|其他书签|その他/i;
 
 async function rootParentId() {
   const tree = await browser.bookmarks.getTree();
   const root = (tree && tree[0]) || {};
-  const children = (root.children || []).filter((node) => node && node.id !== root.id);
-  const target =
-    children.find((node) => node.folderType === 'other') || // Chrome 新版语义字段
-    children.find((node) => /^unfiled/i.test(node.id)) || // Firefox: unfiled_____
-    children.find((node) => node.id === '2') || // Chromium 固定 id：其他书签
-    children.find((node) => OTHER_FOLDER_TITLE.test(node.title || '')) || // 标题兜底（多语言）
-    children[1] || // 位序兜底（书签栏, 其他书签, 移动端书签）
-    children[0];
-  if (!target || target.id === root.id) {
+  const rootId = String(root.id ?? '0');
+  // 收集所有非根的顶层文件夹（排除 root 自身与任何父级是 root 的不可写节点）
+  const children = (root.children || []).filter((node) => node && String(node.id) !== rootId && node.id !== '0');
+  // 多级兜底：folderType → unfiled* → id '2' → 标题 → 位序
+  const candidates = [
+    ...children.filter((n) => n.folderType === 'other'),      // Chrome 新版语义字段
+    ...children.filter((n) => /^unfiled/i.test(String(n.id))), // Firefox: unfiled_____
+    ...children.filter((n) => String(n.id) === '2'),           // Chromium 固定 id：其他书签
+    ...children.filter((n) => OTHER_FOLDER_TITLE.test(n.title || '')), // 标题兜底（多语言）
+    children[1], // 位序兜底（书签栏, 其他书签, 移动端书签）
+    children[0],
+  ].filter(Boolean);
+  const target = candidates.find((n) => String(n.id) !== rootId && String(n.id) !== '0');
+  if (!target) {
     throw new Error('找不到可写入的浏览器书签文件夹（其他书签），请在浏览器书签管理器里检查');
   }
-  return target.id;
+  return String(target.id);
 }
 
 async function ensureFolder(parentId, title) {
+  // 硬性防线：绝不允许往根节点写入（Chrome id="0"，Firefox 同）
+  if (parentId === undefined || parentId === null || String(parentId) === '' || String(parentId) === '0') {
+    throw new Error('找不到可写入的浏览器书签文件夹（其他书签），请在浏览器书签管理器里检查');
+  }
   const children = await browser.bookmarks.getChildren(parentId);
   const found = children.find((node) => !node.url && node.title === title);
   if (found) return found.id;
